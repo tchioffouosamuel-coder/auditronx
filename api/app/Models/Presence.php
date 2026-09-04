@@ -13,12 +13,14 @@ class Presence extends Model
     protected $fillable = [
         'enseignant_id', 'date', 'heure_arrivee', 'heure_depart',
         'source', 'access_point_id', 'device_id', 'recorded_by', 'on_behalf_of', 'reason',
+        'device_capture_at',
     ];
 
     protected $casts = [
         'date' => 'date:Y-m-d',
         'heure_arrivee' => 'datetime',
         'heure_depart' => 'datetime',
+        'device_capture_at' => 'datetime',
     ];
 
     public function enseignant(): BelongsTo

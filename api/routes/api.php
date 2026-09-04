@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\PresenceCorrecteurController;
 use App\Http\Controllers\Api\PresenceValidationController;
 use App\Http\Controllers\Api\ProgrammeController;
 use App\Http\Controllers\Api\QrPointController;
+use App\Http\Controllers\Api\RelaySyncController;
 use App\Http\Controllers\Api\RetardsController;
 use App\Http\Controllers\Api\SignalementController;
 use App\Http\Controllers\Api\StatistiquesController;
@@ -46,10 +47,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/otp/generate', [OtpController::class, 'generate']);
     Route::post('/devices/{device}/revoke', [DeviceController::class, 'revoke']);
     Route::post('/devices/provision-kiosk', [DeviceController::class, 'provisionKiosk']);
+    Route::post('/devices/provision-relay', [DeviceController::class, 'provisionRelay']);
 
     Route::post('/attendance/scan', [AttendanceController::class, 'scan']);
     Route::post('/attendance/admin-proxy', [AttendanceController::class, 'adminProxy']);
     Route::post('/attendance/facial-scan', [AttendanceController::class, 'facialScan']);
+
+    // Passerelle offline ESP1/ESP2 (§hardware) : lots de pointages relayés en différé.
+    Route::post('/relay/sync', [RelaySyncController::class, 'sync']);
 
     // Historique personnel & notifications (§4.1 — app mobile)
     Route::get('/mes-presences', [MyPresenceController::class, 'index']);

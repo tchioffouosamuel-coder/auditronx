@@ -152,4 +152,31 @@ class DeviceController extends Controller
             'device' => $device,
         ], 201);
     }
+
+    /**
+     * POST /api/devices/provision-relay — provisionne la passerelle offline ESP2
+     * (§hardware, seul le relais s'authentifie auprès de l'API ; ESP1 ne parle
+     * qu'en local à ESP2 via ESP-NOW). Action admin, même schéma que le kiosk :
+     * le device s'authentifie ensuite lui-même via son propre token Sanctum.
+     */
+    public function provisionRelay(Request $request)
+    {
+        $data = $request->validate([
+            'device_uuid' => ['required', 'string', 'unique:devices,device_uuid'],
+            'label' => ['nullable', 'string'],
+        ]);
+
+        $device = Device::create([
+            'device_uuid' => $data['device_uuid'],
+            'device_type' => 'relay_gateway',
+            'activated_at' => now(),
+        ]);
+
+        $token = $device->createToken($data['device_uuid'])->plainTextToken;
+
+        return response()->json([
+            'token' => $token,
+            'device' => $device,
+        ], 201);
+    }
 }

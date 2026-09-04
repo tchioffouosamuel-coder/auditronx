@@ -4,24 +4,26 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Traits\AccessibleEnseignants;
-use App\Models\AccessPoint;
 use App\Models\Device;
 use App\Models\Enseignant;
 use App\Models\Presence;
-use App\Models\QrPoint;
-use App\Models\TeacherNotification;
+use App\Services\AttendanceRecorder;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
 
 /**
  * Réception des scans de présence, quel que soit le canal (§4.3, §5.3, §7).
  *
  * L'horodatage est toujours généré côté serveur (now()) — jamais accepté depuis
- * la requête du client, conformément aux exigences non fonctionnelles (§7).
+ * la requête du client — sauf pour les paquets relayés par la passerelle
+ * offline (ESP1/ESP2, §hardware), traités par RelaySyncController, où l'on
+ * fait exceptionnellement confiance à l'horodatage de capture du matériel de
+ * la borne (device authentifié, pas le téléphone de l'enseignant).
  */
 class AttendanceController extends Controller
 {
     use AccessibleEnseignants;
+
+    public function __construct(private readonly AttendanceRecorder $recorder) {}
 
     /** POST /api/attendance/scan — scan par l'enseignant lui-même (app + QR + BSSID). */
     public function scan(Request $request)
@@ -34,20 +36,13 @@ class AttendanceController extends Controller
         $enseignant = $this->authenticatedEnseignant($request);
         $device = $this->authenticatedDevice($request, $enseignant);
 
-        QrPoint::where('code', $data['qr_code'])->firstOrFail();
-        $accessPoint = AccessPoint::where('bssid', $data['bssid'])->first();
-
-        if (! $accessPoint) {
-            throw ValidationException::withMessages([
-                'bssid' => ['Borne WiFi non reconnue.'],
-            ]);
-        }
-
-        $presence = $this->enregistrerPointage($enseignant->id, [
-            'source' => 'app_mobile',
-            'access_point_id' => $accessPoint->id,
-            'device_id' => $device?->id,
-        ]);
+        $presence = $this->recorder->recordSelfScan(
+            $enseignant,
+            $device?->id,
+            $data['qr_code'],
+            $data['bssid'],
+            now(),
+        );
 
         return response()->json($presence, 201);
     }
@@ -66,28 +61,15 @@ class AttendanceController extends Controller
         $device = $this->authenticatedDevice($request, $acteur);
         $cible = Enseignant::findOrFail($data['enseignant_id']);
 
-        QrPoint::where('code', $data['qr_code'])->firstOrFail();
-        $accessPoint = AccessPoint::where('bssid', $data['bssid'])->first();
-
-        if (! $accessPoint) {
-            throw ValidationException::withMessages([
-                'bssid' => ['Borne WiFi non reconnue.'],
-            ]);
-        }
-
-        $presence = $this->enregistrerPointage($cible->id, [
-            'source' => 'admin_proxy',
-            'access_point_id' => $accessPoint->id,
-            'device_id' => $device?->id,
-            'reason' => $data['motif'],
-        ]);
-
-        // §4.1 : l'enseignant concerné est notifié qu'un tiers a scanné en son nom.
-        TeacherNotification::create([
-            'enseignant_id' => $cible->id,
-            'type' => 'scan_procuration',
-            'message' => "{$acteur->nom} a scanné votre présence en votre nom ({$data['motif']}).",
-        ]);
+        $presence = $this->recorder->recordProxyScan(
+            $acteur,
+            $device?->id,
+            $cible,
+            $data['qr_code'],
+            $data['bssid'],
+            $data['motif'],
+            now(),
+        );
 
         return response()->json($presence, 201);
     }
@@ -106,23 +88,9 @@ class AttendanceController extends Controller
             abort(403, 'Authentification poste de reconnaissance faciale requise.');
         }
 
-        $presence = $this->enregistrerPointage($data['enseignant_id'], [
-            'source' => 'reconnaissance_faciale',
-            'device_id' => $device->id,
-            'reason' => "score_confiance={$data['score_confiance']}",
-        ]);
-
-        return response()->json($presence, 201);
-    }
-
-    /**
-     * Alterne heure_arrivee / heure_depart sur la ligne du jour, en la créant si besoin.
-     * L'horodatage (now()) est toujours généré ici, côté serveur.
-     */
-    private function enregistrerPointage(int $enseignantId, array $attributs): Presence
-    {
+        // Le scan facial n'a pas de QR/BSSID à valider : le kiosk fait lui-même office de point d'accès.
         $presence = Presence::firstOrNew([
-            'enseignant_id' => $enseignantId,
+            'enseignant_id' => $data['enseignant_id'],
             'date' => now()->toDateString(),
         ]);
 
@@ -132,10 +100,14 @@ class AttendanceController extends Controller
             $presence->heure_depart = now();
         }
 
-        $presence->fill($attributs);
+        $presence->fill([
+            'source' => 'reconnaissance_faciale',
+            'device_id' => $device->id,
+            'reason' => "score_confiance={$data['score_confiance']}",
+        ]);
         $presence->save();
 
-        return $presence;
+        return response()->json($presence, 201);
     }
 
     private function authenticatedEnseignant(Request $request): Enseignant
