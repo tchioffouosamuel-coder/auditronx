@@ -6,7 +6,15 @@ const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     const raw = localStorage.getItem('auditron_user')
-    return raw ? JSON.parse(raw) : null
+    if (!raw) return null
+    try {
+      return JSON.parse(raw)
+    } catch {
+      // Valeur corrompue (ex: "undefined" littéral stocké par erreur) : on
+      // repart d'un état déconnecté plutôt que de faire planter le rendu.
+      localStorage.removeItem('auditron_user')
+      return null
+    }
   })
   const [loading, setLoading] = useState(true)
 
@@ -19,6 +27,7 @@ export function AuthProvider({ children }) {
     api
       .get('/me')
       .then(({ data }) => {
+        if (!data) throw new Error('/me a renvoyé une réponse vide')
         setUser(data)
         localStorage.setItem('auditron_user', JSON.stringify(data))
       })
@@ -32,6 +41,7 @@ export function AuthProvider({ children }) {
 
   async function login(email, password) {
     const { data } = await api.post('/login', { email, password })
+    if (!data?.token || !data?.user) throw new Error('/login a renvoyé une réponse invalide')
     localStorage.setItem('auditron_token', data.token)
     localStorage.setItem('auditron_user', JSON.stringify(data.user))
     setUser(data.user)
