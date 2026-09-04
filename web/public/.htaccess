@@ -1,0 +1,8 @@
+RewriteEngine On
+
+# React Router (mode history) : toute route qui n'est pas un fichier ou
+# dossier existant sur le disque doit renvoyer index.html — sinon Apache
+# répond 404 sur /login, /dashboard, etc. avant même que React ne charge.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.html [L]
