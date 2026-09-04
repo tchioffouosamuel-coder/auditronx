@@ -1,0 +1,38 @@
+@import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,400&display=swap');
+@import "tailwindcss";
+
+/* Identité visuelle Auditron X — palette extraite du logo (vert circuit + or). */
+@theme {
+  --font-sans: 'Lato', ui-sans-serif, system-ui, sans-serif;
+
+  --color-brand-950: #00281a;
+  --color-brand-900: #003b27;
+  --color-brand-800: #054e34;
+  --color-brand-700: #0f6e49;
+  --color-brand-600: #16805a;
+  --color-brand-500: #23855d;
+  --color-brand-400: #4aa87e;
+  --color-brand-300: #8ccbac;
+  --color-brand-200: #c3e4d5;
+  --color-brand-100: #e2f2ea;
+  --color-brand-50: #f2f9f6;
+
+  --color-gold-700: #a67a1f;
+  --color-gold-600: #c4972f;
+  --color-gold-500: #e0b44a;
+  --color-gold-400: #eac262;
+  --color-gold-300: #f1d38f;
+  --color-gold-100: #fbf1dc;
+
+  --color-ink-900: #16241d;
+  --color-ink-700: #33443c;
+  --color-ink-500: #5b6b63;
+  --color-ink-300: #9caaa3;
+  --color-ink-100: #e4e7e2;
+  --color-ink-50: #f7f8f5;
+}
+
+body {
+  @apply bg-ink-50 text-ink-900;
+  font-family: var(--font-sans);
+}

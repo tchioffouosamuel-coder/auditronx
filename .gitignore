@@ -1,0 +1,7 @@
+# Racine du monorepo Auditron X (api/, frontend/, mobile/ ont chacun leur
+# propre .gitignore plus spécifique) — uniquement les artefacts communs ici.
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
