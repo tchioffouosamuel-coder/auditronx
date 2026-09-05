@@ -6,7 +6,7 @@ function StatsTab() {
   const [lignes, setLignes] = useState([])
 
   useEffect(() => {
-    api.get('/assiduite/stats').then(({ data }) => setLignes(data))
+    api.get('/assiduite/stats').then(({ data }) => setLignes(Array.isArray(data) ? data : []))
   }, [])
 
   return (
@@ -40,7 +40,7 @@ function JournalTab() {
   const [presences, setPresences] = useState([])
 
   useEffect(() => {
-    api.get('/assiduite/journal', { params: { date } }).then(({ data }) => setPresences(data))
+    api.get('/assiduite/journal', { params: { date } }).then(({ data }) => setPresences(Array.isArray(data) ? data : []))
   }, [date])
 
   return (
@@ -53,6 +53,7 @@ function JournalTab() {
             <th className="px-4 py-2 text-left font-medium text-ink-500">Arrivée</th>
             <th className="px-4 py-2 text-left font-medium text-ink-500">Départ</th>
             <th className="px-4 py-2 text-left font-medium text-ink-500">Source</th>
+            <th className="px-4 py-2 text-left font-medium text-ink-500">Photo (§hardware)</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-ink-100">
@@ -62,6 +63,29 @@ function JournalTab() {
               <td className="px-4 py-2">{p.heure_arrivee ? new Date(p.heure_arrivee).toLocaleTimeString('fr-FR') : '—'}</td>
               <td className="px-4 py-2">{p.heure_depart ? new Date(p.heure_depart).toLocaleTimeString('fr-FR') : '—'}</td>
               <td className="px-4 py-2">{p.source}</td>
+              <td className="px-4 py-2">
+                <div className="flex gap-2">
+                  {p.photo_url_arrivee && (
+                    <a href={p.photo_url_arrivee} target="_blank" rel="noreferrer" title="Photo à l'arrivée">
+                      <img
+                        src={p.photo_url_arrivee}
+                        alt="Photo arrivée"
+                        className="h-10 w-10 rounded-md border border-ink-100 object-cover transition hover:scale-150 hover:shadow-md"
+                      />
+                    </a>
+                  )}
+                  {p.photo_url_depart && (
+                    <a href={p.photo_url_depart} target="_blank" rel="noreferrer" title="Photo au départ">
+                      <img
+                        src={p.photo_url_depart}
+                        alt="Photo départ"
+                        className="h-10 w-10 rounded-md border border-ink-100 object-cover transition hover:scale-150 hover:shadow-md"
+                      />
+                    </a>
+                  )}
+                  {!p.photo_url_arrivee && !p.photo_url_depart && <span className="text-ink-300">—</span>}
+                </div>
+              </td>
             </tr>
           ))}
         </tbody>
@@ -75,7 +99,7 @@ function PersonnelInactifTab() {
   const [inactifs, setInactifs] = useState([])
 
   useEffect(() => {
-    api.get('/assiduite/personnel-inactif', { params: { jours } }).then(({ data }) => setInactifs(data))
+    api.get('/assiduite/personnel-inactif', { params: { jours } }).then(({ data }) => setInactifs(Array.isArray(data) ? data : []))
   }, [jours])
 
   return (

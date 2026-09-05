@@ -13,12 +13,12 @@ use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\PersonalAccessToken;
 
 /**
- * Passerelle offline (§hardware) : ESP1 (borne) reçoit le pointage du
- * téléphone en local (WiFi + HTTP, sans internet) et le transmet à ESP2
- * (relais) via ESP-NOW. ESP2 met en file, puis — dès que sa connexion au
- * modem est disponible — pousse les paquets en attente ici par lots. Chaque
- * paquet accusé de réception (`ok`) peut être supprimé de la file d'ESP2 ;
- * les autres restent en file pour une prochaine tentative.
+ * Passerelle offline (§hardware) : la borne ESP32-S3 (WIFI_AP_STA + caméra
+ * OV5640) reçoit le pointage du téléphone en local (WiFi + HTTP), le met en
+ * file sur flash, et — dès que sa connexion au modem est disponible — pousse
+ * les paquets en attente ici par lots. Chaque paquet accusé de réception
+ * (`ok`) peut être supprimé de sa file locale ; les autres (`retry`) y
+ * restent pour une prochaine tentative.
  *
  * Authentification : uniquement le device relais (Device, device_type
  * `relay_gateway`) — jamais le téléphone directement. L'identité de
@@ -26,6 +26,10 @@ use Laravel\Sanctum\PersonalAccessToken;
  * Sanctum que son app a émis au moment du scan (`teacher_token`), exactement
  * comme si la requête avait atteint l'API directement : le relais ne fait que
  * rejouer, en différé, une requête que le téléphone avait déjà authentifiée.
+ *
+ * `payload.photo_base64` (optionnelle) : photo JPEG prise par la caméra de la
+ * borne au moment du scan, encodée en base64 — preuve visuelle anti-fraude
+ * (§hardware), décodée et stockée par AttendanceRecorder.
  */
 class RelaySyncController extends Controller
 {
@@ -47,6 +51,7 @@ class RelaySyncController extends Controller
             'packets.*.captured_at' => ['required', 'date'],
             'packets.*.teacher_token' => ['required', 'string'],
             'packets.*.payload' => ['required', 'array'],
+            'packets.*.payload.photo_base64' => ['sometimes', 'nullable', 'string'],
         ]);
 
         $results = array_map(
@@ -65,6 +70,7 @@ class RelaySyncController extends Controller
             $acteur = $this->resolveTeacher($packet['teacher_token']);
             $capturedAt = Carbon::parse($packet['captured_at']);
             $payload = $packet['payload'];
+            $photoBase64 = $payload['photo_base64'] ?? null;
 
             $presence = $packet['type'] === 'scan'
                 ? $this->recorder->recordSelfScan(
@@ -75,8 +81,9 @@ class RelaySyncController extends Controller
                     $capturedAt,
                     source: 'app_mobile',
                     deviceCaptureAt: $capturedAt,
+                    photoBase64: $photoBase64,
                 )
-                : $this->recordProxyPacket($acteur, $payload, $capturedAt, $relay);
+                : $this->recordProxyPacket($acteur, $payload, $capturedAt, $relay, $photoBase64);
 
             return ['local_id' => $localId, 'status' => 'ok', 'presence_id' => $presence->id];
         } catch (ValidationException $e) {
@@ -91,7 +98,7 @@ class RelaySyncController extends Controller
         }
     }
 
-    private function recordProxyPacket(Enseignant $acteur, array $payload, Carbon $capturedAt, Device $relay)
+    private function recordProxyPacket(Enseignant $acteur, array $payload, Carbon $capturedAt, Device $relay, ?string $photoBase64)
     {
         $cibleId = $payload['enseignant_id'] ?? null;
         $motif = $payload['motif'] ?? null;
@@ -112,6 +119,7 @@ class RelaySyncController extends Controller
             $capturedAt,
             source: 'admin_proxy',
             deviceCaptureAt: $capturedAt,
+            photoBase64: $photoBase64,
         );
     }
 

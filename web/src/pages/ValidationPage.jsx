@@ -9,7 +9,7 @@ export default function ValidationPage() {
   function load() {
     setLoading(true)
     api.get('/presences/validation', { params: { date } }).then(({ data }) => {
-      setCours(data.cours)
+      setCours(Array.isArray(data.cours) ? data.cours : [])
       setLoading(false)
     })
   }

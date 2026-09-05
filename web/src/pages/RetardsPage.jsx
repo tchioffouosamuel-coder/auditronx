@@ -25,7 +25,7 @@ export default function RetardsPage() {
       api.get('/retards', { params: { debut, fin } }),
       api.get('/retards/parametres'),
     ]).then(([r, p]) => {
-      setLignes(r.data)
+      setLignes(Array.isArray(r.data) ? r.data : [])
       setTolerance(p.data.tolerance_minutes)
       setLoading(false)
     })

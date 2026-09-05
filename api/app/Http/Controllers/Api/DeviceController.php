@@ -179,4 +179,29 @@ class DeviceController extends Controller
             'device' => $device,
         ], 201);
     }
+
+    /**
+     * POST /api/devices/fcm-token — enregistre/rafraîchit le token FCM du device
+     * courant (push notifications). Appelé par l'app mobile au démarrage et à
+     * chaque rotation de token Firebase.
+     */
+    public function updateFcmToken(Request $request)
+    {
+        $data = $request->validate(['fcm_token' => ['required', 'string']]);
+
+        $principal = $request->user();
+
+        $device = $principal instanceof Device
+            ? $principal
+            : Device::where('teacher_id', $principal->id)
+                ->where('device_uuid', $principal->currentAccessToken()?->name)
+                ->whereNull('revoked_at')
+                ->first();
+
+        abort_unless($device, 404, 'Device introuvable pour cette session.');
+
+        $device->update(['fcm_token' => $data['fcm_token']]);
+
+        return response()->json(['updated' => true]);
+    }
 }

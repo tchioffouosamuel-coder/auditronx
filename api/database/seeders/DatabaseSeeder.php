@@ -33,7 +33,7 @@ class DatabaseSeeder extends Seeder
         );
 
         $admin = User::updateOrCreate(
-            ['email' => 'superadmin@auditron.test'],
+            ['email' => 'superadmin@auditron.ltm'],
             [
                 'name' => 'Super Admin',
                 'password' => Hash::make('ChangeMe123!'),
@@ -50,7 +50,7 @@ class DatabaseSeeder extends Seeder
             [
                 'nom' => 'Admin Test',
                 'matricule' => 'ADM-0001',
-                'email' => 'enseignant.admin@auditron.test',
+                'email' => 'enseignant.admin@auditron.ltm',
                 'password' => Hash::make('ChangeMe123!'),
                 'est_admin' => true,
             ]

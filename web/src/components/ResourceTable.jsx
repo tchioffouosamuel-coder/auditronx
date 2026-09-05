@@ -88,11 +88,11 @@ export default function ResourceTable({ title, resource, fields, columns, idKey 
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-ink-900">{title}</h1>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {title && <h1 className="text-lg font-semibold text-ink-900">{title}</h1>}
         <button
           onClick={openCreate}
-          className="rounded-md bg-brand-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-800"
+          className="rounded-md bg-brand-700 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-brand-800 sm:ml-auto"
         >
           + Nouveau
         </button>
@@ -100,29 +100,29 @@ export default function ResourceTable({ title, resource, fields, columns, idKey 
 
       {error && <div className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
-      <div className="overflow-x-auto rounded-lg border border-ink-100 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-ink-100 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-ink-100 text-sm">
           <thead className="bg-ink-50">
             <tr>
               {displayColumns.map((c) => (
-                <th key={c.key} className="px-4 py-2 text-left font-medium text-ink-500">
+                <th key={c.key} className="whitespace-nowrap px-4 py-2.5 text-left font-medium text-ink-500">
                   {c.label}
                 </th>
               ))}
-              <th className="px-4 py-2" />
+              <th className="px-4 py-2.5" />
             </tr>
           </thead>
           <tbody className="divide-y divide-ink-100">
             {loading && (
               <tr>
-                <td colSpan={displayColumns.length + 1} className="px-4 py-6 text-center text-ink-300">
+                <td colSpan={displayColumns.length + 1} className="px-4 py-8 text-center text-ink-300">
                   Chargement…
                 </td>
               </tr>
             )}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={displayColumns.length + 1} className="px-4 py-6 text-center text-ink-300">
+                <td colSpan={displayColumns.length + 1} className="px-4 py-8 text-center text-ink-300">
                   Aucune donnée.
                 </td>
               </tr>
@@ -130,11 +130,11 @@ export default function ResourceTable({ title, resource, fields, columns, idKey 
             {rows.map((row) => (
               <tr key={row[idKey]} className="hover:bg-ink-50">
                 {displayColumns.map((c) => (
-                  <td key={c.key} className="px-4 py-2 text-ink-700">
+                  <td key={c.key} className="whitespace-nowrap px-4 py-2.5 text-ink-700">
                     {c.render ? c.render(row) : String(row[c.key] ?? '—')}
                   </td>
                 ))}
-                <td className="px-4 py-2 text-right">
+                <td className="whitespace-nowrap px-4 py-2.5 text-right">
                   <button onClick={() => openEdit(row)} className="mr-3 text-ink-500 hover:text-ink-900">
                     Éditer
                   </button>

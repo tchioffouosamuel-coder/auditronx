@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1026215057369",
+    "project_id": "auditronx",
+    "storage_bucket": "auditronx.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1026215057369:android:5b1d31073de6a5b0256bc8",
+        "android_client_info": {
+          "package_name": "com.auditronx.auditron_x_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD3BVyz8dduKAPgDM2Md31-O_OU7hp96JM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

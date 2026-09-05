@@ -1,11 +1,18 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'screens/activation_screen.dart';
 import 'screens/home_screen.dart';
+import 'services/push_notifications.dart';
 import 'services/session.dart';
 import 'theme.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+
   runApp(const AuditronXApp());
 }
 

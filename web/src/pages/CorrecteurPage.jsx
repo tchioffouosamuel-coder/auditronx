@@ -17,7 +17,7 @@ export default function CorrecteurPage() {
   function load() {
     setLoading(true)
     api.get('/presences/anomalies', { params: { date } }).then(({ data }) => {
-      setAnomalies(data.anomalies)
+      setAnomalies(Array.isArray(data.anomalies) ? data.anomalies : [])
       setLoading(false)
     })
   }

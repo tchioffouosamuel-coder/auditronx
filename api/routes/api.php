@@ -48,6 +48,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/devices/{device}/revoke', [DeviceController::class, 'revoke']);
     Route::post('/devices/provision-kiosk', [DeviceController::class, 'provisionKiosk']);
     Route::post('/devices/provision-relay', [DeviceController::class, 'provisionRelay']);
+    Route::post('/devices/fcm-token', [DeviceController::class, 'updateFcmToken']);
 
     Route::post('/attendance/scan', [AttendanceController::class, 'scan']);
     Route::post('/attendance/admin-proxy', [AttendanceController::class, 'adminProxy']);

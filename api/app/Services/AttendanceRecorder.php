@@ -8,6 +8,9 @@ use App\Models\Presence;
 use App\Models\QrPoint;
 use App\Models\TeacherNotification;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -22,6 +25,8 @@ use Illuminate\Validation\ValidationException;
  */
 class AttendanceRecorder
 {
+    public function __construct(private readonly PushNotificationService $push) {}
+
     public function recordSelfScan(
         Enseignant $enseignant,
         ?int $deviceId,
@@ -30,6 +35,7 @@ class AttendanceRecorder
         Carbon $timestamp,
         string $source = 'app_mobile',
         ?Carbon $deviceCaptureAt = null,
+        ?string $photoBase64 = null,
     ): Presence {
         $accessPoint = $this->resolveAccessPoint($qrCode, $bssid);
 
@@ -38,7 +44,7 @@ class AttendanceRecorder
             'access_point_id' => $accessPoint->id,
             'device_id' => $deviceId,
             'device_capture_at' => $deviceCaptureAt,
-        ]);
+        ], $photoBase64);
     }
 
     public function recordProxyScan(
@@ -51,6 +57,7 @@ class AttendanceRecorder
         Carbon $timestamp,
         string $source = 'admin_proxy',
         ?Carbon $deviceCaptureAt = null,
+        ?string $photoBase64 = null,
     ): Presence {
         $accessPoint = $this->resolveAccessPoint($qrCode, $bssid);
 
@@ -60,13 +67,20 @@ class AttendanceRecorder
             'device_id' => $deviceId,
             'reason' => $motif,
             'device_capture_at' => $deviceCaptureAt,
-        ]);
+        ], $photoBase64);
 
         // §4.1 : l'enseignant concerné est notifié qu'un tiers a scanné en son nom.
+        $message = "{$acteur->nom} a scanné votre présence en votre nom ({$motif}).";
+
         TeacherNotification::create([
             'enseignant_id' => $cible->id,
             'type' => 'scan_procuration',
-            'message' => "{$acteur->nom} a scanné votre présence en votre nom ({$motif}).",
+            'message' => $message,
+        ]);
+
+        $this->push->sendToTeacher($cible->id, 'Pointage par procuration', $message, [
+            'type' => 'scan_procuration',
+            'presence_id' => $presence->id,
         ]);
 
         return $presence;
@@ -87,22 +101,55 @@ class AttendanceRecorder
     }
 
     /** Alterne heure_arrivee / heure_depart sur la ligne du jour, en la créant si besoin. */
-    private function record(int $enseignantId, Carbon $timestamp, array $attributs): Presence
+    private function record(int $enseignantId, Carbon $timestamp, array $attributs, ?string $photoBase64 = null): Presence
     {
         $presence = Presence::firstOrNew([
             'enseignant_id' => $enseignantId,
             'date' => $timestamp->toDateString(),
         ]);
 
-        if (! $presence->exists || $presence->heure_arrivee === null) {
+        $estArrivee = ! $presence->exists || $presence->heure_arrivee === null;
+
+        if ($estArrivee) {
             $presence->heure_arrivee = $timestamp;
         } else {
             $presence->heure_depart = $timestamp;
+        }
+
+        if ($photoBase64) {
+            $path = $this->storePhoto($photoBase64);
+            if ($path) {
+                $attributs[$estArrivee ? 'photo_path_arrivee' : 'photo_path_depart'] = $path;
+            }
         }
 
         $presence->fill($attributs);
         $presence->save();
 
         return $presence;
+    }
+
+    /**
+     * Décode la photo JPEG en base64 remontée par la borne ESP32-S3 + OV5640
+     * (§hardware) et la stocke sur le disque public. Best-effort : une photo
+     * illisible ne doit jamais faire échouer l'enregistrement du pointage.
+     */
+    private function storePhoto(string $photoBase64): ?string
+    {
+        try {
+            $binary = base64_decode($photoBase64, strict: true);
+            if ($binary === false || $binary === '') {
+                return null;
+            }
+
+            $path = 'scan-photos/'.date('Y/m/d').'/'.Str::uuid().'.jpg';
+            Storage::disk('public')->put($path, $binary);
+
+            return $path;
+        } catch (\Throwable $e) {
+            Log::warning('attendance.storePhoto: échec décodage/stockage', ['error' => $e->getMessage()]);
+
+            return null;
+        }
     }
 }

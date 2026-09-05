@@ -9,8 +9,7 @@ class ApiClient {
   ApiClient._();
   static final ApiClient instance = ApiClient._();
 
-  /// À adapter à l'environnement de déploiement (ex. https://api.auditronx.exemple).
-  static const String baseUrl = 'http://10.0.2.2:8000/api';
+  static const String baseUrl = 'https://api-ltm.auditronx.com/public/api';
 
   final _storage = const FlutterSecureStorage();
   static const _tokenKey = 'auditron_token';

@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'api_client.dart';
+import 'push_notifications.dart';
 
 /// État d'activation de l'app (§4.1). Un `device_uuid` est généré une seule
 /// fois et persisté ; il identifie ce téléphone auprès de l'API à l'activation.
@@ -23,6 +26,7 @@ class Session extends ChangeNotifier {
       _activated = await ApiClient.instance.isActivated;
       if (_activated) {
         _me = await ApiClient.instance.get('/me') as Map<String, dynamic>;
+        unawaited(PushNotifications.instance.registerDevice());
       }
     } catch (_) {
       _activated = false;
@@ -57,6 +61,7 @@ class Session extends ChangeNotifier {
       await ApiClient.instance.saveSession(token: response['token'] as String, deviceUuid: uuid);
       _activated = true;
       _me = await ApiClient.instance.get('/me') as Map<String, dynamic>;
+      unawaited(PushNotifications.instance.registerDevice());
       notifyListeners();
     }
 
@@ -76,6 +81,7 @@ class Session extends ChangeNotifier {
     await ApiClient.instance.saveSession(token: response['token'] as String, deviceUuid: uuid);
     _activated = true;
     _me = await ApiClient.instance.get('/me') as Map<String, dynamic>;
+    unawaited(PushNotifications.instance.registerDevice());
     notifyListeners();
   }
 
