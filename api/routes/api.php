@@ -58,6 +58,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/relay/sync', [RelaySyncController::class, 'sync']);
 
     // Historique personnel & notifications (§4.1 — app mobile)
+    Route::get('/wifi-access-points', [AccessPointController::class, 'wifiCredentials']);
     Route::get('/mes-presences', [MyPresenceController::class, 'index']);
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead']);

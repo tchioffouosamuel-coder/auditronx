@@ -21,13 +21,18 @@ class _ScanScreenState extends State<ScanScreen> {
   final _controller = MobileScannerController();
   final _wifi = WifiService();
   bool _processing = false;
+  bool _connectedToBorne = false;
 
   Future<void> _handleCode(String code) async {
     if (_processing) return;
     setState(() => _processing = true);
 
     try {
-      final bssid = await _wifi.currentBssid();
+      final bornes = await _wifi.fetchKnownBornes();
+      var bssid = await _wifi.connectToKnownBorne(bornes);
+      _connectedToBorne = bssid != null;
+      bssid ??= await _wifi.currentBssid();
+
       if (bssid == null) {
         _showMessage("Impossible de lire la borne WiFi. Vérifiez la connexion et l'autorisation de localisation.", error: true);
         return;
@@ -40,6 +45,13 @@ class _ScanScreenState extends State<ScanScreen> {
     } on ApiException catch (e) {
       _showMessage(e.message, error: true);
     } finally {
+      // Libère systématiquement la connexion éphémère à la borne (succès ou
+      // échec) pour ne pas laisser le téléphone occuper un des rares
+      // emplacements de l'AP softAP de l'ESP32 après le scan.
+      if (_connectedToBorne) {
+        await _wifi.release();
+        _connectedToBorne = false;
+      }
       if (mounted) setState(() => _processing = false);
     }
   }
@@ -53,6 +65,7 @@ class _ScanScreenState extends State<ScanScreen> {
 
   @override
   void dispose() {
+    if (_connectedToBorne) _wifi.release();
     _controller.dispose();
     super.dispose();
   }

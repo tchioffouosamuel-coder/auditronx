@@ -193,6 +193,12 @@ export default function AppareilsPage() {
           fields={[
             { key: 'bssid', label: 'BSSID', required: true },
             { key: 'ssid', label: 'SSID' },
+            { key: 'password', label: 'Mot de passe WiFi', type: 'password' },
+            { key: 'label', label: 'Libellé' },
+          ]}
+          columns={[
+            { key: 'bssid', label: 'BSSID' },
+            { key: 'ssid', label: 'SSID' },
             { key: 'label', label: 'Libellé' },
           ]}
         />
