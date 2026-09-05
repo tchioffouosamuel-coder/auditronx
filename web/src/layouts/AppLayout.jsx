@@ -22,7 +22,6 @@ const NAV_SECTIONS = [
     links: [
       { to: '/retards', label: 'Retards & bilans' },
       { to: '/assiduite', label: 'Assiduité & rapports' },
-      { to: '/correcteur', label: 'Correcteur de présences' },
       { to: '/validation', label: 'Validation des présences' },
       { to: '/signalements', label: 'Signalements' },
       { to: '/feries', label: 'Jours fériés' },

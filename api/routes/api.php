@@ -19,7 +19,6 @@ use App\Http\Controllers\Api\FicheProgressionController;
 use App\Http\Controllers\Api\MyPresenceController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OtpController;
-use App\Http\Controllers\Api\PresenceCorrecteurController;
 use App\Http\Controllers\Api\PresenceValidationController;
 use App\Http\Controllers\Api\ProgrammeController;
 use App\Http\Controllers\Api\QrPointController;
@@ -112,10 +111,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/assiduite/journal', [AssiduiteController::class, 'journal']);
     Route::get('/assiduite/personnel-inactif', [AssiduiteController::class, 'personnelInactif']);
     Route::get('/statistiques/export-zip', [StatistiquesController::class, 'exportZip']);
-
-    // Correcteur de présences (§4.2)
-    Route::get('/presences/anomalies', [PresenceCorrecteurController::class, 'anomalies']);
-    Route::post('/presences/corriger', [PresenceCorrecteurController::class, 'corriger']);
 
     // Validation des présences (§4.2)
     Route::get('/presences/validation', [PresenceValidationController::class, 'index']);

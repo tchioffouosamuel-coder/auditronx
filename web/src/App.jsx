@@ -8,7 +8,6 @@ import AppareilsPage from './pages/AppareilsPage'
 import AssiduitePage from './pages/AssiduitePage'
 import CahierTextePage from './pages/CahierTextePage'
 import ClassesPage from './pages/ClassesPage'
-import CorrecteurPage from './pages/CorrecteurPage'
 import DashboardPage from './pages/DashboardPage'
 import DisciplinesPage from './pages/DisciplinesPage'
 import EmploisPage from './pages/EmploisPage'
@@ -42,7 +41,6 @@ export default function App() {
             <Route path="/accreditations" element={<AccreditationsPage />} />
             <Route path="/retards" element={<RetardsPage />} />
             <Route path="/assiduite" element={<AssiduitePage />} />
-            <Route path="/correcteur" element={<CorrecteurPage />} />
             <Route path="/validation" element={<ValidationPage />} />
             <Route path="/signalements" element={<SignalementsPage />} />
             <Route path="/feries" element={<FeriesPage />} />
