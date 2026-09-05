@@ -51,7 +51,7 @@ class MainActivity : FlutterActivity() {
                 }
 
                 "release" -> {
-                    release()
+                    releaseBorneNetwork()
                     result.success(null)
                 }
 
@@ -62,7 +62,7 @@ class MainActivity : FlutterActivity() {
 
     @RequiresApi(Build.VERSION_CODES.Q)
     private fun connect(ssid: String, password: String?, result: MethodChannel.Result) {
-        release() // une seule connexion borne active à la fois
+        releaseBorneNetwork() // une seule connexion borne active à la fois
 
         val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
@@ -105,7 +105,7 @@ class MainActivity : FlutterActivity() {
         return (transportInfo as? WifiInfo)?.bssid
     }
 
-    private fun release() {
+    private fun releaseBorneNetwork() {
         val callback = activeCallback ?: return
         activeCallback = null
         try {
@@ -117,7 +117,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
-        release()
+        releaseBorneNetwork()
         super.onDestroy()
     }
 }

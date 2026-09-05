@@ -1,6 +1,27 @@
 import { useEffect, useState } from 'react'
+import Select from 'react-select'
 import api from '../lib/api'
 import Modal from './Modal'
+
+const SELECT_STYLES = {
+  control: (base, state) => ({
+    ...base,
+    minHeight: '2.5rem',
+    borderColor: state.isFocused ? 'var(--color-brand-500)' : 'var(--color-ink-100)',
+    boxShadow: state.isFocused ? '0 0 0 2px var(--color-brand-100)' : 'none',
+    '&:hover': { borderColor: 'var(--color-brand-500)' },
+  }),
+  option: (base, state) => ({
+    ...base,
+    backgroundColor: state.isSelected
+      ? 'var(--color-brand-700)'
+      : state.isFocused
+        ? 'var(--color-brand-50)'
+        : 'white',
+    color: state.isSelected ? 'white' : 'var(--color-ink-900)',
+  }),
+  menu: (base) => ({ ...base, zIndex: 50 }),
+}
 
 /**
  * Table CRUD générique pilotée par un schéma de champs — évite de réécrire le
@@ -166,19 +187,28 @@ export default function ResourceTable({ title, resource, fields, columns, idKey 
                 <label key={f.key} className="mb-3 block text-sm">
                   <span className="mb-1 block text-ink-700">{f.label}</span>
                   {f.type === 'select' ? (
-                    <select
-                      required={f.required}
-                      value={formValues[f.key] ?? ''}
-                      onChange={(e) => setFormValues((v) => ({ ...v, [f.key]: e.target.value }))}
-                      className="w-full rounded-md border border-ink-100 px-3 py-2 focus:border-brand-500 focus:outline-none"
-                    >
-                      <option value="">—</option>
-                      {(f.options ?? optionsByField[f.key] ?? []).map((opt) => (
-                        <option key={opt.id ?? opt.value} value={opt.id ?? opt.value}>
-                          {opt.label ?? (f.optionLabel ? opt[f.optionLabel] : opt.nom ?? opt.label)}
-                        </option>
-                      ))}
-                    </select>
+                    (() => {
+                      const rawOptions = f.options ?? optionsByField[f.key] ?? []
+                      const selectOptions = rawOptions.map((opt) => ({
+                        value: opt.id ?? opt.value,
+                        label: opt.label ?? (f.optionLabel ? opt[f.optionLabel] : opt.nom ?? opt.label),
+                      }))
+                      const current = formValues[f.key] ?? ''
+                      const selected = selectOptions.find((o) => String(o.value) === String(current)) ?? null
+
+                      return (
+                        <Select
+                          inputId={`field-${f.key}`}
+                          styles={SELECT_STYLES}
+                          isClearable={!f.required}
+                          placeholder="Rechercher…"
+                          noOptionsMessage={() => 'Aucun résultat'}
+                          options={selectOptions}
+                          value={selected}
+                          onChange={(opt) => setFormValues((v) => ({ ...v, [f.key]: opt?.value ?? '' }))}
+                        />
+                      )
+                    })()
                   ) : (
                     <input
                       type={f.type ?? 'text'}

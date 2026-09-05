@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import ResourceTable from '../components/ResourceTable'
+import SpreadsheetActions from '../components/SpreadsheetActions'
 import api from '../lib/api'
 
 export default function PersonnelPage() {
+  const [refreshKey, setRefreshKey] = useState(0)
   const [importOpen, setImportOpen] = useState(false)
   const [importJson, setImportJson] = useState('[\n  { "nom": "", "matricule": "" }\n]')
   const [importResult, setImportResult] = useState(null)
@@ -21,6 +23,8 @@ export default function PersonnelPage() {
 
   return (
     <div>
+      <SpreadsheetActions entity="personnel" label="personnel" onImported={() => setRefreshKey((k) => k + 1)} />
+
       <div className="mb-4 flex justify-end">
         <button
           onClick={() => setImportOpen((v) => !v)}
@@ -50,6 +54,7 @@ export default function PersonnelPage() {
       )}
 
       <ResourceTable
+        key={refreshKey}
         title="Personnel"
         resource="/personnel"
         fields={[

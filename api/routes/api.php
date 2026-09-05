@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\QrPointController;
 use App\Http\Controllers\Api\RelaySyncController;
 use App\Http\Controllers\Api\RetardsController;
 use App\Http\Controllers\Api\SignalementController;
+use App\Http\Controllers\Api\SpreadsheetController;
 use App\Http\Controllers\Api\StatistiquesController;
 use App\Http\Controllers\Api\VisageController;
 use Illuminate\Http\Request;
@@ -87,6 +88,14 @@ Route::middleware('auth:sanctum')->group(function () {
         ->parameters(['feries' => 'ferie']);
     Route::apiResource('accreditations', AccreditationController::class);
     Route::post('/personnel/import', [EnseignantController::class, 'import']);
+
+    // Import/export/modèle XLSX génériques (§4.2) pour les entités principales.
+    // Préfixées `/spreadsheet/...` pour ne pas entrer en collision avec les
+    // apiResource `/personnel/{enseignant}` etc. déclarées ci-dessus.
+    Route::pattern('spreadsheetEntity', 'personnel|classes|disciplines|emplois');
+    Route::get('/spreadsheet/{spreadsheetEntity}/template', [SpreadsheetController::class, 'template']);
+    Route::get('/spreadsheet/{spreadsheetEntity}/export', [SpreadsheetController::class, 'export']);
+    Route::post('/spreadsheet/{spreadsheetEntity}/import', [SpreadsheetController::class, 'import']);
 
     // Tableau de bord (§4.2)
     Route::get('/dashboard', [DashboardController::class, 'index']);
