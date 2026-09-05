@@ -1,7 +1,10 @@
 import axios from 'axios'
 
+// En dev, '/api' passe par le proxy Vite (vite.config.js) vers l'API distante.
+// En prod, le build est servi en statique sans proxy : il faut l'URL absolue,
+// injectée à la compilation via VITE_API_BASE_URL (voir .env.production).
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   headers: { Accept: 'application/json' },
 })
 
