@@ -29,13 +29,13 @@ class Presence extends Model
     /** Photo prise par la borne au moment du scan d'arrivée (§hardware, ESP32-S3 + OV5640), ou null. */
     public function getPhotoUrlArriveeAttribute(): ?string
     {
-        return $this->photo_path_arrivee ? Storage::disk('public')->url($this->photo_path_arrivee) : null;
+        return $this->photo_path_arrivee ? Storage::disk('public_direct')->url($this->photo_path_arrivee) : null;
     }
 
     /** Photo prise par la borne au moment du scan de départ, ou null. */
     public function getPhotoUrlDepartAttribute(): ?string
     {
-        return $this->photo_path_depart ? Storage::disk('public')->url($this->photo_path_depart) : null;
+        return $this->photo_path_depart ? Storage::disk('public_direct')->url($this->photo_path_depart) : null;
     }
 
     public function enseignant(): BelongsTo

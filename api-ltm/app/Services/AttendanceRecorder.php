@@ -140,8 +140,10 @@ class AttendanceRecorder
 
     /**
      * Décode la photo JPEG en base64 remontée par la borne ESP32-S3 + OV5640
-     * (§hardware) et la stocke sur le disque public. Best-effort : une photo
-     * illisible ne doit jamais faire échouer l'enregistrement du pointage.
+     * (§hardware) et la stocke directement dans `public/` (disque
+     * `public_direct` — `symlink()`/`exec()` désactivés en prod, donc
+     * `storage:link` est inutilisable sur cet hébergement). Best-effort : une
+     * photo illisible ne doit jamais faire échouer l'enregistrement du pointage.
      */
     private function storePhoto(string $photoBase64): ?string
     {
@@ -152,7 +154,7 @@ class AttendanceRecorder
             }
 
             $path = 'scan-photos/'.date('Y/m/d').'/'.Str::uuid().'.jpg';
-            Storage::disk('public')->put($path, $binary);
+            Storage::disk('public_direct')->put($path, $binary);
 
             return $path;
         } catch (\Throwable $e) {

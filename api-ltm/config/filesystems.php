@@ -47,6 +47,20 @@ return [
             'report' => false,
         ],
 
+        // `symlink()` et `exec()` sont désactivés sur l'hébergement mutualisé
+        // de production — `php artisan storage:link` (donc le disque `public`
+        // ci-dessus) ne peut jamais fonctionner. Ce disque écrit directement
+        // dans `public/`, sans lien symbolique, servi tel quel par le serveur
+        // web. Utilisé pour les photos de pointage (§hardware).
+        'public_direct' => [
+            'driver' => 'local',
+            'root' => public_path(),
+            'url' => rtrim(env('APP_URL', 'http://localhost'), '/'),
+            'visibility' => 'public',
+            'throw' => false,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),
