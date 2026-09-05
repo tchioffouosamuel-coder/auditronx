@@ -406,7 +406,11 @@ void setup() {
     Serial.print("[ap] SSID=");
     Serial.print(AP_SSID);
     Serial.print(" IP=");
-    Serial.println(WiFi.softAPIP());
+    Serial.print(WiFi.softAPIP());
+    // BSSID de la borne = adresse MAC de son interface AP — c'est la valeur à
+    // saisir dans le backoffice (Appareils & points d'accès > Bornes WiFi).
+    Serial.print(" BSSID=");
+    Serial.println(WiFi.softAPmacAddress());
 
     WiFi.begin(STA_SSID, STA_PASSWORD);
 

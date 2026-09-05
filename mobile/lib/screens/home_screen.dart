@@ -50,13 +50,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(titles[_tab]),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Déconnexion',
-            onPressed: () => context.read<Session>().logout(),
-          ),
-        ],
       ),
       body: pages[_tab],
       bottomNavigationBar: NavigationBar(

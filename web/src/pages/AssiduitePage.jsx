@@ -1,95 +1,93 @@
 import { useEffect, useState } from 'react'
+import DataTable from '../components/DataTable'
 import api from '../lib/api'
 import { downloadFile } from '../lib/download'
 
 function StatsTab() {
   const [lignes, setLignes] = useState([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.get('/assiduite/stats').then(({ data }) => setLignes(Array.isArray(data) ? data : []))
+    api.get('/assiduite/stats').then(({ data }) => setLignes(Array.isArray(data) ? data : [])).finally(() => setLoading(false))
   }, [])
 
   return (
-    <table className="min-w-full divide-y divide-ink-100 text-sm">
-      <thead className="bg-ink-50">
-        <tr>
-          <th className="px-4 py-2 text-left font-medium text-ink-500">Nom</th>
-          <th className="px-4 py-2 text-left font-medium text-ink-500">Section</th>
-          <th className="px-4 py-2 text-left font-medium text-ink-500">Jours présents</th>
-          <th className="px-4 py-2 text-left font-medium text-ink-500">Jours ouvrés</th>
-          <th className="px-4 py-2 text-left font-medium text-ink-500">Taux</th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-ink-100">
-        {lignes.map((l) => (
-          <tr key={l.enseignant_id} className="hover:bg-ink-50">
-            <td className="px-4 py-2">{l.nom}</td>
-            <td className="px-4 py-2">{l.section}</td>
-            <td className="px-4 py-2">{l.jours_presents}</td>
-            <td className="px-4 py-2">{l.jours_ouvres}</td>
-            <td className="px-4 py-2">{l.taux_assiduite}%</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <DataTable
+      loading={loading}
+      rows={lignes}
+      idKey="enseignant_id"
+      columns={[
+        { key: 'nom', label: 'Nom' },
+        { key: 'section', label: 'Section' },
+        { key: 'jours_presents', label: 'Jours présents' },
+        { key: 'jours_ouvres', label: 'Jours ouvrés' },
+        { key: 'taux_assiduite', label: 'Taux', render: (l) => `${l.taux_assiduite}%`, sortValue: (l) => l.taux_assiduite },
+      ]}
+    />
   )
 }
 
 function JournalTab() {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [presences, setPresences] = useState([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.get('/assiduite/journal', { params: { date } }).then(({ data }) => setPresences(Array.isArray(data) ? data : []))
+    setLoading(true)
+    api.get('/assiduite/journal', { params: { date } }).then(({ data }) => setPresences(Array.isArray(data) ? data : [])).finally(() => setLoading(false))
   }, [date])
 
   return (
     <div>
       <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mb-3 rounded-md border border-ink-100 px-3 py-1.5 text-sm" />
-      <table className="min-w-full divide-y divide-ink-100 text-sm">
-        <thead className="bg-ink-50">
-          <tr>
-            <th className="px-4 py-2 text-left font-medium text-ink-500">Enseignant</th>
-            <th className="px-4 py-2 text-left font-medium text-ink-500">Arrivée</th>
-            <th className="px-4 py-2 text-left font-medium text-ink-500">Départ</th>
-            <th className="px-4 py-2 text-left font-medium text-ink-500">Source</th>
-            <th className="px-4 py-2 text-left font-medium text-ink-500">Photo (§hardware)</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-ink-100">
-          {presences.map((p) => (
-            <tr key={p.id} className="hover:bg-ink-50">
-              <td className="px-4 py-2">{p.enseignant?.nom}</td>
-              <td className="px-4 py-2">{p.heure_arrivee ? new Date(p.heure_arrivee).toLocaleTimeString('fr-FR') : '—'}</td>
-              <td className="px-4 py-2">{p.heure_depart ? new Date(p.heure_depart).toLocaleTimeString('fr-FR') : '—'}</td>
-              <td className="px-4 py-2">{p.source}</td>
-              <td className="px-4 py-2">
-                <div className="flex gap-2">
-                  {p.photo_url_arrivee && (
-                    <a href={p.photo_url_arrivee} target="_blank" rel="noreferrer" title="Photo à l'arrivée">
-                      <img
-                        src={p.photo_url_arrivee}
-                        alt="Photo arrivée"
-                        className="h-10 w-10 rounded-md border border-ink-100 object-cover transition hover:scale-150 hover:shadow-md"
-                      />
-                    </a>
-                  )}
-                  {p.photo_url_depart && (
-                    <a href={p.photo_url_depart} target="_blank" rel="noreferrer" title="Photo au départ">
-                      <img
-                        src={p.photo_url_depart}
-                        alt="Photo départ"
-                        className="h-10 w-10 rounded-md border border-ink-100 object-cover transition hover:scale-150 hover:shadow-md"
-                      />
-                    </a>
-                  )}
-                  {!p.photo_url_arrivee && !p.photo_url_depart && <span className="text-ink-300">—</span>}
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <DataTable
+        loading={loading}
+        rows={presences}
+        columns={[
+          { key: 'enseignant', label: 'Enseignant', render: (p) => p.enseignant?.nom, sortValue: (p) => p.enseignant?.nom },
+          {
+            key: 'heure_arrivee',
+            label: 'Arrivée',
+            render: (p) => (p.heure_arrivee ? new Date(p.heure_arrivee).toLocaleTimeString('fr-FR') : '—'),
+            sortValue: (p) => p.heure_arrivee ?? '',
+          },
+          {
+            key: 'heure_depart',
+            label: 'Départ',
+            render: (p) => (p.heure_depart ? new Date(p.heure_depart).toLocaleTimeString('fr-FR') : '—'),
+            sortValue: (p) => p.heure_depart ?? '',
+          },
+          { key: 'source', label: 'Source' },
+          {
+            key: 'photo',
+            label: 'Photo (§hardware)',
+            sortable: false,
+            render: (p) => (
+              <div className="flex gap-2">
+                {p.photo_url_arrivee && (
+                  <a href={p.photo_url_arrivee} target="_blank" rel="noreferrer" title="Photo à l'arrivée">
+                    <img
+                      src={p.photo_url_arrivee}
+                      alt="Photo arrivée"
+                      className="h-10 w-10 rounded-md border border-ink-100 object-cover transition hover:scale-150 hover:shadow-md"
+                    />
+                  </a>
+                )}
+                {p.photo_url_depart && (
+                  <a href={p.photo_url_depart} target="_blank" rel="noreferrer" title="Photo au départ">
+                    <img
+                      src={p.photo_url_depart}
+                      alt="Photo départ"
+                      className="h-10 w-10 rounded-md border border-ink-100 object-cover transition hover:scale-150 hover:shadow-md"
+                    />
+                  </a>
+                )}
+                {!p.photo_url_arrivee && !p.photo_url_depart && <span className="text-ink-300">—</span>}
+              </div>
+            ),
+          },
+        ]}
+      />
     </div>
   )
 }
@@ -97,9 +95,11 @@ function JournalTab() {
 function PersonnelInactifTab() {
   const [jours, setJours] = useState(7)
   const [inactifs, setInactifs] = useState([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.get('/assiduite/personnel-inactif', { params: { jours } }).then(({ data }) => setInactifs(Array.isArray(data) ? data : []))
+    setLoading(true)
+    api.get('/assiduite/personnel-inactif', { params: { jours } }).then(({ data }) => setInactifs(Array.isArray(data) ? data : [])).finally(() => setLoading(false))
   }, [jours])
 
   return (
@@ -108,24 +108,16 @@ function PersonnelInactifTab() {
         Inactifs depuis plus de{' '}
         <input type="number" value={jours} onChange={(e) => setJours(e.target.value)} className="w-16 rounded-md border border-ink-100 px-2 py-1" /> jours
       </label>
-      <table className="min-w-full divide-y divide-ink-100 text-sm">
-        <thead className="bg-ink-50">
-          <tr>
-            <th className="px-4 py-2 text-left font-medium text-ink-500">Nom</th>
-            <th className="px-4 py-2 text-left font-medium text-ink-500">Section</th>
-            <th className="px-4 py-2 text-left font-medium text-ink-500">Dernière présence</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-ink-100">
-          {inactifs.map((i) => (
-            <tr key={i.enseignant_id} className="hover:bg-ink-50">
-              <td className="px-4 py-2">{i.nom}</td>
-              <td className="px-4 py-2">{i.section}</td>
-              <td className="px-4 py-2">{i.derniere_presence ?? 'Jamais'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <DataTable
+        loading={loading}
+        rows={inactifs}
+        idKey="enseignant_id"
+        columns={[
+          { key: 'nom', label: 'Nom' },
+          { key: 'section', label: 'Section' },
+          { key: 'derniere_presence', label: 'Dernière présence', render: (i) => i.derniere_presence ?? 'Jamais' },
+        ]}
+      />
     </div>
   )
 }
@@ -163,11 +155,9 @@ export default function AssiduitePage() {
         ))}
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-ink-100 bg-white p-4">
-        {tab === 'stats' && <StatsTab />}
-        {tab === 'journal' && <JournalTab />}
-        {tab === 'inactif' && <PersonnelInactifTab />}
-      </div>
+      {tab === 'stats' && <StatsTab />}
+      {tab === 'journal' && <JournalTab />}
+      {tab === 'inactif' && <PersonnelInactifTab />}
     </div>
   )
 }

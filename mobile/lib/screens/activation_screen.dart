@@ -19,6 +19,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
   final _telController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _submitting = false;
+  bool _obscurePassword = true;
   String? _error;
 
   Future<void> _submit() async {
@@ -90,8 +91,15 @@ class _ActivationScreenState extends State<ActivationScreen> {
                     const SizedBox(height: 12),
                     TextField(
                       controller: _passwordController,
-                      obscureText: true,
-                      decoration: const InputDecoration(labelText: 'Mot de passe'),
+                      obscureText: _obscurePassword,
+                      decoration: InputDecoration(
+                        labelText: 'Mot de passe',
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                          tooltip: _obscurePassword ? 'Afficher le mot de passe' : 'Masquer le mot de passe',
+                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                        ),
+                      ),
                       onSubmitted: (_) => _submit(),
                     ),
                     if (_error != null) ...[

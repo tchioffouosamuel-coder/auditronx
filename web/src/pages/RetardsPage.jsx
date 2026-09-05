@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import DataTable from '../components/DataTable'
 import api from '../lib/api'
 import { downloadFile } from '../lib/download'
 
@@ -74,44 +75,26 @@ export default function RetardsPage() {
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-ink-100 bg-white">
-        <table className="min-w-full divide-y divide-ink-100 text-sm">
-          <thead className="bg-ink-50">
-            <tr>
-              <th className="px-4 py-2 text-left font-medium text-ink-500">Nom</th>
-              <th className="px-4 py-2 text-left font-medium text-ink-500">Matricule</th>
-              <th className="px-4 py-2 text-left font-medium text-ink-500">Section</th>
-              <th className="px-4 py-2 text-left font-medium text-ink-500">Jours de retard</th>
-              <th className="px-4 py-2 text-left font-medium text-ink-500">Minutes cumulées</th>
-              <th className="px-4 py-2" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-ink-100">
-            {loading && (
-              <tr><td colSpan={6} className="px-4 py-6 text-center text-ink-300">Chargement…</td></tr>
-            )}
-            {!loading && lignes.map((l) => (
-              <tr key={l.enseignant_id} className="hover:bg-ink-50">
-                <td className="px-4 py-2">{l.nom}</td>
-                <td className="px-4 py-2">{l.matricule}</td>
-                <td className="px-4 py-2">{l.section}</td>
-                <td className="px-4 py-2">{l.jours_retard}</td>
-                <td className="px-4 py-2">{l.minutes_retard_total}</td>
-                <td className="px-4 py-2 text-right">
-                  <button
-                    onClick={() =>
-                      downloadFile(`/retards/bilan/${l.enseignant_id}?debut=${debut}&fin=${fin}`, `bilan-${l.matricule}.pdf`)
-                    }
-                    className="text-ink-500 hover:text-ink-900"
-                  >
-                    Fiche PDF
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        loading={loading}
+        rows={lignes}
+        idKey="enseignant_id"
+        columns={[
+          { key: 'nom', label: 'Nom' },
+          { key: 'matricule', label: 'Matricule' },
+          { key: 'section', label: 'Section' },
+          { key: 'jours_retard', label: 'Jours de retard' },
+          { key: 'minutes_retard_total', label: 'Minutes cumulées' },
+        ]}
+        renderActions={(l) => (
+          <button
+            onClick={() => downloadFile(`/retards/bilan/${l.enseignant_id}?debut=${debut}&fin=${fin}`, `bilan-${l.matricule}.pdf`)}
+            className="text-ink-500 hover:text-ink-900"
+          >
+            Fiche PDF
+          </button>
+        )}
+      />
     </div>
   )
 }

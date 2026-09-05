@@ -37,12 +37,21 @@ class DeviceController extends Controller
         }
 
         if ($enseignant->est_admin) {
-            $device = Device::create([
-                'teacher_id' => $enseignant->id,
-                'device_uuid' => $data['device_uuid'],
-                'device_type' => $data['device_type'] ?? 'mobile',
-                'activated_at' => now(),
-            ]);
+            // updateOrCreate plutôt que create() : le device_uuid (généré une
+            // fois côté app et persisté sur le téléphone) peut déjà exister en
+            // base si ce même appareil a été révoqué puis se ré-active — sans
+            // ça, l'unicité de device_uuid fait planter l'activation avec une
+            // erreur SQL brute au lieu de la réactiver proprement.
+            $device = Device::updateOrCreate(
+                ['device_uuid' => $data['device_uuid']],
+                [
+                    'teacher_id' => $enseignant->id,
+                    'device_type' => $data['device_type'] ?? 'mobile',
+                    'activated_at' => now(),
+                    'revoked_at' => null,
+                ]
+            );
+            $enseignant->tokens()->where('name', $data['device_uuid'])->delete();
 
             $token = $enseignant->createToken($data['device_uuid'])->plainTextToken;
 
@@ -101,13 +110,22 @@ class DeviceController extends Controller
 
         $otp->update(['used_at' => now()]);
 
-        $device = Device::create([
-            'teacher_id' => $otp->teacher_id,
-            'device_uuid' => $data['device_uuid'],
-            'device_type' => $data['device_type'] ?? 'mobile',
-            'activated_at' => now(),
-            'otp_id' => $otp->id,
-        ]);
+        // updateOrCreate : ce device_uuid (généré une fois côté app et
+        // persisté sur le téléphone) peut déjà exister en base si cet
+        // appareil a été révoqué puis se ré-active avec un nouvel OTP — sans
+        // ça, l'unicité de device_uuid fait planter l'activation avec une
+        // erreur SQL brute au lieu de la réactiver proprement.
+        $device = Device::updateOrCreate(
+            ['device_uuid' => $data['device_uuid']],
+            [
+                'teacher_id' => $otp->teacher_id,
+                'device_type' => $data['device_type'] ?? 'mobile',
+                'activated_at' => now(),
+                'otp_id' => $otp->id,
+                'revoked_at' => null,
+            ]
+        );
+        $otp->teacher->tokens()->where('name', $data['device_uuid'])->delete();
 
         $token = $otp->teacher->createToken($data['device_uuid'])->plainTextToken;
 

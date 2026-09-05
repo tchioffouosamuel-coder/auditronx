@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import Select from 'react-select'
 import api from '../lib/api'
+import DataTable from './DataTable'
 import Modal from './Modal'
+import PasswordInput from './PasswordInput'
 
 const SELECT_STYLES = {
   control: (base, state) => ({
@@ -121,53 +123,22 @@ export default function ResourceTable({ title, resource, fields, columns, idKey 
 
       {error && <div className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
-      <div className="overflow-x-auto rounded-lg border border-ink-100 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-ink-100 text-sm">
-          <thead className="bg-ink-50">
-            <tr>
-              {displayColumns.map((c) => (
-                <th key={c.key} className="whitespace-nowrap px-4 py-2.5 text-left font-medium text-ink-500">
-                  {c.label}
-                </th>
-              ))}
-              <th className="px-4 py-2.5" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-ink-100">
-            {loading && (
-              <tr>
-                <td colSpan={displayColumns.length + 1} className="px-4 py-8 text-center text-ink-300">
-                  Chargement…
-                </td>
-              </tr>
-            )}
-            {!loading && rows.length === 0 && (
-              <tr>
-                <td colSpan={displayColumns.length + 1} className="px-4 py-8 text-center text-ink-300">
-                  Aucune donnée.
-                </td>
-              </tr>
-            )}
-            {rows.map((row) => (
-              <tr key={row[idKey]} className="hover:bg-ink-50">
-                {displayColumns.map((c) => (
-                  <td key={c.key} className="whitespace-nowrap px-4 py-2.5 text-ink-700">
-                    {c.render ? c.render(row) : String(row[c.key] ?? '—')}
-                  </td>
-                ))}
-                <td className="whitespace-nowrap px-4 py-2.5 text-right">
-                  <button onClick={() => openEdit(row)} className="mr-3 text-ink-500 hover:text-ink-900">
-                    Éditer
-                  </button>
-                  <button onClick={() => handleDelete(row)} className="text-red-500 hover:text-red-700">
-                    Suppr.
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        columns={displayColumns}
+        rows={rows}
+        idKey={idKey}
+        loading={loading}
+        renderActions={(row) => (
+          <>
+            <button onClick={() => openEdit(row)} className="mr-3 text-ink-500 hover:text-ink-900">
+              Éditer
+            </button>
+            <button onClick={() => handleDelete(row)} className="text-red-500 hover:text-red-700">
+              Suppr.
+            </button>
+          </>
+        )}
+      />
 
       {editing && (
         <Modal title={editing[idKey] ? 'Modifier' : 'Créer'} onClose={() => setEditing(null)}>
@@ -209,6 +180,14 @@ export default function ResourceTable({ title, resource, fields, columns, idKey 
                         />
                       )
                     })()
+                  ) : f.type === 'password' ? (
+                    <PasswordInput
+                      required={f.required}
+                      placeholder={f.placeholder}
+                      value={formValues[f.key] ?? ''}
+                      onChange={(e) => setFormValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                      className="w-full rounded-md border border-ink-100 px-3 py-2 focus:border-brand-500 focus:outline-none"
+                    />
                   ) : (
                     <input
                       type={f.type ?? 'text'}

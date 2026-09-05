@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import DataTable from '../components/DataTable'
 import ResourceTable from '../components/ResourceTable'
 import Modal from '../components/Modal'
 import api from '../lib/api'
@@ -24,54 +25,36 @@ function DevicesTable() {
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-ink-100 bg-white">
-      <table className="min-w-full divide-y divide-ink-100 text-sm">
-        <thead className="bg-ink-50">
-          <tr>
-            <th className="px-4 py-2 text-left font-medium text-ink-500">Enseignant</th>
-            <th className="px-4 py-2 text-left font-medium text-ink-500">UUID</th>
-            <th className="px-4 py-2 text-left font-medium text-ink-500">Type</th>
-            <th className="px-4 py-2 text-left font-medium text-ink-500">Activé le</th>
-            <th className="px-4 py-2 text-left font-medium text-ink-500">Statut</th>
-            <th className="px-4 py-2" />
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-ink-100">
-          {loading && (
-            <tr>
-              <td colSpan={6} className="px-4 py-6 text-center text-ink-300">Chargement…</td>
-            </tr>
-          )}
-          {!loading && devices.length === 0 && (
-            <tr>
-              <td colSpan={6} className="px-4 py-6 text-center text-ink-300">Aucun device.</td>
-            </tr>
-          )}
-          {devices.map((d) => (
-            <tr key={d.id} className="hover:bg-ink-50">
-              <td className="px-4 py-2">{d.teacher?.nom ?? '—'}</td>
-              <td className="px-4 py-2 font-mono text-xs">{d.device_uuid}</td>
-              <td className="px-4 py-2">{d.device_type}</td>
-              <td className="px-4 py-2">{d.activated_at ? new Date(d.activated_at).toLocaleString('fr-FR') : '—'}</td>
-              <td className="px-4 py-2">
-                {d.revoked_at ? (
-                  <span className="text-red-600">Révoqué</span>
-                ) : (
-                  <span className="text-green-600">Actif</span>
-                )}
-              </td>
-              <td className="px-4 py-2 text-right">
-                {!d.revoked_at && (
-                  <button onClick={() => revoke(d)} className="text-red-500 hover:text-red-700">
-                    Révoquer
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      loading={loading}
+      emptyMessage="Aucun device."
+      rows={devices}
+      columns={[
+        { key: 'teacher', label: 'Enseignant', render: (d) => d.teacher?.nom ?? '—', sortValue: (d) => d.teacher?.nom ?? '' },
+        { key: 'device_uuid', label: 'UUID', render: (d) => <span className="font-mono text-xs">{d.device_uuid}</span> },
+        { key: 'device_type', label: 'Type' },
+        {
+          key: 'activated_at',
+          label: 'Activé le',
+          render: (d) => (d.activated_at ? new Date(d.activated_at).toLocaleString('fr-FR') : '—'),
+          sortValue: (d) => d.activated_at ?? '',
+        },
+        {
+          key: 'statut',
+          label: 'Statut',
+          render: (d) => (d.revoked_at ? <span className="text-red-600">Révoqué</span> : <span className="text-green-600">Actif</span>),
+          searchValue: (d) => (d.revoked_at ? 'Révoqué' : 'Actif'),
+          sortValue: (d) => (d.revoked_at ? 1 : 0),
+        },
+      ]}
+      renderActions={(d) =>
+        !d.revoked_at && (
+          <button onClick={() => revoke(d)} className="text-red-500 hover:text-red-700">
+            Révoquer
+          </button>
+        )
+      }
+    />
   )
 }
 
@@ -103,45 +86,26 @@ function ActivationRequestsTable() {
 
   return (
     <>
-      <div className="overflow-x-auto rounded-lg border border-ink-100 bg-white">
-        <table className="min-w-full divide-y divide-ink-100 text-sm">
-          <thead className="bg-ink-50">
-            <tr>
-              <th className="px-4 py-2 text-left font-medium text-ink-500">Enseignant</th>
-              <th className="px-4 py-2 text-left font-medium text-ink-500">Téléphone</th>
-              <th className="px-4 py-2 text-left font-medium text-ink-500">Demandée le</th>
-              <th className="px-4 py-2" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-ink-100">
-            {loading && (
-              <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-ink-300">Chargement…</td>
-              </tr>
-            )}
-            {!loading && requests.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-ink-300">Aucune demande en attente.</td>
-              </tr>
-            )}
-            {requests.map((r) => (
-              <tr key={r.id} className="hover:bg-ink-50">
-                <td className="px-4 py-2">{r.enseignant?.nom}</td>
-                <td className="px-4 py-2">{r.enseignant?.tel}</td>
-                <td className="px-4 py-2">{new Date(r.requested_at).toLocaleString('fr-FR')}</td>
-                <td className="px-4 py-2 text-right">
-                  <button
-                    onClick={() => generateOtp(r)}
-                    className="rounded-md bg-brand-700 px-3 py-1 text-white hover:bg-brand-800"
-                  >
-                    Générer le code
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        loading={loading}
+        emptyMessage="Aucune demande en attente."
+        rows={requests}
+        columns={[
+          { key: 'enseignant', label: 'Enseignant', render: (r) => r.enseignant?.nom, sortValue: (r) => r.enseignant?.nom },
+          { key: 'tel', label: 'Téléphone', render: (r) => r.enseignant?.tel, sortValue: (r) => r.enseignant?.tel },
+          {
+            key: 'requested_at',
+            label: 'Demandée le',
+            render: (r) => new Date(r.requested_at).toLocaleString('fr-FR'),
+            sortValue: (r) => r.requested_at,
+          },
+        ]}
+        renderActions={(r) => (
+          <button onClick={() => generateOtp(r)} className="rounded-md bg-brand-700 px-3 py-1 text-white hover:bg-brand-800">
+            Générer le code
+          </button>
+        )}
+      />
 
       {otpResult && (
         <Modal title={`Code d'activation — ${otpResult.enseignant}`} onClose={() => setOtpResult(null)}>

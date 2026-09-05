@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\Device;
 use App\Models\DeviceActivationRequest;
 use App\Models\Enseignant;
+use App\Models\Otp;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -136,6 +138,47 @@ class DeviceActivationFlowTest extends TestCase
         $this->assertDatabaseHas('devices', [
             'teacher_id' => $enseignant->id,
             'device_uuid' => 'device-teacher-2',
+        ]);
+    }
+
+    /**
+     * Régression : un device révoqué (device_uuid conservé sur le téléphone,
+     * §4.1) qui se ré-active avec un nouvel OTP ne doit pas planter sur la
+     * contrainte d'unicité de device_uuid — il doit être réactivé en place.
+     */
+    public function test_reactivation_dun_device_revoke_avec_le_meme_uuid_ne_plante_pas(): void
+    {
+        $enseignant = Enseignant::factory()->create([
+            'tel' => '699000006',
+            'password' => Hash::make('secret123'),
+        ]);
+
+        $device = Device::factory()->create([
+            'teacher_id' => $enseignant->id,
+            'device_uuid' => 'device-recycled',
+            'revoked_at' => now(),
+        ]);
+
+        $code = '123456';
+        $otp = Otp::create([
+            'teacher_id' => $enseignant->id,
+            'code_hash' => Hash::make($code),
+            'expires_at' => now()->addMinutes(15),
+        ]);
+
+        $response = $this->postJson('/api/devices/activate', [
+            'code' => $code,
+            'device_uuid' => 'device-recycled',
+        ]);
+
+        $response->assertCreated();
+        $this->assertNotEmpty($response->json('token'));
+        $this->assertDatabaseCount('devices', 1);
+        $this->assertDatabaseHas('devices', [
+            'id' => $device->id,
+            'device_uuid' => 'device-recycled',
+            'otp_id' => $otp->id,
+            'revoked_at' => null,
         ]);
     }
 }

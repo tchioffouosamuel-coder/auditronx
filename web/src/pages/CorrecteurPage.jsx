@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import DataTable from '../components/DataTable'
 import api from '../lib/api'
 import Modal from '../components/Modal'
 
@@ -53,36 +54,21 @@ export default function CorrecteurPage() {
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-md border border-ink-100 px-3 py-1.5 text-sm" />
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-ink-100 bg-white">
-        <table className="min-w-full divide-y divide-ink-100 text-sm">
-          <thead className="bg-ink-50">
-            <tr>
-              <th className="px-4 py-2 text-left font-medium text-ink-500">Enseignant</th>
-              <th className="px-4 py-2 text-left font-medium text-ink-500">Anomalie</th>
-              <th className="px-4 py-2" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-ink-100">
-            {loading && (
-              <tr><td colSpan={3} className="px-4 py-6 text-center text-ink-300">Chargement…</td></tr>
-            )}
-            {!loading && anomalies.length === 0 && (
-              <tr><td colSpan={3} className="px-4 py-6 text-center text-ink-300">Aucune anomalie ce jour.</td></tr>
-            )}
-            {anomalies.map((a, i) => (
-              <tr key={i} className="hover:bg-ink-50">
-                <td className="px-4 py-2">{a.nom}</td>
-                <td className="px-4 py-2">{LABELS[a.type] ?? a.type}</td>
-                <td className="px-4 py-2 text-right">
-                  <button onClick={() => openCorrection(a)} className="text-ink-500 hover:text-ink-900">
-                    Corriger
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        loading={loading}
+        emptyMessage="Aucune anomalie ce jour."
+        rows={anomalies}
+        getRowKey={(a, i) => i}
+        columns={[
+          { key: 'nom', label: 'Enseignant' },
+          { key: 'type', label: 'Anomalie', render: (a) => LABELS[a.type] ?? a.type },
+        ]}
+        renderActions={(a) => (
+          <button onClick={() => openCorrection(a)} className="text-ink-500 hover:text-ink-900">
+            Corriger
+          </button>
+        )}
+      />
 
       {correction && (
         <Modal title={`Corriger — ${correction.nom}`} onClose={() => setCorrection(null)}>

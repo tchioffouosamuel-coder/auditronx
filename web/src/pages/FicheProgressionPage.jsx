@@ -1,41 +1,35 @@
 import { useEffect, useState } from 'react'
+import DataTable from '../components/DataTable'
 import ResourceTable from '../components/ResourceTable'
 import api from '../lib/api'
 
 function FicheTab() {
   const [fiche, setFiche] = useState([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.get('/fiche-progression').then(({ data }) => setFiche(data))
+    api.get('/fiche-progression').then(({ data }) => setFiche(data)).finally(() => setLoading(false))
   }, [])
 
   return (
-    <table className="min-w-full divide-y divide-ink-100 text-sm">
-      <thead className="bg-ink-50">
-        <tr>
-          <th className="px-4 py-2 text-left font-medium text-ink-500">Classe</th>
-          <th className="px-4 py-2 text-left font-medium text-ink-500">Discipline</th>
-          <th className="px-4 py-2 text-left font-medium text-ink-500">Année</th>
-          <th className="px-4 py-2 text-left font-medium text-ink-500">Séances prévues</th>
-          <th className="px-4 py-2 text-left font-medium text-ink-500">Réalisées</th>
-          <th className="px-4 py-2 text-left font-medium text-ink-500">Taux</th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-ink-100">
-        {fiche.map((f, i) => (
-          <tr key={i} className="hover:bg-ink-50">
-            <td className="px-4 py-2">{f.classe}</td>
-            <td className="px-4 py-2">{f.discipline}</td>
-            <td className="px-4 py-2">{f.annee_scolaire}</td>
-            <td className="px-4 py-2">{f.nb_seances_prevues}</td>
-            <td className="px-4 py-2">{f.nb_seances_realisees}</td>
-            <td className="px-4 py-2">
-              <span className={f.en_retard ? 'text-red-600' : 'text-green-600'}>{f.taux_avancement}%</span>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <DataTable
+      loading={loading}
+      rows={fiche}
+      getRowKey={(f, i) => i}
+      columns={[
+        { key: 'classe', label: 'Classe' },
+        { key: 'discipline', label: 'Discipline' },
+        { key: 'annee_scolaire', label: 'Année' },
+        { key: 'nb_seances_prevues', label: 'Séances prévues' },
+        { key: 'nb_seances_realisees', label: 'Réalisées' },
+        {
+          key: 'taux_avancement',
+          label: 'Taux',
+          render: (f) => <span className={f.en_retard ? 'text-red-600' : 'text-green-600'}>{f.taux_avancement}%</span>,
+          sortValue: (f) => f.taux_avancement,
+        },
+      ]}
+    />
   )
 }
 
@@ -63,11 +57,7 @@ export default function FicheProgressionPage() {
         ))}
       </div>
 
-      {tab === 'fiche' && (
-        <div className="overflow-x-auto rounded-lg border border-ink-100 bg-white p-4">
-          <FicheTab />
-        </div>
-      )}
+      {tab === 'fiche' && <FicheTab />}
 
       {tab === 'programmes' && (
         <ResourceTable

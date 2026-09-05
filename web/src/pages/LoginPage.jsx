@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
+import PasswordInput from '../components/PasswordInput'
 import { useAuth } from '../context/AuthContext'
 
 export default function LoginPage() {
@@ -52,8 +53,7 @@ export default function LoginPage() {
 
         <label className="mb-6 block text-sm">
           <span className="mb-1 block font-medium text-ink-700">Mot de passe</span>
-          <input
-            type="password"
+          <PasswordInput
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
