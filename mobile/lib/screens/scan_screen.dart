@@ -3,15 +3,25 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../services/api_client.dart';
 import '../services/wifi_service.dart';
 
-/// Écran de scan générique (§4.1, §4.3) : lecture du QR papier fixe au point
-/// de contrôle + lecture du BSSID de la borne WiFi connectée, puis envoi à
-/// l'endpoint fourni par [onScanned]. L'horodatage est toujours généré côté
-/// serveur — cet écran ne fait que transmettre le contexte du scan.
+/// Écran de scan générique (§4.1, §4.3, §hardware) : lecture du QR papier fixe
+/// au point de contrôle, puis transmission à la borne WiFi ESP32 en HTTP
+/// local (jamais à l'API distante directement — la borne met le paquet en
+/// file sur sa carte SD et le pousse elle-même vers l'API à son rythme). Le
+/// téléphone n'a donc besoin d'internet qu'une seule fois, à l'activation de
+/// l'app — jamais pendant un scan.
 class ScanScreen extends StatefulWidget {
   final String title;
-  final Future<Map<String, dynamic>> Function(String qrCode, String bssid) onScanned;
+  final String type; // 'scan' (pointage personnel) ou 'admin_proxy'
+  final int? enseignantId; // requis pour 'admin_proxy'
+  final String? motif; // requis pour 'admin_proxy'
 
-  const ScanScreen({super.key, required this.title, required this.onScanned});
+  const ScanScreen({
+    super.key,
+    required this.title,
+    this.type = 'scan',
+    this.enseignantId,
+    this.motif,
+  });
 
   @override
   State<ScanScreen> createState() => _ScanScreenState();
@@ -21,36 +31,53 @@ class _ScanScreenState extends State<ScanScreen> {
   final _controller = MobileScannerController();
   final _wifi = WifiService();
   bool _processing = false;
-  bool _connectedToBorne = false;
 
   Future<void> _handleCode(String code) async {
     if (_processing) return;
     setState(() => _processing = true);
+    // Coupe la détection pendant le traitement : tant que le QR reste dans le
+    // champ de la caméra, onDetect se redéclencherait immédiatement après
+    // chaque tentative échouée et relancerait la connexion WiFi en boucle
+    // très rapide (symptôme observé : caméra qui clignote, rien ne se passe).
+    await _controller.stop();
 
+    bool success = false;
     try {
-      final bornes = await _wifi.fetchKnownBornes();
-      var bssid = await _wifi.connectToKnownBorne(bornes);
-      _connectedToBorne = bssid != null;
-      bssid ??= await _wifi.currentBssid();
-
-      if (bssid == null) {
-        _showMessage("Impossible de lire la borne WiFi. Vérifiez la connexion et l'autorisation de localisation.", error: true);
+      final teacherToken = await ApiClient.instance.token;
+      if (teacherToken == null) {
+        _showMessage('Session expirée, merci de vous réactiver.', error: true);
         return;
       }
 
-      final presence = await widget.onScanned(code, bssid);
-      final sens = presence['heure_depart'] != null ? 'Départ' : 'Arrivée';
-      _showMessage('$sens enregistrée avec succès.');
+      if (!await _wifi.isWifiEnabled()) {
+        _showWifiDisabledMessage();
+        return;
+      }
+
+      final result = await _wifi.scanViaBorne(
+        type: widget.type,
+        teacherToken: teacherToken,
+        qrCode: code,
+        enseignantId: widget.enseignantId,
+        motif: widget.motif,
+      );
+
+      _showMessage(
+        result.photoCaptured
+            ? 'Pointage transmis à la borne avec photo — synchronisation en cours.'
+            : 'Pointage transmis à la borne — synchronisation en cours.',
+      );
+      success = true;
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
       _showMessage(e.message, error: true);
     } finally {
-      // Libère systématiquement la connexion éphémère à la borne (succès ou
-      // échec) pour ne pas laisser le téléphone occuper un des rares
-      // emplacements de l'AP softAP de l'ESP32 après le scan.
-      if (_connectedToBorne) {
-        await _wifi.release();
-        _connectedToBorne = false;
+      if (!success) {
+        // Laisse le temps à l'utilisateur d'écarter le QR du champ de la
+        // caméra avant de rouvrir la détection, sinon la même tentative
+        // échouée repartirait aussitôt en boucle.
+        await Future.delayed(const Duration(seconds: 2));
+        if (mounted) await _controller.start();
       }
       if (mounted) setState(() => _processing = false);
     }
@@ -63,9 +90,23 @@ class _ScanScreenState extends State<ScanScreen> {
     );
   }
 
+  /// Android bloque toute activation du WiFi par code depuis une app tierce
+  /// (§ WifiService.isWifiEnabled) — seul un tap de l'utilisateur peut le
+  /// faire, via le panneau rapide système.
+  void _showWifiDisabledMessage() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Le WiFi est désactivé. Activez-le pour vous connecter à la borne.'),
+        backgroundColor: Colors.red,
+        action: SnackBarAction(label: 'Activer', onPressed: _wifi.openWifiPanel),
+        duration: const Duration(seconds: 6),
+      ),
+    );
+  }
+
   @override
   void dispose() {
-    if (_connectedToBorne) _wifi.release();
     _controller.dispose();
     super.dispose();
   }

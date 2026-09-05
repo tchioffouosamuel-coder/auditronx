@@ -44,6 +44,12 @@ class RelaySyncController extends Controller
             abort(403, 'Authentification passerelle relais requise.');
         }
 
+        // Chaque sous-champ de `payload` DOIT avoir sa propre règle explicite :
+        // dès qu'UN sous-champ a une règle (ex. photo_base64 ci-dessous),
+        // Validator::validated() élague silencieusement tous les autres
+        // sous-champs sans règle propre — sans ça, qr_code/bssid disparaissent
+        // du tableau validé et tout paquet relayé échoue avec "QR code non
+        // reconnu" (qr_code devient toujours une chaîne vide côté AttendanceRecorder).
         $data = $request->validate([
             'packets' => ['required', 'array', 'min:1', 'max:100'],
             'packets.*.local_id' => ['required', 'string'],
@@ -51,6 +57,10 @@ class RelaySyncController extends Controller
             'packets.*.captured_at' => ['required', 'date'],
             'packets.*.teacher_token' => ['required', 'string'],
             'packets.*.payload' => ['required', 'array'],
+            'packets.*.payload.qr_code' => ['required', 'string'],
+            'packets.*.payload.bssid' => ['required', 'string'],
+            'packets.*.payload.enseignant_id' => ['sometimes', 'nullable', 'integer'],
+            'packets.*.payload.motif' => ['sometimes', 'nullable', 'string'],
             'packets.*.payload.photo_base64' => ['sometimes', 'nullable', 'string'],
         ]);
 

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -41,14 +42,32 @@ class ApiClient {
 
   Future<dynamic> get(String path, {Map<String, String>? query}) async {
     final uri = Uri.parse('$baseUrl$path').replace(queryParameters: query);
-    final response = await http.get(uri, headers: await _headers());
+    final response = await _guarded(() async => http.get(uri, headers: await _headers()));
     return _decode(response);
   }
 
   Future<dynamic> post(String path, Map<String, dynamic> body) async {
     final uri = Uri.parse('$baseUrl$path');
-    final response = await http.post(uri, headers: await _headers(), body: jsonEncode(body));
+    final response = await _guarded(
+      () async => http.post(uri, headers: await _headers(), body: jsonEncode(body)),
+    );
     return _decode(response);
+  }
+
+  /// Convertit tout échec réseau bas niveau (pas de DNS/internet, timeout,
+  /// TLS...) en [ApiException] — sans ça, ces erreurs remontent comme des
+  /// exceptions non gérées (SocketException...) que les écrans n'attrapent
+  /// pas puisqu'ils ne catchent que ApiException.
+  Future<http.Response> _guarded(Future<http.Response> Function() request) async {
+    try {
+      return await request();
+    } on SocketException {
+      throw ApiException("Pas de connexion internet. Vérifiez votre réseau et réessayez.", 0);
+    } on HttpException {
+      throw ApiException("Le serveur n'a pas répondu correctement. Réessayez.", 0);
+    } on http.ClientException {
+      throw ApiException("Impossible de contacter le serveur. Vérifiez votre connexion et réessayez.", 0);
+    }
   }
 
   dynamic _decode(http.Response response) {

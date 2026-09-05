@@ -38,15 +38,9 @@ class _ProcurationScreenState extends State<ProcurationScreen> {
       MaterialPageRoute(
         builder: (_) => ScanScreen(
           title: 'Scan par procuration — ${_selected!.nom}',
-          onScanned: (qrCode, bssid) async {
-            final result = await ApiClient.instance.post('/attendance/admin-proxy', {
-              'enseignant_id': _selected!.id,
-              'qr_code': qrCode,
-              'bssid': bssid,
-              'motif': _motifController.text.trim(),
-            });
-            return result as Map<String, dynamic>;
-          },
+          type: 'admin_proxy',
+          enseignantId: _selected!.id,
+          motif: _motifController.text.trim(),
         ),
       ),
     );

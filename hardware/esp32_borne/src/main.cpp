@@ -24,6 +24,9 @@
 #include <mbedtls/base64.h>
 #include <time.h>
 #include <vector>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
 
 #include "config.h"
 
@@ -113,7 +116,24 @@ static String capturePhotoBase64() {
 // Persistance de la file (carte SD, une ligne JSON par paquet en attente)
 // ---------------------------------------------------------------------------
 
+// La synchro tourne dans sa propre tâche FreeRTOS (voir setup()/syncTask) pour
+// lui donner une pile dédiée assez grande pour la poignée de main TLS de
+// mbedTLS — elle peut donc s'exécuter en parallèle de handleScan() (tâche
+// loop()/webserver), qui touche le même fichier sur la carte SD.
+static SemaphoreHandle_t g_sdMutex = nullptr;
+
+struct MutexGuard {
+    explicit MutexGuard(SemaphoreHandle_t sem) : _sem(sem) {
+        if (_sem) xSemaphoreTake(_sem, portMAX_DELAY);
+    }
+    ~MutexGuard() {
+        if (_sem) xSemaphoreGive(_sem);
+    }
+    SemaphoreHandle_t _sem;
+};
+
 static size_t queueLength() {
+    MutexGuard guard(g_sdMutex);
     if (!SD_MMC.exists(QUEUE_FILE)) return 0;
     File f = SD_MMC.open(QUEUE_FILE, "r");
     if (!f) return 0;
@@ -128,6 +148,7 @@ static size_t queueLength() {
 }
 
 static void appendToQueue(const String &json) {
+    MutexGuard guard(g_sdMutex);
     File f = SD_MMC.open(QUEUE_FILE, "a");
     if (!f) {
         Serial.println("[queue] échec ouverture carte SD en écriture");
@@ -143,6 +164,7 @@ struct QueuedPacket {
 };
 
 static bool readQueueBatch(std::vector<QueuedPacket> &out) {
+    MutexGuard guard(g_sdMutex);
     if (!SD_MMC.exists(QUEUE_FILE)) return true;
 
     File f = SD_MMC.open(QUEUE_FILE, "r");
@@ -168,6 +190,7 @@ static bool readQueueBatch(std::vector<QueuedPacket> &out) {
 /** Réécrit la file sans les local_id passés en paramètre (terminaux : ok ou rejected). */
 static void removeFromQueue(const std::vector<String> &idsToRemove) {
     if (idsToRemove.empty()) return;
+    MutexGuard guard(g_sdMutex);
     if (!SD_MMC.exists(QUEUE_FILE)) return;
 
     File in = SD_MMC.open(QUEUE_FILE, "r");
@@ -262,6 +285,20 @@ static void syncWithApi() {
 
     removeFromQueue(toRemove);
     Serial.printf("[sync] %u paquet(s) envoyés, %u confirmé(s)/rejeté(s)\n", (unsigned) batch.size(), (unsigned) toRemove.size());
+}
+
+/**
+ * Tâche dédiée (pile 16 Ko) pour la synchro périodique : la poignée de main
+ * TLS de mbedTLS (HTTPS vers l'API) a besoin de plus de pile que celle de la
+ * tâche loop() par défaut — l'y exécuter directement provoquait un
+ * débordement de pile ("Guru Meditation Error: Double exception" pendant
+ * ecp_drbg_seed, ~15s après le boot, à chaque premier cycle de synchro).
+ */
+static void syncTask(void *) {
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(SYNC_INTERVAL_MS));
+        if (WiFi.status() == WL_CONNECTED) syncWithApi();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -418,6 +455,11 @@ void setup() {
     server.onNotFound(handleNotFound);
     server.begin();
     Serial.println("[http] serveur local démarré sur le port 80");
+
+    g_sdMutex = xSemaphoreCreateMutex();
+    // Cœur 1 (APP_CPU), comme loopTask par défaut sur Arduino-ESP32 — la pile
+    // dédiée de 16 Ko est la partie qui compte ici, pas l'affinité de cœur.
+    xTaskCreatePinnedToCore(syncTask, "sync_task", 16384, nullptr, 1, nullptr, 1);
 }
 
 void loop() {
@@ -430,11 +472,8 @@ void loop() {
 
     if (!isConnected) connectWifiIfNeeded();
 
-    static uint32_t lastSync = 0;
-    if (millis() - lastSync > SYNC_INTERVAL_MS) {
-        lastSync = millis();
-        syncWithApi();
-    }
+    // La synchro périodique tourne dans sa propre tâche (syncTask, voir
+    // setup()) — pile dédiée assez grande pour la poignée de main TLS.
 
     // Réaffiche le BSSID dès le premier tour de loop() puis toutes les 3s : le
     // port série "hoquette" parfois juste après l'init WiFi (coupure/reconnexion

@@ -88,7 +88,16 @@ class AttendanceRecorder
 
     private function resolveAccessPoint(string $qrCode, string $bssid): AccessPoint
     {
-        QrPoint::where('code', $qrCode)->firstOrFail();
+        // ValidationException (pas firstOrFail/ModelNotFoundException) : un QR
+        // code inconnu ne se "réparera" jamais tout seul, RelaySyncController
+        // doit le classer "rejected" (rejet définitif, purgé de la file de la
+        // borne) plutôt que "retry" (sinon boucle de réessai infinie, §hardware).
+        if (! QrPoint::where('code', $qrCode)->exists()) {
+            throw ValidationException::withMessages([
+                'qr_code' => ['QR code non reconnu.'],
+            ]);
+        }
+
         $accessPoint = AccessPoint::where('bssid', $bssid)->first();
 
         if (! $accessPoint) {

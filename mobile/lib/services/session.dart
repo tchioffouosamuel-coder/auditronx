@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
@@ -8,9 +9,16 @@ import 'push_notifications.dart';
 
 /// État d'activation de l'app (§4.1). Un `device_uuid` est généré une seule
 /// fois et persisté ; il identifie ce téléphone auprès de l'API à l'activation.
+///
+/// Une fois l'enseignant activé (token Sanctum stocké de façon sécurisée), il
+/// ne doit plus jamais repasser par le login/OTP — y compris au tout premier
+/// lancement sans internet (le scan passe par la borne locale, pas par l'API,
+/// §hardware) : la présence du token suffit à rester connecté, `/me` n'est
+/// qu'un rafraîchissement best-effort qui ne doit jamais démonter la session.
 class Session extends ChangeNotifier {
   final _storage = const FlutterSecureStorage();
   static const _deviceUuidKey = 'auditron_device_uuid_local';
+  static const _meCacheKey = 'auditron_me_cache';
 
   bool _loading = true;
   bool _activated = false;
@@ -22,17 +30,35 @@ class Session extends ChangeNotifier {
   String get nom => _me?['nom'] as String? ?? '';
 
   Future<void> bootstrap() async {
-    try {
-      _activated = await ApiClient.instance.isActivated;
-      if (_activated) {
+    _activated = await ApiClient.instance.isActivated;
+
+    if (_activated) {
+      _me = await _loadCachedMe();
+      try {
         _me = await ApiClient.instance.get('/me') as Map<String, dynamic>;
+        await _cacheMe(_me!);
         unawaited(PushNotifications.instance.registerDevice());
+      } catch (_) {
+        // Pas d'internet (ou API indisponible) au démarrage : on reste
+        // connecté avec les infos mises en cache localement — l'app n'en a
+        // besoin qu'à l'activation, jamais pour scanner.
       }
-    } catch (_) {
-      _activated = false;
     }
+
     _loading = false;
     notifyListeners();
+  }
+
+  Future<void> _cacheMe(Map<String, dynamic> me) => _storage.write(key: _meCacheKey, value: jsonEncode(me));
+
+  Future<Map<String, dynamic>?> _loadCachedMe() async {
+    final raw = await _storage.read(key: _meCacheKey);
+    if (raw == null) return null;
+    try {
+      return jsonDecode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<String> deviceUuid() async {
@@ -61,6 +87,7 @@ class Session extends ChangeNotifier {
       await ApiClient.instance.saveSession(token: response['token'] as String, deviceUuid: uuid);
       _activated = true;
       _me = await ApiClient.instance.get('/me') as Map<String, dynamic>;
+      await _cacheMe(_me!);
       unawaited(PushNotifications.instance.registerDevice());
       notifyListeners();
     }
@@ -81,12 +108,14 @@ class Session extends ChangeNotifier {
     await ApiClient.instance.saveSession(token: response['token'] as String, deviceUuid: uuid);
     _activated = true;
     _me = await ApiClient.instance.get('/me') as Map<String, dynamic>;
+    await _cacheMe(_me!);
     unawaited(PushNotifications.instance.registerDevice());
     notifyListeners();
   }
 
   Future<void> logout() async {
     await ApiClient.instance.clearSession();
+    await _storage.delete(key: _meCacheKey);
     _activated = false;
     _me = null;
     notifyListeners();

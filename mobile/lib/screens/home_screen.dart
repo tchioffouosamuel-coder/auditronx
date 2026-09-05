@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../services/api_client.dart';
 import '../services/session.dart';
 import 'historique_screen.dart';
 import 'notifications_screen.dart';
@@ -20,16 +19,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openSelfScan() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ScanScreen(
-          title: 'Scanner ma présence',
-          onScanned: (qrCode, bssid) async {
-            final result = await ApiClient.instance.post('/attendance/scan', {
-              'qr_code': qrCode,
-              'bssid': bssid,
-            });
-            return result as Map<String, dynamic>;
-          },
-        ),
+        builder: (_) => const ScanScreen(title: 'Scanner ma présence', type: 'scan'),
       ),
     );
   }

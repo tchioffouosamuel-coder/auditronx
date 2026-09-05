@@ -59,7 +59,7 @@ function SidebarContent({ onNavigate }) {
         </div>
       </div>
 
-      <nav className="relative z-10 flex-1 overflow-y-auto px-3 py-4">
+      <nav className="sidebar-scroll relative z-10 flex-1 overflow-y-auto px-3 py-4">
         {NAV_SECTIONS.map((section) => (
           <div key={section.title} className="mb-5">
             <div className="mb-1 px-2 text-xs font-semibold uppercase tracking-wide text-brand-300">
