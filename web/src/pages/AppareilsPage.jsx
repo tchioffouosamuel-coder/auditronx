@@ -3,6 +3,7 @@ import DataTable from '../components/DataTable'
 import ResourceTable from '../components/ResourceTable'
 import Modal from '../components/Modal'
 import api from '../lib/api'
+import { printQrCode } from '../lib/printQrCode'
 
 function DevicesTable() {
   const [devices, setDevices] = useState([])
@@ -176,6 +177,14 @@ export default function AppareilsPage() {
             { key: 'code', label: 'Code' },
             { key: 'label', label: 'Libellé' },
           ]}
+          extraRowActions={(row) => (
+            <button
+              onClick={() => printQrCode({ value: row.code, label: row.label })}
+              className="mr-3 text-brand-700 hover:text-brand-900"
+            >
+              QR / Imprimer
+            </button>
+          )}
         />
       )}
     </div>

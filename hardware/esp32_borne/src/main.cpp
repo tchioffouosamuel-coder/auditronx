@@ -435,4 +435,19 @@ void loop() {
         lastSync = millis();
         syncWithApi();
     }
+
+    // Réaffiche le BSSID dès le premier tour de loop() puis toutes les 3s : le
+    // port série "hoquette" parfois juste après l'init WiFi (coupure/reconnexion
+    // PlatformIO Monitor) et fait rater l'unique ligne imprimée au démarrage —
+    // inutile de redémarrer la borne en boucle pour l'attraper, un intervalle
+    // court garantit de l'attraper même si la borne replante peu après le boot.
+    static uint32_t lastBssidPrint = 0;
+    static bool bssidPrintedOnce = false;
+    if (!bssidPrintedOnce || millis() - lastBssidPrint > 3000) {
+        bssidPrintedOnce = true;
+        lastBssidPrint = millis();
+        Serial.print("[ap] BSSID=");
+        Serial.println(WiFi.softAPmacAddress());
+        Serial.flush();
+    }
 }

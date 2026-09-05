@@ -59,14 +59,14 @@ inline constexpr char QUEUE_FILE[] = "/queue.jsonl";
 #define SD_MMC_D0_GPIO 40
 
 // ---- API distante ----
-inline constexpr char API_BASE_URL[] = "https://votre-domaine.example.com";
+inline constexpr char API_BASE_URL[] = "https://api-ltm.auditronx.com/public";
 inline constexpr char API_RELAY_SYNC_PATH[] = "/api/relay/sync";
 
 // Token Sanctum du device relay_gateway, obtenu une fois via
 // POST /api/devices/provision-relay (voir hardware/README.md), puis codé en
 // dur ici (pas de flux d'activation OTP pour ce device : il n'a pas
 // d'écran ni d'utilisateur pour saisir un code).
-inline constexpr char RELAY_API_TOKEN[] = "REPLACE_WITH_TOKEN_FROM_PROVISION_RELAY";
+inline constexpr char RELAY_API_TOKEN[] = "6|1WPc9xWbDurVjcjqlf00px5uuKvPZtrRuHYLnW1q92f6b31f";
 
 // <= 100 (limite validée côté API) ; réduit à 5 : avec la photo, un lot de 50
 // paquets pèserait ~1 Mo de JSON et dépasserait le tas ArduinoJson disponible.

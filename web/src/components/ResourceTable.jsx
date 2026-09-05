@@ -34,7 +34,7 @@ const SELECT_STYLES = {
  *              optionLabel?, required? }]
  * `columns`: [{ key, label, render?(row) }] — par défaut dérivées de `fields`.
  */
-export default function ResourceTable({ title, resource, fields, columns, idKey = 'id' }) {
+export default function ResourceTable({ title, resource, fields, columns, idKey = 'id', extraRowActions }) {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -130,6 +130,7 @@ export default function ResourceTable({ title, resource, fields, columns, idKey 
         loading={loading}
         renderActions={(row) => (
           <>
+            {extraRowActions?.(row)}
             <button onClick={() => openEdit(row)} className="mr-3 text-ink-500 hover:text-ink-900">
               Éditer
             </button>
