@@ -5,20 +5,22 @@ modem, pour fiabiliser le pointage dans les zones où internet n'est pas
 toujours disponible — et prouver visuellement qui a réellement scanné.
 
 ```
-[Téléphone enseignant] --WiFi local (HTTP)--> [ESP32-S3 "borne" + caméra, WIFI_AP_STA] --WiFi modem (HTTPS)--> [API]
+[Téléphone enseignant] --BLE--> [ESP32-S3 "borne" + caméra, BLE + WIFI_STA] --WiFi modem (HTTPS)--> [API]
 ```
 
 Un seul ESP32-S3 tient trois rôles simultanément :
-- **AP** : point d'accès WiFi auquel le téléphone se connecte pour pointer.
-  Sert aussi de vérification de localisation (le téléphone doit être
-  associé à cette borne).
+- **BLE** : serveur local auquel le téléphone se connecte pour pointer.
+  Remplace l'ancien point d'accès WiFi — négociation bien plus rapide (pas
+  de poignée de main WiFi ni de boîte de dialogue système Android), et sert
+  aussi de vérification de proximité (le téléphone doit être connecté à
+  cette borne précise en BLE).
 - **STA** : client WiFi connecté au modem/routeur, pour la remontée vers
   l'API dès que la connexion est disponible.
-- **Caméra** : au moment précis où un scan arrive (`POST /scan`), la borne
-  prend une photo (OV5640, JPEG QVGA) et l'attache au paquet en base64 —
-  preuve visuelle que la personne présente devant la borne est bien celle
-  qui pointe, pas seulement que son téléphone est authentifié (anti-fraude).
-  L'admin voit cette photo sur chaque pointage dans le backoffice.
+- **Caméra** : au moment précis où un scan arrive, la borne prend une photo
+  (OV5640, JPEG QVGA) et l'attache au paquet en base64 — preuve visuelle que
+  la personne présente devant la borne est bien celle qui pointe, pas
+  seulement que son téléphone est authentifié (anti-fraude). L'admin voit
+  cette photo sur chaque pointage dans le backoffice.
 
 Le pointage (texte + photo) est écrit sur la carte micro-SD **avant** toute
 tentative réseau, et un paquet n'est retiré de la file locale que sur
@@ -26,6 +28,13 @@ confirmation explicite de l'API (`ok` = accepté, `rejected` = invalide,
 inutile de réessayer). Une réponse `retry` (ou une requête qui échoue) le
 laisse en file pour le prochain cycle — rien n'est perdu en cas de coupure
 secteur ou réseau.
+
+> **Pourquoi BLE plutôt que WiFi local** : la négociation `WifiNetworkSpecifier`
+> côté Android (connexion éphémère, sans l'enregistrer dans la liste WiFi du
+> téléphone) prenait plusieurs secondes et pouvait déclencher une boîte de
+> dialogue système à chaque scan. Le BLE se connecte typiquement en moins
+> d'une seconde, sans dialogue de confirmation — le but étant de réduire au
+> maximum le temps que l'enseignant passe devant la borne.
 
 ## Matériel requis
 
@@ -53,19 +62,25 @@ secteur ou réseau.
 
 `POST /api/relay/sync` recevait déjà des paquets
 `{local_id, type, teacher_token, payload, captured_at}` sans rien supposer
-sur le nombre de sauts matériels entre le téléphone et l'appel HTTP. Seul
-ajout pour la caméra : `payload.photo_base64` (optionnelle) — JPEG encodé
-en base64, décodé et stocké par `AttendanceRecorder`, exposé ensuite via
+sur le nombre de sauts matériels entre le téléphone et l'appel HTTP — ni sur
+la techno radio utilisée pour ce premier saut (WiFi ou BLE). Seul ajout pour
+la caméra : `payload.photo_base64` (optionnelle) — JPEG encodé en base64,
+décodé et stocké par `AttendanceRecorder`, exposé ensuite via
 `Presence.photo_url_arrivee`/`photo_url_depart` (une photo par événement,
 pas juste par jour, sinon celle du départ écraserait la preuve de
 l'arrivée).
+
+`payload.bssid` (colonne `AccessPoint.bssid` côté API, inchangée) contient
+désormais l'**adresse BLE** de la borne plutôt qu'un BSSID WiFi — même rôle
+(identifier quelle borne précise a servi de preuve de proximité), juste une
+valeur différente à enregistrer dans le backoffice (voir « Mise en service »).
 
 - `POST /api/devices/provision-relay` (admin, `auth:sanctum`) — crée le
   `Device` (`device_type = relay_gateway`) et renvoie son token Sanctum.
   À faire une fois, avant de flasher la borne.
 - `POST /api/relay/sync` (`auth:sanctum`, device relais uniquement) — reçoit
   jusqu'à 100 paquets par requête, voir
-  [`RelaySyncController`](../api/app/Http/Controllers/Api/RelaySyncController.php).
+  [`RelaySyncController`](../api-ltm/app/Http/Controllers/Api/RelaySyncController.php).
   Réponse : `{"results":[{"local_id","status":"ok"|"rejected"|"retry","message"?}]}`.
 
 Seule chose facultative : le `device_type` s'appelle encore
@@ -87,7 +102,11 @@ fonctionne.
    Copier le `token` renvoyé dans `esp32_borne/include/config.h` (`RELAY_API_TOKEN`).
 
 2. **Configurer** `esp32_borne/include/config.h` :
-   - `AP_SSID` / `AP_PASSWORD` : point d'accès local pour le téléphone.
+   - `BLE_DEVICE_NAME` : nom BLE annoncé (facultatif, cosmétique).
+   - `BLE_SERVICE_UUID`/`BLE_CHAR_SCAN_UUID`/`BLE_CHAR_RESULT_UUID` : DOIVENT
+     correspondre exactement à ceux déclarés côté app mobile
+     (`mobile/lib/services/ble_service.dart`) — ne pas modifier sauf à les
+     changer aussi côté app.
    - `STA_SSID` / `STA_PASSWORD` : WiFi du modem/routeur.
    - `API_BASE_URL`, `RELAY_API_TOKEN`.
 
@@ -96,29 +115,38 @@ fonctionne.
    cd hardware/esp32_borne && pio run -t upload
    ```
 
-## Contrat HTTP local (téléphone → borne)
+4. **Relever l'adresse BLE** de la borne au démarrage (moniteur série,
+   ligne `[ble] adresse=...`) et l'enregistrer dans le backoffice
+   (**Appareils & points d'accès → Bornes WiFi**, champ BSSID) — c'est cette
+   valeur que l'API compare pour valider la proximité du scan.
 
-`POST http://<ip-borne>/scan`
+## Contrat BLE (téléphone → borne)
+
+Service `BLE_SERVICE_UUID`, deux caractéristiques :
+- **scan** (`BLE_CHAR_SCAN_UUID`, écriture) : le téléphone y écrit la requête JSON.
+- **result** (`BLE_CHAR_RESULT_UUID`, lecture/notification) : la borne y publie sa réponse JSON après traitement.
+
+Requête écrite sur la caractéristique **scan** :
 
 ```json
 {
   "type": "scan",
   "teacher_token": "<token Sanctum de l'enseignant, émis à l'activation de son app>",
-  "payload": { "qr_code": "...", "bssid": "..." },
-  "captured_at": "2026-09-04T08:12:00Z"
+  "payload": { "qr_code": "..." }
 }
 ```
 
 `type: "admin_proxy"` attend en plus `payload.enseignant_id` et
-`payload.motif` (voir `AttendanceRecorder::recordProxyScan`). `captured_at`
-est optionnel : si omis, la borne utilise son heure NTP propre (elle a son
-propre accès au modem, donc plus besoin de synchro horaire par un second
-module) ; si elle n'a encore jamais réussi de NTP au démarrage, elle
-répond `503` plutôt que d'enregistrer un horodatage faux. Le téléphone n'a
-rien à envoyer pour la photo : la borne l'ajoute elle-même
+`payload.motif` (voir `AttendanceRecorder::recordProxyScan`). Pas de
+`captured_at` ni de `bssid` à fournir : la borne utilise son heure NTP
+propre (elle a son propre accès au modem) et son adresse BLE tient lieu de
+preuve de proximité — si elle n'a encore jamais réussi de NTP au démarrage,
+la réponse contient une erreur plutôt qu'un horodatage faux. Le téléphone
+n'a rien à envoyer pour la photo : la borne l'ajoute elle-même
 (`payload.photo_base64`) avant de mettre le paquet en file.
 
-Réponse : `202 {"queued": true, "local_id": "...", "photo_captured": true}`.
+Réponse publiée sur la caractéristique **result** (notification) :
+`{"queued": true, "local_id": "...", "photo_captured": true}`.
 `photo_captured` reflète si la prise de vue a réussi — un échec caméra
 (capteur débranché, etc.) n'empêche jamais le pointage d'être mis en file,
 il part juste sans photo (best effort, comme tout le reste de la chaîne).
@@ -126,12 +154,25 @@ Le pointage est définitivement acquis côté serveur après le prochain cycle
 de synchro de la borne — l'app mobile ne doit pas attendre de confirmation
 immédiate dans ce mode dégradé.
 
+Un serveur HTTP local (`POST /scan`, même contrat JSON) reste actif sur
+l'IP WiFi STA de la borne, uniquement pour du débogage via `curl` — l'app
+mobile n'utilise plus ce chemin.
+
 ## Fichiers
 
 ```
 hardware/
-  esp32_borne/   # firmware unique (AP+STA + caméra + HTTP local + file persistante + sync API)
+  esp32_borne/   # firmware unique (BLE + WiFi STA + caméra + file persistante + sync API)
 ```
+
+## Ce qui a changé (WiFi local → BLE)
+
+- `AP_SSID`/`AP_PASSWORD` (config.h) supprimés — remplacés par
+  `BLE_DEVICE_NAME`/`BLE_SERVICE_UUID`/`BLE_CHAR_SCAN_UUID`/`BLE_CHAR_RESULT_UUID`.
+- La borne n'est plus un point d'accès WiFi (`WIFI_AP_STA`) : uniquement
+  client (`WIFI_STA`) désormais.
+- `payload.bssid` contient l'adresse BLE de la borne (déduite
+  automatiquement côté firmware si absente de la requête), plus un BSSID WiFi.
 
 ## Ce qui a changé (deux ESP32 → un seul)
 
@@ -144,7 +185,7 @@ dépôt qui les contient encore (déjà absents de ce dépôt) :
 - `hardware/esp2_relais/` (dont sa propre copie de `relay_protocol.h`, son
   `onDataRecv` de réassemblage de fragments, l'envoi de `PacketAck`)
 
-Ce qui a été conservé à l'identique dans `esp32_borne/` : le serveur HTTP
-local `/scan`, l'écriture immédiate sur la carte SD avant tout envoi, le
-moteur de pull périodique (`syncWithApi`), et la suppression uniquement
-sur confirmation explicite (`ok`/`rejected`) de l'API.
+Ce qui a été conservé à l'identique dans `esp32_borne/` : l'écriture
+immédiate sur la carte SD avant tout envoi, le moteur de pull périodique
+(`syncWithApi`), et la suppression uniquement sur confirmation explicite
+(`ok`/`rejected`) de l'API.

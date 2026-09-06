@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../services/api_client.dart';
-import '../services/wifi_service.dart';
+import '../services/ble_service.dart';
 
 /// Écran de scan générique (§4.1, §4.3, §hardware) : lecture du QR papier fixe
-/// au point de contrôle, puis transmission à la borne WiFi ESP32 en HTTP
-/// local (jamais à l'API distante directement — la borne met le paquet en
-/// file sur sa carte SD et le pousse elle-même vers l'API à son rythme). Le
-/// téléphone n'a donc besoin d'internet qu'une seule fois, à l'activation de
-/// l'app — jamais pendant un scan.
+/// au point de contrôle, puis transmission à la borne ESP32 en BLE local
+/// (jamais à l'API distante directement — la borne met le paquet en file sur
+/// sa carte SD et le pousse elle-même vers l'API à son rythme). Le téléphone
+/// n'a donc besoin d'internet qu'une seule fois, à l'activation de l'app —
+/// jamais pendant un scan.
 class ScanScreen extends StatefulWidget {
   final String title;
   final String type; // 'scan' (pointage personnel) ou 'admin_proxy'
@@ -29,7 +29,7 @@ class ScanScreen extends StatefulWidget {
 
 class _ScanScreenState extends State<ScanScreen> {
   final _controller = MobileScannerController();
-  final _wifi = WifiService();
+  final _ble = BleService();
   bool _processing = false;
 
   Future<void> _handleCode(String code) async {
@@ -37,8 +37,8 @@ class _ScanScreenState extends State<ScanScreen> {
     setState(() => _processing = true);
     // Coupe la détection pendant le traitement : tant que le QR reste dans le
     // champ de la caméra, onDetect se redéclencherait immédiatement après
-    // chaque tentative échouée et relancerait la connexion WiFi en boucle
-    // très rapide (symptôme observé : caméra qui clignote, rien ne se passe).
+    // chaque tentative échouée et relancerait la connexion BLE en boucle très
+    // rapide (symptôme observé avec le WiFi : caméra qui clignote, rien ne se passe).
     await _controller.stop();
 
     bool success = false;
@@ -49,12 +49,12 @@ class _ScanScreenState extends State<ScanScreen> {
         return;
       }
 
-      if (!await _wifi.isWifiEnabled()) {
-        _showWifiDisabledMessage();
+      if (!await _ble.isBluetoothEnabled()) {
+        _showBluetoothDisabledMessage();
         return;
       }
 
-      final result = await _wifi.scanViaBorne(
+      final result = await _ble.scanViaBorne(
         type: widget.type,
         teacherToken: teacherToken,
         qrCode: code,
@@ -90,16 +90,16 @@ class _ScanScreenState extends State<ScanScreen> {
     );
   }
 
-  /// Android bloque toute activation du WiFi par code depuis une app tierce
-  /// (§ WifiService.isWifiEnabled) — seul un tap de l'utilisateur peut le
-  /// faire, via le panneau rapide système.
-  void _showWifiDisabledMessage() {
+  /// Contrairement au WiFi, Android autorise une app à demander l'activation
+  /// du Bluetooth directement — un seul tap suffit, pas besoin d'un panneau
+  /// système séparé (voir BleService.requestEnableBluetooth).
+  void _showBluetoothDisabledMessage() {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Le WiFi est désactivé. Activez-le pour vous connecter à la borne.'),
+        content: const Text('Le Bluetooth est désactivé. Activez-le pour vous connecter à la borne.'),
         backgroundColor: Colors.red,
-        action: SnackBarAction(label: 'Activer', onPressed: _wifi.openWifiPanel),
+        action: SnackBarAction(label: 'Activer', onPressed: _ble.requestEnableBluetooth),
         duration: const Duration(seconds: 6),
       ),
     );

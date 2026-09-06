@@ -134,7 +134,7 @@ export default function AppareilsPage() {
         {[
           ['activation-requests', 'Demandes d’activation'],
           ['devices', 'Devices'],
-          ['access-points', 'Bornes WiFi'],
+          ['access-points', 'Bornes (BLE)'],
           ['qr-points', 'Points QR'],
         ].map(([key, label]) => (
           <button
@@ -156,14 +156,13 @@ export default function AppareilsPage() {
           title=""
           resource="/access-points"
           fields={[
-            { key: 'bssid', label: 'BSSID', required: true },
-            { key: 'ssid', label: 'SSID' },
-            { key: 'password', label: 'Mot de passe WiFi', type: 'password' },
+            { key: 'bssid', label: 'Adresse BLE de la borne', required: true, placeholder: 'ex. AA:BB:CC:DD:EE:FF' },
+            { key: 'ssid', label: 'Nom BLE annoncé (facultatif)' },
             { key: 'label', label: 'Libellé' },
           ]}
           columns={[
-            { key: 'bssid', label: 'BSSID' },
-            { key: 'ssid', label: 'SSID' },
+            { key: 'bssid', label: 'Adresse BLE' },
+            { key: 'ssid', label: 'Nom BLE' },
             { key: 'label', label: 'Libellé' },
           ]}
         />

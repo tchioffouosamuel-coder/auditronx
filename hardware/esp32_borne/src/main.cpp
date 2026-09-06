@@ -1,17 +1,18 @@
 /**
- * ESP32-S3 "borne" (module unique, caméra OV5640) — point d'accès WiFi local
- * pour le téléphone de l'enseignant ET client WiFi connecté au modem,
- * simultanément (WIFI_AP_STA). Colocalisé avec le modem : un seul module,
- * pas de saut ESP-NOW intermédiaire.
+ * ESP32-S3 "borne" (module unique, caméra OV5640) — serveur BLE local pour le
+ * téléphone de l'enseignant ET client WiFi (STA) connecté au modem pour la
+ * synchro API. Colocalisé avec le modem : un seul module, pas de saut
+ * ESP-NOW intermédiaire.
  *
- * Reçoit le pointage en HTTP local, prend une photo avec la caméra au même
- * instant (preuve visuelle anti-fraude : la personne qui a réellement scanné,
- * pas seulement le téléphone authentifié), écrit le tout immédiatement sur
- * la carte SD avant toute tentative réseau, puis un moteur de pull
- * périodique le pousse vers l'API dès qu'internet est disponible. Un paquet
- * n'est retiré de la file locale que sur confirmation explicite de l'API
- * (`ok` ou `rejected`) — jamais avant, pour ne rien perdre en cas de coupure
- * secteur ou réseau.
+ * Le téléphone parle en BLE (pas WiFi local : négociation trop lente, voir
+ * §hardware) — reçoit le pointage via une caractéristique BLE, prend une
+ * photo avec la caméra au même instant (preuve visuelle anti-fraude : la
+ * personne qui a réellement scanné, pas seulement le téléphone authentifié),
+ * écrit le tout immédiatement sur la carte SD avant toute tentative réseau,
+ * puis un moteur de pull périodique le pousse vers l'API dès qu'internet est
+ * disponible. Un paquet n'est retiré de la file locale que sur confirmation
+ * explicite de l'API (`ok` ou `rejected`) — jamais avant, pour ne rien perdre
+ * en cas de coupure secteur ou réseau.
  */
 #include <Arduino.h>
 #include <WiFi.h>
@@ -27,6 +28,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
+#include <NimBLEDevice.h>
 
 #include "config.h"
 
@@ -302,43 +304,38 @@ static void syncTask(void *) {
 }
 
 // ---------------------------------------------------------------------------
-// Serveur HTTP local — reçoit le pointage du téléphone de l'enseignant
+// Traitement d'un scan — commun aux transports BLE (principal) et HTTP
+// (conservé pour du débogage via curl sur le WiFi STA déjà utilisé pour la
+// synchro, ex. `curl http://<ip-sta>/scan`).
 // ---------------------------------------------------------------------------
 
 /**
- * POST /scan  { "type": "scan"|"admin_proxy", "teacher_token": "...", "payload": {...}, "captured_at"?: "ISO8601" }
+ * { "type": "scan"|"admin_proxy", "teacher_token": "...", "payload": {...}, "captured_at"?: "ISO8601" }
  *
- * Le téléphone parle à la borne exactement comme il parlerait à l'API en
- * ligne (mêmes champs `payload` : qr_code/bssid[/enseignant_id/motif]). La
- * borne ajoute local_id + captured_at + une photo caméra (payload.photo_base64),
- * écrit sur flash, puis répond — l'envoi vers l'API est différé au prochain
- * cycle de `syncWithApi()`.
+ * Le téléphone transmet exactement ce qu'il enverrait à l'API en ligne
+ * (mêmes champs `payload` : qr_code[/enseignant_id/motif]). La borne ajoute
+ * local_id + captured_at + un `payload.bssid` (BSSID WiFi si fourni par
+ * l'appelant HTTP legacy, sinon l'adresse BLE de la borne — preuve de
+ * proximité, même rôle que l'ancien BSSID WiFi côté API) + une photo caméra
+ * (payload.photo_base64), écrit sur flash, puis répond — l'envoi vers l'API
+ * est différé au prochain cycle de `syncWithApi()`.
  */
-static void handleScan() {
-    if (!server.hasArg("plain")) {
-        server.send(400, "application/json", "{\"error\":\"corps JSON manquant\"}");
-        return;
-    }
-
+static String processScan(const String &rawJson) {
     if (queueLength() >= MAX_QUEUE_SIZE) {
-        server.send(503, "application/json", "{\"error\":\"file locale saturée, réessayez plus tard\"}");
-        return;
+        return "{\"error\":\"file locale saturée, réessayez plus tard\"}";
     }
 
     DynamicJsonDocument in(4096);
-    if (deserializeJson(in, server.arg("plain")) != DeserializationError::Ok) {
-        server.send(400, "application/json", "{\"error\":\"JSON invalide\"}");
-        return;
+    if (deserializeJson(in, rawJson) != DeserializationError::Ok) {
+        return "{\"error\":\"JSON invalide\"}";
     }
 
     const char *type = in["type"] | "";
     if (strcmp(type, "scan") != 0 && strcmp(type, "admin_proxy") != 0) {
-        server.send(400, "application/json", "{\"error\":\"type invalide\"}");
-        return;
+        return "{\"error\":\"type invalide\"}";
     }
     if (!in.containsKey("teacher_token") || !in.containsKey("payload")) {
-        server.send(400, "application/json", "{\"error\":\"teacher_token et payload requis\"}");
-        return;
+        return "{\"error\":\"teacher_token et payload requis\"}";
     }
 
     String capturedAt;
@@ -355,8 +352,7 @@ static void handleScan() {
         strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &tmVal);
         capturedAt = String(buf);
     } else {
-        server.send(503, "application/json", "{\"error\":\"borne non synchronisée en heure, réessayez dans un instant\"}");
-        return;
+        return "{\"error\":\"borne non synchronisée en heure, réessayez dans un instant\"}";
     }
 
     char localId[40];
@@ -374,6 +370,9 @@ static void handleScan() {
     out["type"] = type;
     out["teacher_token"] = in["teacher_token"];
     out["payload"] = in["payload"];
+    if (!out["payload"].containsKey("bssid") || out["payload"]["bssid"].as<String>().length() == 0) {
+        out["payload"]["bssid"] = NimBLEDevice::getAddress().toString();
+    }
     out["captured_at"] = capturedAt;
     if (photoBase64.length() > 0) {
         out["payload"]["photo_base64"] = photoBase64;
@@ -383,8 +382,8 @@ static void handleScan() {
     serializeJson(out, serialized);
 
     // Écriture sur flash AVANT toute réponse au téléphone ou tentative
-    // réseau : c'est ce qui garantit qu'un scan accepté (202) ne se perd
-    // jamais, même si l'ESP32 redémarre dans la seconde qui suit.
+    // réseau : c'est ce qui garantit qu'un scan accepté ne se perd jamais,
+    // même si l'ESP32 redémarre dans la seconde qui suit.
     appendToQueue(serialized);
 
     StaticJsonDocument<160> resp;
@@ -393,7 +392,60 @@ static void handleScan() {
     resp["photo_captured"] = photoBase64.length() > 0;
     String respStr;
     serializeJson(resp, respStr);
-    server.send(202, "application/json", respStr);
+    return respStr;
+}
+
+// ---------------------------------------------------------------------------
+// Serveur BLE — reçoit le pointage du téléphone de l'enseignant (transport principal)
+// ---------------------------------------------------------------------------
+
+static NimBLECharacteristic *g_bleResultChar = nullptr;
+
+class ScanCharCallbacks : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic *characteristic) override {
+        String response = processScan(String(characteristic->getValue().c_str()));
+        if (g_bleResultChar) {
+            g_bleResultChar->setValue(response);
+            g_bleResultChar->notify();
+        }
+    }
+};
+
+static void setupBle() {
+    NimBLEDevice::init(BLE_DEVICE_NAME);
+
+    NimBLEServer *bleServer = NimBLEDevice::createServer();
+    NimBLEService *service = bleServer->createService(BLE_SERVICE_UUID);
+
+    NimBLECharacteristic *scanChar = service->createCharacteristic(
+        BLE_CHAR_SCAN_UUID, NIMBLE_PROPERTY::WRITE);
+    scanChar->setCallbacks(new ScanCharCallbacks());
+
+    g_bleResultChar = service->createCharacteristic(
+        BLE_CHAR_RESULT_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+
+    service->start();
+
+    NimBLEAdvertising *advertising = NimBLEDevice::getAdvertising();
+    advertising->addServiceUUID(BLE_SERVICE_UUID);
+    advertising->start();
+
+    Serial.print("[ble] serveur démarré, adresse=");
+    Serial.println(NimBLEDevice::getAddress().toString().c_str());
+}
+
+// ---------------------------------------------------------------------------
+// Serveur HTTP local — legacy/débogage uniquement (voir processScan ci-dessus)
+// ---------------------------------------------------------------------------
+
+static void handleScan() {
+    if (!server.hasArg("plain")) {
+        server.send(400, "application/json", "{\"error\":\"corps JSON manquant\"}");
+        return;
+    }
+    String resp = processScan(server.arg("plain"));
+    bool queued = resp.indexOf("\"queued\"") >= 0;
+    server.send(queued ? 202 : 400, "application/json", resp);
 }
 
 static void handleNotFound() {
@@ -437,24 +489,19 @@ void setup() {
     g_camera_ready = initCamera();
     Serial.println(g_camera_ready ? "[cam] caméra initialisée" : "[cam] caméra indisponible — les scans continueront sans photo");
 
-    // Les deux rôles à la fois : AP pour le téléphone, STA pour le modem.
-    WiFi.mode(WIFI_AP_STA);
-    WiFi.softAP(AP_SSID, AP_PASSWORD);
-    Serial.print("[ap] SSID=");
-    Serial.print(AP_SSID);
-    Serial.print(" IP=");
-    Serial.print(WiFi.softAPIP());
-    // BSSID de la borne = adresse MAC de son interface AP — c'est la valeur à
-    // saisir dans le backoffice (Appareils & points d'accès > Bornes WiFi).
-    Serial.print(" BSSID=");
-    Serial.println(WiFi.softAPmacAddress());
-
+    // WiFi en client uniquement désormais : le téléphone parle en BLE, plus
+    // besoin du rôle AP (voir setupBle() ci-dessous).
+    WiFi.mode(WIFI_STA);
     WiFi.begin(STA_SSID, STA_PASSWORD);
 
+    setupBle();
+
+    // Conservé pour du débogage (curl direct sur l'IP STA) — le téléphone
+    // n'utilise plus ce chemin, voir processScan()/setupBle().
     server.on("/scan", HTTP_POST, handleScan);
     server.onNotFound(handleNotFound);
     server.begin();
-    Serial.println("[http] serveur local démarré sur le port 80");
+    Serial.println("[http] serveur local démarré sur le port 80 (débogage)");
 
     g_sdMutex = xSemaphoreCreateMutex();
     // Cœur 1 (APP_CPU), comme loopTask par défaut sur Arduino-ESP32 — la pile
@@ -475,18 +522,19 @@ void loop() {
     // La synchro périodique tourne dans sa propre tâche (syncTask, voir
     // setup()) — pile dédiée assez grande pour la poignée de main TLS.
 
-    // Réaffiche le BSSID dès le premier tour de loop() puis toutes les 3s : le
-    // port série "hoquette" parfois juste après l'init WiFi (coupure/reconnexion
-    // PlatformIO Monitor) et fait rater l'unique ligne imprimée au démarrage —
-    // inutile de redémarrer la borne en boucle pour l'attraper, un intervalle
-    // court garantit de l'attraper même si la borne replante peu après le boot.
-    static uint32_t lastBssidPrint = 0;
-    static bool bssidPrintedOnce = false;
-    if (!bssidPrintedOnce || millis() - lastBssidPrint > 3000) {
-        bssidPrintedOnce = true;
-        lastBssidPrint = millis();
-        Serial.print("[ap] BSSID=");
-        Serial.println(WiFi.softAPmacAddress());
+    // Réaffiche l'adresse BLE dès le premier tour de loop() puis toutes les 3s
+    // (à saisir dans le backoffice, Appareils & points d'accès > Bornes WiFi,
+    // champ BSSID) : le port série "hoquette" parfois juste après le boot et
+    // fait rater l'unique ligne imprimée au démarrage — inutile de redémarrer
+    // la borne en boucle pour l'attraper, un intervalle court garantit de
+    // l'attraper même si la borne replante peu après le boot.
+    static uint32_t lastBleAddrPrint = 0;
+    static bool bleAddrPrintedOnce = false;
+    if (!bleAddrPrintedOnce || millis() - lastBleAddrPrint > 3000) {
+        bleAddrPrintedOnce = true;
+        lastBleAddrPrint = millis();
+        Serial.print("[ble] adresse=");
+        Serial.println(NimBLEDevice::getAddress().toString().c_str());
         Serial.flush();
     }
 }

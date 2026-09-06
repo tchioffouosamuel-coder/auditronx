@@ -41,7 +41,25 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Text('Erreur de chargement.'))]);
+            // L'historique est lu depuis le serveur distant (pas depuis le
+            // téléphone) : les pointages transitent par la borne, qui les
+            // synchronise elle-même de façon différée dès qu'elle a internet
+            // (§hardware) — consulter l'historique nécessite donc que le
+            // téléphone, lui, ait internet à cet instant précis.
+            return ListView(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      Text('${snapshot.error}', textAlign: TextAlign.center),
+                      const SizedBox(height: 12),
+                      OutlinedButton(onPressed: _refresh, child: const Text('Réessayer')),
+                    ],
+                  ),
+                ),
+              ],
+            );
           }
 
           final entries = snapshot.data!;

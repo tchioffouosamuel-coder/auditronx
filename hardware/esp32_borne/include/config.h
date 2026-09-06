@@ -28,16 +28,21 @@
 #define CAMERA_FRAME_SIZE FRAMESIZE_QVGA
 #define CAMERA_JPEG_QUALITY 15 // 0 (meilleure qualité) à 63 (plus compressé)
 
-// ---- Point d'accès local auquel le téléphone de l'enseignant se connecte ----
-inline constexpr char AP_SSID[] = "AUDITRON-BORNE-01";
-inline constexpr char AP_PASSWORD[] = "change-me-wifi-pass"; // 8+ caractères, WPA2
+// ---- Nom BLE annoncé, auquel le téléphone de l'enseignant se connecte ----
+// Le WiFi local (AP) a été remplacé par le BLE comme transport téléphone
+// <-> borne : négociation bien plus rapide (pas de poignée de main WiFi ni de
+// boîte de dialogue système), voir BLE_* ci-dessous.
+inline constexpr char BLE_DEVICE_NAME[] = "AUDITRON-BORNE-01";
+
+// UUIDs du service/caractéristiques BLE — DOIVENT correspondre exactement à
+// ceux déclarés côté app mobile (mobile/lib/services/ble_service.dart).
+inline constexpr char BLE_SERVICE_UUID[] = "b3a1a100-2c33-4e6f-9a1e-5f6a2e6c2b01";
+inline constexpr char BLE_CHAR_SCAN_UUID[] = "b3a1a101-2c33-4e6f-9a1e-5f6a2e6c2b01"; // écriture : requête du téléphone
+inline constexpr char BLE_CHAR_RESULT_UUID[] = "b3a1a102-2c33-4e6f-9a1e-5f6a2e6c2b01"; // lecture/notify : réponse de la borne
 
 // ---- WiFi du modem/routeur qui fournit l'accès internet ----
-// L'ESP32 tient les deux rôles à la fois (WIFI_AP_STA) : une fois connecté
-// au modem en STA, le SDK aligne automatiquement le canal du softAP sur
-// celui du STA — inutile de le fixer nous-mêmes comme dans l'ancienne
-// architecture à deux modules (où ESP1 et ESP2 devaient partager un canal
-// ESP-NOW commun).
+// Uniquement en client (WIFI_STA) désormais : plus besoin du rôle AP
+// puisque le téléphone parle en BLE, pas en WiFi local.
 inline constexpr char STA_SSID[] = "AC-inGit";
 inline constexpr char STA_PASSWORD[] = "12345678";
 

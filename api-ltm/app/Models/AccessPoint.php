@@ -9,10 +9,11 @@ class AccessPoint extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['bssid', 'ssid', 'password', 'label', 'etablissement_id'];
+    protected $fillable = ['bssid', 'ssid', 'label', 'etablissement_id'];
 
-    // Le mot de passe WiFi n'a rien à faire dans les réponses du CRUD admin
-    // (§4.2) — seul l'endpoint dédié à la connexion auto du mobile (§4.1) le
-    // rend visible explicitement via makeVisible().
+    // `password` (colonne encore présente en base) n'est plus utilisé depuis
+    // le passage au BLE (§hardware) : la connexion téléphone<->borne ne
+    // nécessite plus d'identifiants WiFi. Caché par prudence sur d'éventuelles
+    // lignes historiques qui en contiendraient encore.
     protected $hidden = ['password'];
 }

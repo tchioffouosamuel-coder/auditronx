@@ -19,7 +19,6 @@ class AccessPointController extends Controller
         $data = $request->validate([
             'bssid' => ['required', 'string', 'max:50', 'unique:access_points,bssid'],
             'ssid' => ['nullable', 'string', 'max:255'],
-            'password' => ['nullable', 'string', 'max:255'],
             'label' => ['nullable', 'string', 'max:255'],
         ]);
 
@@ -31,7 +30,6 @@ class AccessPointController extends Controller
         $data = $request->validate([
             'bssid' => ['sometimes', 'string', 'max:50', 'unique:access_points,bssid,'.$accessPoint->id],
             'ssid' => ['nullable', 'string', 'max:255'],
-            'password' => ['nullable', 'string', 'max:255'],
             'label' => ['nullable', 'string', 'max:255'],
         ]);
 
@@ -45,17 +43,5 @@ class AccessPointController extends Controller
         $accessPoint->delete();
 
         return response()->json(status: 204);
-    }
-
-    /**
-     * Liste des bornes connues avec leur mot de passe WiFi en clair, pour la
-     * connexion automatique côté app mobile au moment du scan (§4.1) — jamais
-     * exposé via `index()` (utilisé par le backoffice React).
-     */
-    public function wifiCredentials()
-    {
-        return response()->json(
-            AccessPoint::whereNotNull('ssid')->get()->makeVisible('password')
-        );
     }
 }
