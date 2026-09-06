@@ -1,11 +1,12 @@
-import { Navigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
+import { Navigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import LoadingState from "./LoadingState";
 
 export default function ProtectedRoute({ children }) {
-  const { user, loading } = useAuth()
+  const { user, loading } = useAuth();
 
-  if (loading) return <div className="p-8 text-ink-500">Chargement…</div>
-  if (!user) return <Navigate to="/login" replace />
+  if (loading) return <LoadingState label="Vérification de la session" />;
+  if (!user) return <Navigate to="/login" replace />;
 
-  return children
+  return children;
 }

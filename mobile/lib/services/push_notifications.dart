@@ -43,6 +43,21 @@ class PushNotifications {
     }
   }
 
+  /// Token FCM brut, sans appel API — utilisé à la demande d'activation
+  /// (§otp-approval), *avant* toute authentification : à ce stade il n'y a pas
+  /// encore de device Sanctum, donc pas de `POST /devices/fcm-token` possible.
+  /// L'API stocke ce token directement sur la demande pour pouvoir y pousser
+  /// l'OTP une fois l'admin d'accord.
+  Future<String?> getTokenOnly() async {
+    try {
+      await FirebaseMessaging.instance.requestPermission(alert: true, badge: true, sound: true);
+      return await FirebaseMessaging.instance.getToken();
+    } catch (e) {
+      debugPrint('PushNotifications.getTokenOnly: $e');
+      return null;
+    }
+  }
+
   Future<void> _sendTokenToApi(String fcmToken) async {
     try {
       await ApiClient.instance.post('/devices/fcm-token', {'fcm_token': fcmToken});

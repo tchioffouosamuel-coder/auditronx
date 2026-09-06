@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/session.dart';
+import '../widgets/sync_status_banner.dart';
 import 'historique_screen.dart';
 import 'notifications_screen.dart';
 import 'procuration_screen.dart';
@@ -41,7 +42,12 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: Text(titles[_tab]),
       ),
-      body: pages[_tab],
+      body: Column(
+        children: [
+          const SyncStatusBanner(),
+          Expanded(child: pages[_tab]),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),

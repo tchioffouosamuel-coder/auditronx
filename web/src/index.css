@@ -1,9 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,400&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;0,900;1,400&display=swap");
 @import "tailwindcss";
 
 /* Identité visuelle Auditron X — palette extraite du logo (vert circuit + or). */
 @theme {
-  --font-sans: 'Lato', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Lato", ui-sans-serif, system-ui, sans-serif;
 
   --color-brand-950: #00281a;
   --color-brand-900: #003b27;
@@ -35,6 +35,94 @@
 body {
   @apply bg-ink-50 text-ink-900;
   font-family: var(--font-sans);
+}
+
+.qr-loader {
+  display: flex;
+  min-height: 150px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  flex-direction: column;
+  color: var(--color-ink-900);
+  font-size: 0.875rem;
+}
+
+.qr-loader__frame {
+  position: relative;
+  display: grid;
+  width: 68px;
+  height: 68px;
+  place-items: center;
+  border: 3px solid var(--color-brand-600);
+  border-radius: 10px;
+  background: var(--color-brand-50);
+  box-shadow: 0 8px 20px
+    color-mix(in srgb, var(--color-brand-700) 16%, transparent);
+  overflow: hidden;
+}
+
+.qr-loader__frame::before,
+.qr-loader__frame::after {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: var(--color-gold-500);
+  border-style: solid;
+  content: "";
+}
+
+.qr-loader__frame::before {
+  top: -3px;
+  left: -3px;
+  border-width: 3px 0 0 3px;
+}
+
+.qr-loader__frame::after {
+  right: -3px;
+  bottom: -3px;
+  border-width: 0 3px 3px 0;
+}
+
+.qr-loader__pattern {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  opacity: 0.85;
+}
+
+.qr-loader__cell--filled {
+  background: var(--color-brand-800);
+}
+
+.qr-loader__scan-line {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  background: var(--color-gold-500);
+  box-shadow: 0 0 8px var(--color-gold-400);
+  animation: qr-loader-scan 1.5s ease-in-out infinite;
+}
+
+.qr-loader__hint {
+  color: var(--color-ink-500);
+  font-size: 0.75rem;
+}
+
+@keyframes qr-loader-scan {
+  0%,
+  100% {
+    transform: translateY(-24px);
+    opacity: 0.45;
+  }
+
+  50% {
+    transform: translateY(24px);
+    opacity: 1;
+  }
 }
 
 /* Scrollbar de la sidebar (fond vert foncé) : fine et discrète plutôt que le

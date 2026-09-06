@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'api_client.dart';
+import 'presence_repository.dart';
 import 'push_notifications.dart';
 
 /// État d'activation de l'app (§4.1). Un `device_uuid` est généré une seule
@@ -49,7 +50,8 @@ class Session extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _cacheMe(Map<String, dynamic> me) => _storage.write(key: _meCacheKey, value: jsonEncode(me));
+  Future<void> _cacheMe(Map<String, dynamic> me) =>
+      _storage.write(key: _meCacheKey, value: jsonEncode(me));
 
   Future<Map<String, dynamic>?> _loadCachedMe() async {
     final raw = await _storage.read(key: _meCacheKey);
@@ -75,16 +77,27 @@ class Session extends ChangeNotifier {
   /// pour l'administration, qui remettra un OTP en personne.
   Future<bool> requestActivation(String tel, String password) async {
     final uuid = await deviceUuid();
-    final response = await ApiClient.instance.post('/devices/request-activation', {
-      'tel': tel,
-      'password': password,
-      'device_uuid': uuid,
-      'device_type': 'mobile',
-    });
+    // Capturé avant toute authentification (§otp-approval) : c'est le seul
+    // moyen pour l'admin de pousser l'OTP par notification à ce téléphone une
+    // fois la demande validée, plutôt que de le remettre en personne.
+    final fcmToken = await PushNotifications.instance.getTokenOnly();
+    final response = await ApiClient.instance.post(
+      '/devices/request-activation',
+      {
+        'tel': tel,
+        'password': password,
+        'device_uuid': uuid,
+        'device_type': 'mobile',
+        if (fcmToken != null) 'fcm_token': fcmToken,
+      },
+    );
 
     final activated = response['activated'] as bool;
     if (activated) {
-      await ApiClient.instance.saveSession(token: response['token'] as String, deviceUuid: uuid);
+      await ApiClient.instance.saveSession(
+        token: response['token'] as String,
+        deviceUuid: uuid,
+      );
       _activated = true;
       _me = await ApiClient.instance.get('/me') as Map<String, dynamic>;
       await _cacheMe(_me!);
@@ -105,7 +118,10 @@ class Session extends ChangeNotifier {
       'device_type': 'mobile',
     });
 
-    await ApiClient.instance.saveSession(token: response['token'] as String, deviceUuid: uuid);
+    await ApiClient.instance.saveSession(
+      token: response['token'] as String,
+      deviceUuid: uuid,
+    );
     _activated = true;
     _me = await ApiClient.instance.get('/me') as Map<String, dynamic>;
     await _cacheMe(_me!);
@@ -116,6 +132,7 @@ class Session extends ChangeNotifier {
   Future<void> logout() async {
     await ApiClient.instance.clearSession();
     await _storage.delete(key: _meCacheKey);
+    await PresenceRepository(storage: _storage).clearCache();
     _activated = false;
     _me = null;
     notifyListeners();

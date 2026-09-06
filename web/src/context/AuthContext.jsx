@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import api from '../lib/api'
+import { clearAuthToken, saveAuthToken } from '../lib/authTokenStore'
+import { registerAdminPush } from '../lib/push'
 
 const AuthContext = createContext(null)
 
@@ -30,10 +32,13 @@ export function AuthProvider({ children }) {
         if (!data) throw new Error('/me a renvoyé une réponse vide')
         setUser(data)
         localStorage.setItem('auditron_user', JSON.stringify(data))
+        saveAuthToken(token)
+        registerAdminPush()
       })
       .catch(() => {
         localStorage.removeItem('auditron_token')
         localStorage.removeItem('auditron_user')
+        clearAuthToken()
         setUser(null)
       })
       .finally(() => setLoading(false))
@@ -44,7 +49,11 @@ export function AuthProvider({ children }) {
     if (!data?.token || !data?.user) throw new Error('/login a renvoyé une réponse invalide')
     localStorage.setItem('auditron_token', data.token)
     localStorage.setItem('auditron_user', JSON.stringify(data.user))
+    saveAuthToken(data.token)
     setUser(data.user)
+    // Notifications de validation OTP (§otp-approval) : activées après coup,
+    // sans bloquer la connexion si l'admin refuse la permission navigateur.
+    registerAdminPush()
   }
 
   async function logout() {
@@ -53,6 +62,7 @@ export function AuthProvider({ children }) {
     } finally {
       localStorage.removeItem('auditron_token')
       localStorage.removeItem('auditron_user')
+      clearAuthToken()
       setUser(null)
     }
   }

@@ -30,7 +30,12 @@ class BleService {
 
   Future<bool> isBluetoothEnabled() async {
     if (!await FlutterBluePlus.isSupported) return false;
-    return FlutterBluePlus.adapterStateNow == BluetoothAdapterState.on;
+    // `adapterStateNow` reste à `unknown` tant qu'aucun *changement* d'état
+    // n'a été observé depuis le démarrage de l'app (ex. Bluetooth déjà activé
+    // avant l'ouverture) — on utilise donc le stream `adapterState`, qui va
+    // chercher l'état réel via une requête native si besoin.
+    final state = await FlutterBluePlus.adapterState.first;
+    return state == BluetoothAdapterState.on;
   }
 
   /// Contrairement au WiFi (bloqué pour les apps tierces depuis Android 10),
@@ -65,6 +70,52 @@ class BleService {
       );
     }
 
+    // Android renvoie parfois une erreur GATT générique (code 133) sur une
+    // opération par ailleurs valide — bug connu du stack BLE Android (plus
+    // fréquent sur certains Samsung), sans solution fiable côté app hormis
+    // réessayer. cf. https://github.com/boskokg/flutter_blue_plus (FAQ
+    // "ANDROID_SPECIFIC_ERROR").
+    const maxAttempts = 3;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        final result = await _attemptScan(
+          device,
+          total: total,
+          type: type,
+          teacherToken: teacherToken,
+          qrCode: qrCode,
+          enseignantId: enseignantId,
+          motif: motif,
+        );
+        // Fire-and-forget : ne doit pas retarder le retour du résultat à
+        // l'écran (turnOff() peut mettre plusieurs secondes à répondre).
+        unawaited(_disableBluetoothAfterSend());
+        return result;
+      } on FlutterBluePlusException catch (e) {
+        if (attempt == maxAttempts) {
+          throw ApiException(
+            "La borne n'a pas répondu correctement (erreur Bluetooth). Réessayez.",
+            0,
+          );
+        }
+        debugPrint('[ble] tentative $attempt échouée (${e.description}), nouvel essai...');
+        await device.disconnect();
+        await Future.delayed(const Duration(milliseconds: 400));
+      }
+    }
+    // Inatteignable : la boucle retourne ou lève avant sa dernière itération.
+    throw ApiException("Échec de communication avec la borne.", 0);
+  }
+
+  Future<BorneScanResult> _attemptScan(
+    BluetoothDevice device, {
+    required Stopwatch total,
+    required String type,
+    required String teacherToken,
+    required String qrCode,
+    int? enseignantId,
+    String? motif,
+  }) async {
     try {
       await device.connect(timeout: const Duration(seconds: 8));
       final services = await device.discoverServices();
@@ -77,6 +128,13 @@ class BleService {
 
       // `connect()` négocie déjà un MTU de 512 par défaut — pas besoin d'un
       // requestMtu() séparé, le payload JSON (quelques centaines d'octets) y tient.
+      //
+      // Petite pause avant la première opération GATT : sur certains
+      // téléphones (Samsung notamment), enchaîner discoverServices() puis un
+      // write immédiatement déclenche une erreur GATT générique (133) alors
+      // que la connexion est en réalité valide.
+      await Future.delayed(const Duration(milliseconds: 300));
+
       await resultChar.setNotifyValue(true);
       final responseFuture = resultChar.onValueReceived.first.timeout(const Duration(seconds: 10));
 
@@ -93,6 +151,21 @@ class BleService {
       return _parseBorneResponse(utf8.decode(responseBytes));
     } finally {
       unawaited(device.disconnect());
+    }
+  }
+
+  /// Une fois le pointage transmis, on coupe le Bluetooth du téléphone : la
+  /// borne n'est plus utile tant qu'il n'y a pas de nouveau scan. Best-effort
+  /// et silencieux — `turnOff()` est dépréciée et n'a plus aucun effet sur
+  /// Android 13+ (Google a retiré la possibilité pour une app tierce de
+  /// couper le Bluetooth système) : sur ces versions, l'appel ne fait rien,
+  /// sans lever d'erreur.
+  Future<void> _disableBluetoothAfterSend() async {
+    try {
+      // ignore: deprecated_member_use
+      await FlutterBluePlus.turnOff();
+    } catch (_) {
+      // best-effort, cf. commentaire ci-dessus.
     }
   }
 

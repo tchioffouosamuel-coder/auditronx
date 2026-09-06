@@ -43,6 +43,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', fn (Request $request) => $request->user());
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+    Route::post('/me/fcm-token', [AuthController::class, 'updateFcmToken']);
 
     Route::post('/otp/generate', [OtpController::class, 'generate']);
     Route::post('/devices/{device}/revoke', [DeviceController::class, 'revoke']);
@@ -121,7 +122,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Administration des appareils (§4.2)
     Route::get('/devices', [DeviceController::class, 'index']);
     Route::get('/devices/activation-requests', [DeviceActivationRequestController::class, 'index']);
-    Route::post('/devices/activation-requests/{activationRequest}/generate-otp', [DeviceActivationRequestController::class, 'generateOtp']);
+    Route::post('/devices/activation-requests/{activationRequest}/approve', [DeviceActivationRequestController::class, 'approve']);
+    Route::post('/devices/activation-requests/{activationRequest}/reject', [DeviceActivationRequestController::class, 'reject']);
     Route::apiResource('access-points', AccessPointController::class)
         ->parameters(['access-points' => 'accessPoint'])
         ->except(['show']);

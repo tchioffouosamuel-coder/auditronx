@@ -95,7 +95,29 @@ class DeviceActivationFlowTest extends TestCase
         ])->assertUnprocessable();
     }
 
-    public function test_ladministration_genere_lotp_et_le_flux_dactivation_se_termine(): void
+    public function test_un_enseignant_ne_peut_pas_demander_un_second_telephone(): void
+    {
+        $enseignant = Enseignant::factory()->create([
+            'tel' => '699000007',
+            'password' => Hash::make('secret123'),
+        ]);
+        Device::factory()->create([
+            'teacher_id' => $enseignant->id,
+            'device_uuid' => 'device-first',
+        ]);
+
+        $this->postJson('/api/devices/request-activation', [
+            'tel' => '699000007',
+            'password' => 'secret123',
+            'device_uuid' => 'device-second',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['device_uuid']);
+
+        $this->assertDatabaseCount('device_activation_requests', 0);
+    }
+
+    public function test_ladministration_valide_la_demande_et_le_flux_dactivation_se_termine(): void
     {
         $enseignant = Enseignant::factory()->create([
             'tel' => '699000005',
@@ -111,24 +133,22 @@ class DeviceActivationFlowTest extends TestCase
         $admin = User::factory()->create();
         $this->withToken($admin->createToken('backoffice')->plainTextToken);
 
+        // L'OTP est déjà généré à la demande (notification de validation
+        // envoyée aux admins) : le code est visible ici en secours de la push.
         $pending = $this->getJson('/api/devices/activation-requests')->assertOk();
         $this->assertCount(1, $pending->json('data'));
         $requestId = $pending->json('data.0.id');
-
-        $otpResponse = $this->postJson("/api/devices/activation-requests/{$requestId}/generate-otp")
-            ->assertCreated();
-        $code = $otpResponse->json('code');
+        $code = $pending->json('data.0.code');
         $this->assertNotEmpty($code);
 
-        $this->assertDatabaseHas('device_activation_requests', [
-            'id' => $requestId,
-        ]);
+        $this->postJson("/api/devices/activation-requests/{$requestId}/approve")->assertOk();
+
         $this->assertNotNull(DeviceActivationRequest::find($requestId)->fulfilled_at);
 
         // La liste "en attente" ne doit plus contenir cette demande.
         $this->getJson('/api/devices/activation-requests')->assertOk()->assertJsonCount(0, 'data');
 
-        // L'enseignant termine l'activation avec le code remis en personne.
+        // L'enseignant termine l'activation avec le code poussé par notification.
         $activation = $this->postJson('/api/devices/activate', [
             'code' => $code,
             'device_uuid' => 'device-teacher-2',
@@ -139,6 +159,30 @@ class DeviceActivationFlowTest extends TestCase
             'teacher_id' => $enseignant->id,
             'device_uuid' => 'device-teacher-2',
         ]);
+    }
+
+    public function test_ladministration_peut_refuser_une_demande_dactivation(): void
+    {
+        Enseignant::factory()->create([
+            'tel' => '699000009',
+            'password' => Hash::make('secret123'),
+        ]);
+
+        $this->postJson('/api/devices/request-activation', [
+            'tel' => '699000009',
+            'password' => 'secret123',
+            'device_uuid' => 'device-teacher-3',
+        ])->assertStatus(202);
+
+        $admin = User::factory()->create();
+        $this->withToken($admin->createToken('backoffice')->plainTextToken);
+
+        $requestId = $this->getJson('/api/devices/activation-requests')->json('data.0.id');
+
+        $this->postJson("/api/devices/activation-requests/{$requestId}/reject")->assertOk();
+
+        $this->assertNotNull(DeviceActivationRequest::find($requestId)->rejected_at);
+        $this->getJson('/api/devices/activation-requests')->assertOk()->assertJsonCount(0, 'data');
     }
 
     /**
@@ -180,5 +224,32 @@ class DeviceActivationFlowTest extends TestCase
             'otp_id' => $otp->id,
             'revoked_at' => null,
         ]);
+    }
+
+    public function test_un_otp_ne_peut_pas_activer_un_second_telephone(): void
+    {
+        $enseignant = Enseignant::factory()->create([
+            'tel' => '699000008',
+            'password' => Hash::make('secret123'),
+        ]);
+        Device::factory()->create([
+            'teacher_id' => $enseignant->id,
+            'device_uuid' => 'device-first-otp',
+        ]);
+        $otp = Otp::create([
+            'teacher_id' => $enseignant->id,
+            'code_hash' => Hash::make('654321'),
+            'expires_at' => now()->addMinutes(15),
+        ]);
+
+        $this->postJson('/api/devices/activate', [
+            'code' => '654321',
+            'device_uuid' => 'device-second-otp',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['device_uuid']);
+
+        $this->assertDatabaseHas('otps', ['id' => $otp->id, 'used_at' => null]);
+        $this->assertDatabaseCount('devices', 1);
     }
 }

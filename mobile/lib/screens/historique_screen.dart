@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/presence.dart';
-import '../services/api_client.dart';
+import '../services/presence_repository.dart';
 
 /// Historique personnel (§4.1) : consultation de ses propres présences/retards
 /// du mois en cours.
@@ -12,6 +12,7 @@ class HistoriqueScreen extends StatefulWidget {
 }
 
 class _HistoriqueScreenState extends State<HistoriqueScreen> {
+  final _repository = PresenceRepository();
   late Future<List<PresenceEntry>> _future;
 
   @override
@@ -21,8 +22,7 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
   }
 
   Future<List<PresenceEntry>> _load() async {
-    final data = await ApiClient.instance.get('/mes-presences') as List<dynamic>;
-    return data.map((e) => PresenceEntry.fromJson(e as Map<String, dynamic>)).toList();
+    return _repository.load();
   }
 
   Future<void> _refresh() async {
@@ -41,11 +41,6 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            // L'historique est lu depuis le serveur distant (pas depuis le
-            // téléphone) : les pointages transitent par la borne, qui les
-            // synchronise elle-même de façon différée dès qu'elle a internet
-            // (§hardware) — consulter l'historique nécessite donc que le
-            // téléphone, lui, ait internet à cet instant précis.
             return ListView(
               children: [
                 Padding(
@@ -54,7 +49,10 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
                     children: [
                       Text('${snapshot.error}', textAlign: TextAlign.center),
                       const SizedBox(height: 12),
-                      OutlinedButton(onPressed: _refresh, child: const Text('Réessayer')),
+                      OutlinedButton(
+                        onPressed: _refresh,
+                        child: const Text('Réessayer'),
+                      ),
                     ],
                   ),
                 ),
@@ -64,7 +62,14 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
 
           final entries = snapshot.data!;
           if (entries.isEmpty) {
-            return ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Text('Aucune présence ce mois-ci.'))]);
+            return ListView(
+              children: const [
+                Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text('Aucune présence ce mois-ci.'),
+                ),
+              ],
+            );
           }
 
           return ListView.separated(
@@ -76,7 +81,9 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
               return Card(
                 child: ListTile(
                   title: Text(e.date),
-                  subtitle: Text('Arrivée : ${e.heureArrivee ?? '—'}   Départ : ${e.heureDepart ?? '—'}'),
+                  subtitle: Text(
+                    'Arrivée : ${e.heureArrivee ?? '—'}   Départ : ${e.heureDepart ?? '—'}',
+                  ),
                   trailing: e.enRetard
                       ? Chip(
                           label: Text('Retard ${e.minutesRetard} min'),

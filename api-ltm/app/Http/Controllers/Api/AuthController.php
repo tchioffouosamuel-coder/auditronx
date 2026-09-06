@@ -51,4 +51,20 @@ class AuthController extends Controller
             $principal instanceof User ? $principal->load('accreditation') : $principal
         );
     }
+
+    /**
+     * POST /api/me/fcm-token — enregistre le token FCM du navigateur backoffice
+     * (notifications de validation OTP, §otp-approval). Équivalent, côté admin,
+     * de DeviceController::updateFcmToken côté enseignant/device.
+     */
+    public function updateFcmToken(Request $request)
+    {
+        $data = $request->validate(['fcm_token' => ['required', 'string']]);
+
+        abort_unless($request->user() instanceof User, 403, 'Réservé au backoffice.');
+
+        $request->user()->update(['fcm_token' => $data['fcm_token']]);
+
+        return response()->json(['updated' => true]);
+    }
 }

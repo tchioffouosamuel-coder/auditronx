@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState } from "react";
+import LoadingState from "./LoadingState";
 
 /**
  * Table générique avec recherche, tri par colonne et pagination côté client —
@@ -12,68 +13,85 @@ import { useMemo, useState } from 'react'
 export default function DataTable({
   columns,
   rows,
-  idKey = 'id',
+  idKey = "id",
   getRowKey,
   loading = false,
-  emptyMessage = 'Aucune donnée.',
-  searchPlaceholder = 'Rechercher…',
+  emptyMessage = "Aucune donnée.",
+  searchPlaceholder = "Rechercher…",
   pageSize = 10,
   renderActions,
-  actionsLabel = '',
+  actionsLabel = "",
 }) {
-  const [query, setQuery] = useState('')
-  const [sort, setSort] = useState({ key: null, dir: 'asc' })
-  const [page, setPage] = useState(1)
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState({ key: null, dir: "asc" });
+  const [page, setPage] = useState(1);
 
   function cellText(column, row) {
-    if (column.searchValue) return String(column.searchValue(row) ?? '')
+    if (column.searchValue) return String(column.searchValue(row) ?? "");
     if (column.render) {
-      const rendered = column.render(row)
-      return typeof rendered === 'string' || typeof rendered === 'number' ? String(rendered) : ''
+      const rendered = column.render(row);
+      return typeof rendered === "string" || typeof rendered === "number"
+        ? String(rendered)
+        : "";
     }
-    return String(row[column.key] ?? '')
+    return String(row[column.key] ?? "");
   }
 
   function sortKeyOf(column, row) {
-    if (column.sortValue) return column.sortValue(row)
-    return cellText(column, row)
+    if (column.sortValue) return column.sortValue(row);
+    return cellText(column, row);
   }
 
   const filtered = useMemo(() => {
-    if (!query.trim()) return rows
-    const q = query.trim().toLowerCase()
-    return rows.filter((row) => columns.some((c) => cellText(c, row).toLowerCase().includes(q)))
+    if (!query.trim()) return rows;
+    const q = query.trim().toLowerCase();
+    return rows.filter((row) =>
+      columns.some((c) => cellText(c, row).toLowerCase().includes(q)),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, query, columns])
+  }, [rows, query, columns]);
 
   const sorted = useMemo(() => {
-    if (!sort.key) return filtered
-    const column = columns.find((c) => c.key === sort.key)
-    if (!column) return filtered
+    if (!sort.key) return filtered;
+    const column = columns.find((c) => c.key === sort.key);
+    if (!column) return filtered;
 
-    const withKeys = filtered.map((row) => ({ row, k: sortKeyOf(column, row) }))
+    const withKeys = filtered.map((row) => ({
+      row,
+      k: sortKeyOf(column, row),
+    }));
     withKeys.sort((a, b) => {
-      const na = Number(a.k)
-      const nb = Number(b.k)
-      const bothNumeric = a.k !== '' && b.k !== '' && !Number.isNaN(na) && !Number.isNaN(nb)
-      const cmp = bothNumeric ? na - nb : String(a.k).localeCompare(String(b.k), 'fr')
-      return sort.dir === 'asc' ? cmp : -cmp
-    })
-    return withKeys.map((w) => w.row)
+      const na = Number(a.k);
+      const nb = Number(b.k);
+      const bothNumeric =
+        a.k !== "" && b.k !== "" && !Number.isNaN(na) && !Number.isNaN(nb);
+      const cmp = bothNumeric
+        ? na - nb
+        : String(a.k).localeCompare(String(b.k), "fr");
+      return sort.dir === "asc" ? cmp : -cmp;
+    });
+    return withKeys.map((w) => w.row);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtered, sort, columns])
+  }, [filtered, sort, columns]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
-  const currentPage = Math.min(page, totalPages)
-  const pageRows = sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pageRows = sorted.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
+  );
 
   function toggleSort(column) {
-    if (column.sortable === false) return
-    setPage(1)
-    setSort((s) => (s.key === column.key ? { key: column.key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key: column.key, dir: 'asc' }))
+    if (column.sortable === false) return;
+    setPage(1);
+    setSort((s) =>
+      s.key === column.key
+        ? { key: column.key, dir: s.dir === "asc" ? "desc" : "asc" }
+        : { key: column.key, dir: "asc" },
+    );
   }
 
-  const colSpan = columns.length + (renderActions ? 1 : 0)
+  const colSpan = columns.length + (renderActions ? 1 : 0);
 
   return (
     <div>
@@ -82,15 +100,15 @@ export default function DataTable({
           type="search"
           value={query}
           onChange={(e) => {
-            setQuery(e.target.value)
-            setPage(1)
+            setQuery(e.target.value);
+            setPage(1);
           }}
           placeholder={searchPlaceholder}
           className="w-full max-w-xs rounded-md border border-ink-100 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
         />
         {!loading && (
           <span className="shrink-0 text-xs text-ink-300">
-            {sorted.length} résultat{sorted.length > 1 ? 's' : ''}
+            {sorted.length} résultat{sorted.length > 1 ? "s" : ""}
           </span>
         )}
       </div>
@@ -104,11 +122,13 @@ export default function DataTable({
                   key={c.key}
                   onClick={() => toggleSort(c)}
                   className={`whitespace-nowrap px-4 py-2.5 font-medium text-ink-500 ${
-                    c.align === 'right' ? 'text-right' : 'text-left'
-                  } ${c.sortable === false ? '' : 'cursor-pointer select-none hover:text-ink-700'}`}
+                    c.align === "right" ? "text-right" : "text-left"
+                  } ${c.sortable === false ? "" : "cursor-pointer select-none hover:text-ink-700"}`}
                 >
                   {c.label}
-                  {c.sortable !== false && sort.key === c.key && (sort.dir === 'asc' ? ' ▲' : ' ▼')}
+                  {c.sortable !== false &&
+                    sort.key === c.key &&
+                    (sort.dir === "asc" ? " ▲" : " ▼")}
                 </th>
               ))}
               {renderActions && <th className="px-4 py-2.5">{actionsLabel}</th>}
@@ -117,30 +137,42 @@ export default function DataTable({
           <tbody className="divide-y divide-ink-100">
             {loading && (
               <tr>
-                <td colSpan={colSpan} className="px-4 py-8 text-center text-ink-300">
-                  Chargement…
+                <td colSpan={colSpan} className="px-4 py-5 text-center">
+                  <LoadingState />
                 </td>
               </tr>
             )}
             {!loading && pageRows.length === 0 && (
               <tr>
-                <td colSpan={colSpan} className="px-4 py-8 text-center text-ink-300">
-                  {query ? 'Aucun résultat pour cette recherche.' : emptyMessage}
+                <td
+                  colSpan={colSpan}
+                  className="px-4 py-8 text-center text-ink-300"
+                >
+                  {query
+                    ? "Aucun résultat pour cette recherche."
+                    : emptyMessage}
                 </td>
               </tr>
             )}
             {!loading &&
               pageRows.map((row, i) => (
-                <tr key={getRowKey ? getRowKey(row, i) : (row[idKey] ?? i)} className="hover:bg-ink-50">
+                <tr
+                  key={getRowKey ? getRowKey(row, i) : (row[idKey] ?? i)}
+                  className="hover:bg-ink-50"
+                >
                   {columns.map((c) => (
                     <td
                       key={c.key}
-                      className={`whitespace-nowrap px-4 py-2.5 text-ink-700 ${c.align === 'right' ? 'text-right' : ''}`}
+                      className={`whitespace-nowrap px-4 py-2.5 text-ink-700 ${c.align === "right" ? "text-right" : ""}`}
                     >
-                      {c.render ? c.render(row) : String(row[c.key] ?? '—')}
+                      {c.render ? c.render(row) : String(row[c.key] ?? "—")}
                     </td>
                   ))}
-                  {renderActions && <td className="whitespace-nowrap px-4 py-2.5 text-right">{renderActions(row)}</td>}
+                  {renderActions && (
+                    <td className="whitespace-nowrap px-4 py-2.5 text-right">
+                      {renderActions(row)}
+                    </td>
+                  )}
                 </tr>
               ))}
           </tbody>
@@ -171,5 +203,5 @@ export default function DataTable({
         </div>
       )}
     </div>
-  )
+  );
 }

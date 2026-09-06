@@ -1,4 +1,5 @@
 import QRCode from 'qrcode'
+import { notify } from './swal'
 
 /**
  * Génère un QR code pour `value` et ouvre l'aperçu d'impression du navigateur
@@ -10,7 +11,7 @@ export async function printQrCode({ value, label }) {
 
   const win = window.open('', '_blank', 'width=600,height=700')
   if (!win) {
-    window.alert("Le navigateur a bloqué l'ouverture de la fenêtre d'impression (popup).")
+    notify("Le navigateur a bloqué l'ouverture de la fenêtre d'impression (popup).", { icon: 'error' })
     return
   }
 

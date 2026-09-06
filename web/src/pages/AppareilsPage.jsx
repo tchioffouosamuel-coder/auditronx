@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import DataTable from '../components/DataTable'
 import ResourceTable from '../components/ResourceTable'
-import Modal from '../components/Modal'
 import api from '../lib/api'
 import { printQrCode } from '../lib/printQrCode'
+import { confirmAction } from '../lib/swal'
 
 function DevicesTable() {
   const [devices, setDevices] = useState([])
@@ -20,7 +20,7 @@ function DevicesTable() {
   useEffect(load, [])
 
   async function revoke(device) {
-    if (!window.confirm(`Révoquer le device ${device.device_uuid} ?`)) return
+    if (!(await confirmAction(`Révoquer le device ${device.device_uuid} ?`, { confirmText: 'Révoquer' }))) return
     await api.post(`/devices/${device.id}/revoke`)
     load()
   }
@@ -60,14 +60,16 @@ function DevicesTable() {
 }
 
 /**
- * Demandes d'activation (§4.1 revu) : un enseignant non-admin s'est identifié
- * (tel + mot de passe) mais attend qu'un administrateur génère l'OTP à lui
- * remettre en personne.
+ * Demandes d'activation (§4.1 revu, §otp-approval) : un enseignant non-admin
+ * s'est identifié (tel + mot de passe). L'OTP est déjà généré côté serveur ;
+ * une notification de validation (Valider/Refuser) a été poussée aux admins
+ * connectés — ce tableau est le relais/secours pour agir depuis le backoffice
+ * si la notification n'a pas été reçue.
  */
 function ActivationRequestsTable() {
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(true)
-  const [otpResult, setOtpResult] = useState(null)
+  const [error, setError] = useState(null)
 
   function load() {
     setLoading(true)
@@ -79,14 +81,25 @@ function ActivationRequestsTable() {
 
   useEffect(load, [])
 
-  async function generateOtp(request) {
-    const { data } = await api.post(`/devices/activation-requests/${request.id}/generate-otp`)
-    setOtpResult({ enseignant: request.enseignant?.nom, ...data })
+  async function approve(request) {
+    setError(null)
+    try {
+      await api.post(`/devices/activation-requests/${request.id}/approve`)
+      load()
+    } catch (e) {
+      setError(e.response?.data?.message ?? "Échec de l'envoi du code.")
+    }
+  }
+
+  async function reject(request) {
+    if (!(await confirmAction(`Refuser la demande de ${request.enseignant?.nom} ?`, { confirmText: 'Refuser' }))) return
+    await api.post(`/devices/activation-requests/${request.id}/reject`)
     load()
   }
 
   return (
     <>
+      {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       <DataTable
         loading={loading}
         emptyMessage="Aucune demande en attente."
@@ -95,6 +108,12 @@ function ActivationRequestsTable() {
           { key: 'enseignant', label: 'Enseignant', render: (r) => r.enseignant?.nom, sortValue: (r) => r.enseignant?.nom },
           { key: 'tel', label: 'Téléphone', render: (r) => r.enseignant?.tel, sortValue: (r) => r.enseignant?.tel },
           {
+            key: 'code',
+            label: 'Code',
+            sortable: false,
+            render: (r) => (r.code ? <span className="font-mono font-semibold tracking-widest">{r.code}</span> : '—'),
+          },
+          {
             key: 'requested_at',
             label: 'Demandée le',
             render: (r) => new Date(r.requested_at).toLocaleString('fr-FR'),
@@ -102,23 +121,16 @@ function ActivationRequestsTable() {
           },
         ]}
         renderActions={(r) => (
-          <button onClick={() => generateOtp(r)} className="rounded-md bg-brand-700 px-3 py-1 text-white hover:bg-brand-800">
-            Générer le code
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => approve(r)} className="rounded-md bg-brand-700 px-3 py-1 text-white hover:bg-brand-800">
+              Valider
+            </button>
+            <button onClick={() => reject(r)} className="rounded-md border border-red-200 px-3 py-1 text-red-600 hover:bg-red-50">
+              Refuser
+            </button>
+          </div>
         )}
       />
-
-      {otpResult && (
-        <Modal title={`Code d'activation — ${otpResult.enseignant}`} onClose={() => setOtpResult(null)}>
-          <p className="mb-3 text-sm text-ink-700">
-            À remettre en personne à l'enseignant. Ce code n'est affiché qu'une seule fois et expire le{' '}
-            {new Date(otpResult.expires_at).toLocaleString('fr-FR')}.
-          </p>
-          <div className="rounded-lg bg-gold-100 px-4 py-3 text-center text-3xl font-bold tracking-[0.3em] text-gold-700">
-            {otpResult.code}
-          </div>
-        </Modal>
-      )}
     </>
   )
 }

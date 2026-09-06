@@ -44,6 +44,9 @@ dependencies:
   uuid: ^4.5.1
   firebase_core: ^3.8.0
   firebase_messaging: ^15.1.6
+  # Mode offline (§offline-sync) : détection de connectivité pour déclencher
+  # la synchro pull/push automatiquement au retour du réseau.
+  connectivity_plus: ^6.1.0
   # Plafonné à la branche 1.x : la 2.x a introduit une licence payante pour
   # tout usage commercial (License.commercial requis à la connexion) — le "^"
   # empêche une montée de version majeure accidentelle vers cette licence.

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Select from 'react-select'
 import api from '../lib/api'
+import { confirmAction } from '../lib/swal'
 import DataTable from './DataTable'
 import Modal from './Modal'
 import PasswordInput from './PasswordInput'
@@ -88,7 +89,7 @@ export default function ResourceTable({ title, resource, fields, columns, idKey 
   }
 
   async function handleDelete(row) {
-    if (!window.confirm('Confirmer la suppression ?')) return
+    if (!(await confirmAction('Confirmer la suppression ?', { confirmText: 'Supprimer' }))) return
     await api.delete(`${resource}/${row[idKey]}`)
     load()
   }

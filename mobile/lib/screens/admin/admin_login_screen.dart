@@ -1,30 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../services/api_client.dart';
-import '../services/session.dart';
-import '../theme.dart';
-import 'admin/admin_login_screen.dart';
-import 'otp_entry_screen.dart';
+import '../../services/api_client.dart';
+import '../../services/admin_session.dart';
+import '../../theme.dart';
 
-/// Identification (§4.1 revu) : téléphone + mot de passe. Un enseignant admin
-/// est activé immédiatement ; sinon l'écran de saisie de l'OTP (remis en
-/// personne par l'administration) prend le relais.
-class ActivationScreen extends StatefulWidget {
-  const ActivationScreen({super.key});
+/// Connexion admin (§admin-mobile) : mêmes identifiants que le backoffice web
+/// (compte `User`, email + mot de passe), distincte de l'identification
+/// enseignant (tel + mot de passe + OTP) de [ActivationScreen].
+class AdminLoginScreen extends StatefulWidget {
+  const AdminLoginScreen({super.key});
 
   @override
-  State<ActivationScreen> createState() => _ActivationScreenState();
+  State<AdminLoginScreen> createState() => _AdminLoginScreenState();
 }
 
-class _ActivationScreenState extends State<ActivationScreen> {
-  final _telController = TextEditingController();
+class _AdminLoginScreenState extends State<AdminLoginScreen> {
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _submitting = false;
   bool _obscurePassword = true;
   String? _error;
 
   Future<void> _submit() async {
-    if (_telController.text.trim().isEmpty || _passwordController.text.isEmpty) return;
+    if (_emailController.text.trim().isEmpty || _passwordController.text.isEmpty) return;
 
     setState(() {
       _submitting = true;
@@ -32,14 +30,8 @@ class _ActivationScreenState extends State<ActivationScreen> {
     });
 
     try {
-      final activated = await context.read<Session>().requestActivation(
-            _telController.text.trim(),
-            _passwordController.text,
-          );
-
-      if (!activated && mounted) {
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const OtpEntryScreen()));
-      }
+      await context.read<AdminSession>().login(_emailController.text.trim(), _passwordController.text);
+      if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } finally {
@@ -61,13 +53,13 @@ class _ActivationScreenState extends State<ActivationScreen> {
               Image.asset('assets/logo.png', height: 88),
               const SizedBox(height: 20),
               const Text(
-                'Auditron X',
+                'Espace administration',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900),
+                style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900),
               ),
               const SizedBox(height: 4),
               const Text(
-                "L'assiduité intelligente au service de l'éducation.",
+                'Mêmes identifiants que le tableau de bord.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AuditronColors.gold500, fontSize: 13, fontStyle: FontStyle.italic),
               ),
@@ -78,16 +70,10 @@ class _ActivationScreenState extends State<ActivationScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text(
-                      'Connectez-vous avec votre numéro de téléphone et votre mot de passe.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: AuditronColors.ink700),
-                    ),
-                    const SizedBox(height: 20),
                     TextField(
-                      controller: _telController,
-                      keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(labelText: 'Téléphone'),
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(labelText: 'Email'),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -117,23 +103,6 @@ class _ActivationScreenState extends State<ActivationScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                             )
                           : const Text('Se connecter'),
-                    ),
-                    const SizedBox(height: 12),
-                    TextButton(
-                      onPressed: _submitting
-                          ? null
-                          : () => Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => const OtpEntryScreen()),
-                              ),
-                      child: const Text("J'ai déjà reçu mon code d'activation"),
-                    ),
-                    TextButton(
-                      onPressed: _submitting
-                          ? null
-                          : () => Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
-                              ),
-                      child: const Text('Se connecter en tant qu\'administrateur'),
                     ),
                   ],
                 ),

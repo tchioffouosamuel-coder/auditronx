@@ -401,15 +401,44 @@ static String processScan(const String &rawJson) {
 
 static NimBLECharacteristic *g_bleResultChar = nullptr;
 
+// processScan() prend une photo (caméra) et écrit sur la carte SD : trop lent
+// pour tourner dans le callback GATT lui-même, qui s'exécute sur la tâche
+// hôte NimBLE. L'y bloquer perturbe le timing de la connexion BLE (le
+// contrôleur ne peut plus servir les événements de connexion à temps) et fait
+// tomber la liaison (LINK_SUPERVISION_TIMEOUT), avec une erreur GATT_ERROR
+// (133) côté téléphone sur l'écriture en cours — de façon systématique, pas
+// aléatoire. onWrite() se contente donc de recopier la requête et de poser un
+// drapeau ; le traitement réel (et la notification du résultat) a lieu dans
+// loop(), sur la tâche principale.
+static SemaphoreHandle_t g_pendingScanMutex = nullptr;
+static String g_pendingScanJson;
+static volatile bool g_pendingScan = false;
+
 class ScanCharCallbacks : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic *characteristic) override {
-        String response = processScan(String(characteristic->getValue().c_str()));
-        if (g_bleResultChar) {
-            g_bleResultChar->setValue(response);
-            g_bleResultChar->notify();
-        }
+        MutexGuard guard(g_pendingScanMutex);
+        g_pendingScanJson = String(characteristic->getValue().c_str());
+        g_pendingScan = true;
     }
 };
+
+/** Appelé depuis loop() : traite la requête en attente (s'il y en a une) hors du callback GATT. */
+static void processPendingBleScan() {
+    if (!g_pendingScan) return;
+
+    String rawJson;
+    {
+        MutexGuard guard(g_pendingScanMutex);
+        rawJson = g_pendingScanJson;
+        g_pendingScan = false;
+    }
+
+    String response = processScan(rawJson);
+    if (g_bleResultChar) {
+        g_bleResultChar->setValue(response);
+        g_bleResultChar->notify();
+    }
+}
 
 static void setupBle() {
     NimBLEDevice::init(BLE_DEVICE_NAME);
@@ -504,6 +533,7 @@ void setup() {
     Serial.println("[http] serveur local démarré sur le port 80 (débogage)");
 
     g_sdMutex = xSemaphoreCreateMutex();
+    g_pendingScanMutex = xSemaphoreCreateMutex();
     // Cœur 1 (APP_CPU), comme loopTask par défaut sur Arduino-ESP32 — la pile
     // dédiée de 16 Ko est la partie qui compte ici, pas l'affinité de cœur.
     xTaskCreatePinnedToCore(syncTask, "sync_task", 16384, nullptr, 1, nullptr, 1);
@@ -511,6 +541,7 @@ void setup() {
 
 void loop() {
     server.handleClient();
+    processPendingBleScan();
 
     static bool wasConnected = false;
     bool isConnected = WiFi.status() == WL_CONNECTED;

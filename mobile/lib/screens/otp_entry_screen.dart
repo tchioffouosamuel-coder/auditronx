@@ -3,9 +3,10 @@ import 'package:provider/provider.dart';
 import '../services/api_client.dart';
 import '../services/session.dart';
 
-/// Étape 2 de l'activation (§4.1 revu) : l'enseignant saisit le code OTP
-/// remis en personne par l'administration (après qu'elle l'a généré depuis
-/// la demande créée par l'écran d'identification).
+/// Étape 2 de l'activation (§4.1 revu, §otp-approval) : l'enseignant saisit le
+/// code OTP reçu par notification push une fois l'admin validée sa demande
+/// (créée par l'écran d'identification) — plus besoin de le remettre en
+/// personne.
 class OtpEntryScreen extends StatefulWidget {
   const OtpEntryScreen({super.key});
 
@@ -47,7 +48,7 @@ class _OtpEntryScreenState extends State<OtpEntryScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text(
-              "Saisissez le code à 6 chiffres remis en personne par l'administration.",
+              "Un administrateur doit valider votre demande. Saisissez ici le code à 6 chiffres reçu par notification une fois la demande approuvée.",
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
