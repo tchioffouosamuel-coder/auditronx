@@ -15,6 +15,10 @@ class ScanScreen extends StatefulWidget {
   final String type; // 'scan' (pointage personnel) ou 'admin_proxy'
   final int? enseignantId; // requis pour 'admin_proxy'
   final String? motif; // requis pour 'admin_proxy'
+  // Source du token transmis à la borne (`teacher_token`, §admin-mobile) :
+  // celui de l'enseignant par défaut, mais l'admin backoffice (AdminApiClient)
+  // scanne aussi par procuration avec son propre token.
+  final Future<String?> Function()? tokenProvider;
 
   const ScanScreen({
     super.key,
@@ -22,6 +26,7 @@ class ScanScreen extends StatefulWidget {
     this.type = 'scan',
     this.enseignantId,
     this.motif,
+    this.tokenProvider,
   });
 
   @override
@@ -44,7 +49,7 @@ class _ScanScreenState extends State<ScanScreen> {
 
     bool success = false;
     try {
-      final teacherToken = await ApiClient.instance.token;
+      final teacherToken = await (widget.tokenProvider ?? () => ApiClient.instance.token)();
       if (teacherToken == null) {
         _showMessage('Session expirée, merci de vous réactiver.', error: true);
         return;
@@ -140,25 +145,12 @@ class _ScanScreenState extends State<ScanScreen> {
   }
 }
 
-class _QrProcessingOverlay extends StatefulWidget {
+// Overlay statique, sans animation (§4.1) : la version précédente tournait un
+// AnimationController + CustomPaint en continu pendant tout l'échange BLE,
+// ce qui donnait une impression de lenteur sans rien apporter au traitement
+// réel — un simple indicateur suffit à signaler que le scan est en cours.
+class _QrProcessingOverlay extends StatelessWidget {
   const _QrProcessingOverlay();
-
-  @override
-  State<_QrProcessingOverlay> createState() => _QrProcessingOverlayState();
-}
-
-class _QrProcessingOverlayState extends State<_QrProcessingOverlay>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _animation = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1700),
-  )..repeat();
-
-  @override
-  void dispose() {
-    _animation.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -179,26 +171,16 @@ class _QrProcessingOverlayState extends State<_QrProcessingOverlay>
               ),
             ],
           ),
-          child: Column(
+          child: const Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              AnimatedBuilder(
-                animation: _animation,
-                builder: (context, child) => CustomPaint(
-                  size: const Size.square(126),
-                  painter: _QrLoaderPainter(_animation.value),
-                  child: child,
-                ),
-                child: const Center(
-                  child: Icon(
-                    Icons.qr_code_2,
-                    size: 54,
-                    color: AuditronColors.brand800,
-                  ),
-                ),
+              SizedBox(
+                width: 32,
+                height: 32,
+                child: CircularProgressIndicator(strokeWidth: 3, color: AuditronColors.brand600),
               ),
-              const SizedBox(height: 18),
-              const Text(
+              SizedBox(height: 18),
+              Text(
                 'Transmission en cours',
                 textAlign: TextAlign.center,
                 style: TextStyle(
@@ -207,8 +189,8 @@ class _QrProcessingOverlayState extends State<_QrProcessingOverlay>
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(height: 6),
-              const Text(
+              SizedBox(height: 6),
+              Text(
                 'Connexion à la borne...',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AuditronColors.ink500, fontSize: 13),
@@ -219,53 +201,6 @@ class _QrProcessingOverlayState extends State<_QrProcessingOverlay>
       ),
     );
   }
-}
-
-class _QrLoaderPainter extends CustomPainter {
-  const _QrLoaderPainter(this.progress);
-
-  final double progress;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const cornerLength = 25.0;
-    const strokeWidth = 4.0;
-    final cornerPaint = Paint()
-      ..color = AuditronColors.brand600
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-    final linePaint = Paint()
-      ..color = AuditronColors.gold500
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round;
-    final rect = Offset.zero & size;
-    final path = Path()
-      ..moveTo(rect.left + cornerLength, rect.top)
-      ..lineTo(rect.left, rect.top)
-      ..lineTo(rect.left, rect.top + cornerLength)
-      ..moveTo(rect.right - cornerLength, rect.top)
-      ..lineTo(rect.right, rect.top)
-      ..lineTo(rect.right, rect.top + cornerLength)
-      ..moveTo(rect.left, rect.bottom - cornerLength)
-      ..lineTo(rect.left, rect.bottom)
-      ..lineTo(rect.left + cornerLength, rect.bottom)
-      ..moveTo(rect.right, rect.bottom - cornerLength)
-      ..lineTo(rect.right, rect.bottom)
-      ..lineTo(rect.right - cornerLength, rect.bottom);
-    canvas.drawPath(path, cornerPaint);
-
-    final scanY = 10 + (size.height - 20) * progress;
-    canvas.drawLine(
-      Offset(12, scanY),
-      Offset(size.width - 12, scanY),
-      linePaint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_QrLoaderPainter oldDelegate) =>
-      oldDelegate.progress != progress;
 }
 
 extension on List<Barcode> {

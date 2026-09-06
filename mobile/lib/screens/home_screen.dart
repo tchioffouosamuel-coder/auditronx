@@ -28,15 +28,21 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final session = context.watch<Session>();
+    // Le scan par procuration engage la présence d'un tiers en son nom : seul
+    // un enseignant admin (`est_admin`, §admin-mobile) doit pouvoir y accéder,
+    // pas n'importe quel enseignant.
+    final isAdmin = session.me?['est_admin'] == true;
 
     final pages = [
       _ScanTab(onScan: _openSelfScan, nom: session.nom),
       const HistoriqueScreen(),
-      const ProcurationScreen(),
+      if (isAdmin) const ProcurationScreen(),
       const NotificationsScreen(),
     ];
 
-    final titles = ['Auditron X', 'Mon historique', 'Procuration', 'Notifications'];
+    final titles = ['Auditron X', 'Mon historique', if (isAdmin) 'Procuration', 'Notifications'];
+
+    if (_tab >= pages.length) _tab = 0;
 
     return Scaffold(
       appBar: AppBar(
@@ -51,11 +57,11 @@ class _HomeScreenState extends State<HomeScreen> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.qr_code_scanner), label: 'Scanner'),
-          NavigationDestination(icon: Icon(Icons.history), label: 'Historique'),
-          NavigationDestination(icon: Icon(Icons.badge), label: 'Procuration'),
-          NavigationDestination(icon: Icon(Icons.notifications), label: 'Alertes'),
+        destinations: [
+          const NavigationDestination(icon: Icon(Icons.qr_code_scanner), label: 'Scanner'),
+          const NavigationDestination(icon: Icon(Icons.history), label: 'Historique'),
+          if (isAdmin) const NavigationDestination(icon: Icon(Icons.badge), label: 'Procuration'),
+          const NavigationDestination(icon: Icon(Icons.notifications), label: 'Alertes'),
         ],
       ),
     );

@@ -143,7 +143,17 @@ class BleService {
         if (enseignantId != null) 'enseignant_id': enseignantId,
         if (motif != null) 'motif': motif,
       };
-      final body = jsonEncode({'type': type, 'teacher_token': teacherToken, 'payload': payload});
+      // La borne a son propre NTP (voir processScan() côté firmware), mais ça
+      // suppose un modem déjà connecté — sinon elle refuse le scan le temps de
+      // se synchroniser. En attendant un DS3231 (RTC matérielle, jamais
+      // dépendante du réseau), on fournit l'heure du téléphone : le firmware
+      // la préfère déjà à son NTP quand elle est présente dans le paquet.
+      final body = jsonEncode({
+        'type': type,
+        'teacher_token': teacherToken,
+        'payload': payload,
+        'captured_at': DateTime.now().toUtc().toIso8601String(),
+      });
       await scanChar.write(utf8.encode(body), withoutResponse: false);
 
       final responseBytes = await responseFuture;

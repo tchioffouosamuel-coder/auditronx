@@ -7,6 +7,7 @@ use App\Models\Enseignant;
 use App\Models\Presence;
 use App\Models\QrPoint;
 use App\Models\TeacherNotification;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -47,8 +48,14 @@ class AttendanceRecorder
         ], $photoBase64);
     }
 
+    /**
+     * $acteur est le plus souvent un enseignant à rôle restreint, mais peut
+     * aussi être un admin du backoffice (`User`, §admin-mobile) : seul son nom
+     * sert ici (message de notification), jamais son id — il n'est pas la
+     * cible du pointage.
+     */
     public function recordProxyScan(
-        Enseignant $acteur,
+        Enseignant|User $acteur,
         ?int $deviceId,
         Enseignant $cible,
         string $qrCode,
@@ -70,7 +77,8 @@ class AttendanceRecorder
         ], $photoBase64);
 
         // §4.1 : l'enseignant concerné est notifié qu'un tiers a scanné en son nom.
-        $message = "{$acteur->nom} a scanné votre présence en votre nom ({$motif}).";
+        $acteurNom = $acteur instanceof Enseignant ? $acteur->nom : $acteur->name;
+        $message = "{$acteurNom} a scanné votre présence en votre nom ({$motif}).";
 
         TeacherNotification::create([
             'enseignant_id' => $cible->id,

@@ -137,8 +137,8 @@ class DeviceController extends Controller
     public function index(Request $request)
     {
         $devices = Device::with('teacher')
-            ->when($request->query('device_type'), fn ($q, $v) => $q->where('device_type', $v))
-            ->when($request->query('revoked') !== null, fn ($q) => $request->boolean('revoked')
+            ->when($request->query('device_type'), fn($q, $v) => $q->where('device_type', $v))
+            ->when($request->query('revoked') !== null, fn($q) => $request->boolean('revoked')
                 ? $q->whereNotNull('revoked_at')
                 : $q->whereNull('revoked_at'))
             ->orderByDesc('activated_at')
@@ -159,7 +159,7 @@ class DeviceController extends Controller
         $otp = Otp::whereNull('used_at')
             ->where('expires_at', '>', now())
             ->get()
-            ->first(fn (Otp $candidate) => Hash::check($data['code'], $candidate->code_hash));
+            ->first(fn(Otp $candidate) => Hash::check($data['code'], $candidate->code_hash));
 
         if (! $otp) {
             throw ValidationException::withMessages([
@@ -298,9 +298,9 @@ class DeviceController extends Controller
         $device = $principal instanceof Device
             ? $principal
             : Device::where('teacher_id', $principal->id)
-                ->where('device_uuid', $principal->currentAccessToken()?->name)
-                ->whereNull('revoked_at')
-                ->first();
+            ->where('device_uuid', $principal->currentAccessToken()?->name)
+            ->whereNull('revoked_at')
+            ->first();
 
         abort_unless($device, 404, 'Device introuvable pour cette session.');
 

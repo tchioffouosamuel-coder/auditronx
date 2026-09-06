@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Device;
 use App\Models\Enseignant;
+use App\Models\User;
 use App\Services\AttendanceRecorder;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -77,7 +78,9 @@ class RelaySyncController extends Controller
         $localId = $packet['local_id'];
 
         try {
-            $acteur = $this->resolveTeacher($packet['teacher_token']);
+            $acteur = $packet['type'] === 'scan'
+                ? $this->resolveTeacher($packet['teacher_token'])
+                : $this->resolveProxyActor($packet['teacher_token']);
             $capturedAt = Carbon::parse($packet['captured_at']);
             $payload = $packet['payload'];
             $photoBase64 = $payload['photo_base64'] ?? null;
@@ -108,7 +111,7 @@ class RelaySyncController extends Controller
         }
     }
 
-    private function recordProxyPacket(Enseignant $acteur, array $payload, Carbon $capturedAt, Device $relay, ?string $photoBase64)
+    private function recordProxyPacket(Enseignant|User $acteur, array $payload, Carbon $capturedAt, Device $relay, ?string $photoBase64)
     {
         $cibleId = $payload['enseignant_id'] ?? null;
         $motif = $payload['motif'] ?? null;
@@ -133,15 +136,43 @@ class RelaySyncController extends Controller
         );
     }
 
-    /** Résout l'enseignant à partir du token Sanctum émis à son app lors de l'activation. */
+    /**
+     * Résout l'enseignant dont la présence doit être pointée pour un scan
+     * personnel : directement le tokenable si c'est un Enseignant, ou
+     * l'enseignant lié si c'est un admin backoffice (`User`, §admin-mobile) —
+     * un `User` sans lien n'a aucune présence où écrire, rejet définitif.
+     */
     private function resolveTeacher(string $plainTextToken): Enseignant
     {
         $accessToken = PersonalAccessToken::findToken($plainTextToken);
+        $tokenable = $accessToken?->tokenable;
 
-        if (! $accessToken || ! $accessToken->tokenable instanceof Enseignant) {
-            throw ValidationException::withMessages(['teacher_token' => ['Token enseignant invalide.']]);
+        if ($tokenable instanceof Enseignant) {
+            return $tokenable;
         }
 
-        return $accessToken->tokenable;
+        if ($tokenable instanceof User && $tokenable->enseignant) {
+            return $tokenable->enseignant;
+        }
+
+        throw ValidationException::withMessages(['teacher_token' => ['Token enseignant invalide.']]);
+    }
+
+    /**
+     * Résout l'acteur d'un scan par procuration : soit un enseignant à rôle
+     * restreint (`est_admin`), soit un admin du backoffice (`User`,
+     * §admin-mobile) — les deux peuvent scanner au nom d'un enseignant, seul
+     * le libellé de la notification en dépend (voir AttendanceRecorder).
+     */
+    private function resolveProxyActor(string $plainTextToken): Enseignant|User
+    {
+        $accessToken = PersonalAccessToken::findToken($plainTextToken);
+        $tokenable = $accessToken?->tokenable;
+
+        if (! $tokenable instanceof Enseignant && ! $tokenable instanceof User) {
+            throw ValidationException::withMessages(['teacher_token' => ['Token invalide.']]);
+        }
+
+        return $tokenable;
     }
 }

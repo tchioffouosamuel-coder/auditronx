@@ -12,7 +12,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['name', 'email', 'password', 'accreditation_id', 'fcm_token'])]
+#[Fillable(['name', 'email', 'password', 'accreditation_id', 'enseignant_id', 'fcm_token'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -22,6 +22,12 @@ class User extends Authenticatable
     public function accreditation(): BelongsTo
     {
         return $this->belongsTo(Accreditation::class);
+    }
+
+    /** Fiche enseignant liée (§admin-mobile) — seul moyen pour ce compte de pointer sa propre présence. */
+    public function enseignant(): BelongsTo
+    {
+        return $this->belongsTo(Enseignant::class);
     }
 
     /**
