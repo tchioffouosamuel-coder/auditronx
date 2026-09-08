@@ -23,3 +23,20 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 # framework=arduino ; c'est ici un symbole Kconfig sous ce mode hybride
 # espidf+arduino-esp32.
 CONFIG_ARDUINO_LOOP_STACK_SIZE=16384
+
+# --- Bluetooth / NimBLE (serveur BLE local, transport téléphone<->borne) ---
+# Requis pour que h2zero/NimBLE-Arduino compile ET lie correctement sous ce
+# mode hybride espidf+arduino-esp32 : sans CONFIG_BT_ENABLED / 
+# CONFIG_BT_CONTROLLER_ENABLED, le header est trouvé mais l'édition de liens
+# échoue avec des symboles NimBLE manquants (ble_gap_*, ble_hs_*, etc.).
+CONFIG_BT_ENABLED=y
+CONFIG_BT_CONTROLLER_ENABLED=y
+CONFIG_BT_CONTROLLER_ENABLED_DEFAULT=y
+
+# Sélectionne la stack NimBLE plutôt que Bluedroid (défaut d'arduino-esp32
+# selon les versions) — les deux ne peuvent pas coexister. Nécessaire car on
+# utilise NimBLE-Arduino et non le BLE bluedroid natif d'Arduino-ESP32
+# (empreinte RAM/flash bien plus légère, importante ici avec caméra+SD_MMC+
+# WiFi(STA)+ESP-WHO déjà actifs simultanément).
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_BLUEDROID_ENABLED=n
