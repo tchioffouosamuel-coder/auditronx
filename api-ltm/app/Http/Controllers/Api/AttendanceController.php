@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Traits\AccessibleEnseignants;
 use App\Models\Device;
 use App\Models\Enseignant;
-use App\Models\Presence;
 use App\Services\AttendanceRecorder;
 use Illuminate\Http\Request;
 
@@ -80,6 +79,8 @@ class AttendanceController extends Controller
         $data = $request->validate([
             'enseignant_id' => ['required', 'exists:enseignants,id'],
             'score_confiance' => ['required', 'numeric', 'min:0', 'max:1'],
+            // Photo capturée par la borne au moment du match, preuve anti-fraude best-effort (§hardware).
+            'photo_base64' => ['sometimes', 'nullable', 'string'],
         ]);
 
         $device = $request->user();
@@ -88,24 +89,15 @@ class AttendanceController extends Controller
             abort(403, 'Authentification poste de reconnaissance faciale requise.');
         }
 
-        // Le scan facial n'a pas de QR/BSSID à valider : le kiosk fait lui-même office de point d'accès.
-        $presence = Presence::firstOrNew([
-            'enseignant_id' => $data['enseignant_id'],
-            'date' => now()->toDateString(),
-        ]);
+        $enseignant = Enseignant::findOrFail($data['enseignant_id']);
 
-        if (! $presence->exists || $presence->heure_arrivee === null) {
-            $presence->heure_arrivee = now();
-        } else {
-            $presence->heure_depart = now();
-        }
-
-        $presence->fill([
-            'source' => 'reconnaissance_faciale',
-            'device_id' => $device->id,
-            'reason' => "score_confiance={$data['score_confiance']}",
-        ]);
-        $presence->save();
+        $presence = $this->recorder->recordFacialScan(
+            $enseignant,
+            $device->id,
+            (float) $data['score_confiance'],
+            now(),
+            $data['photo_base64'] ?? null,
+        );
 
         return response()->json($presence, 201);
     }

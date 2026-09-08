@@ -3,5 +3,14 @@
 .pioenvs/
 .piolibdeps/
 
+# ESP-IDF (reconnaissance faciale embarquée, framework=espidf — voir
+# hardware/README.md) : composants managés téléchargés par idf_component.yml
+# et config générée à partir de sdkconfig.defaults — pas de raison de les
+# committer (dependencies.lock, lui, EST versionné : il fixe les versions
+# résolues pour un build reproductible).
+esp32_borne/managed_components/
+esp32_borne/sdkconfig.esp32_borne
+esp32_borne/build/
+
 # Éditeurs/IDE
 .vscode/

@@ -87,3 +87,40 @@ inline constexpr size_t SYNC_BODY_JSON_CAPACITY = SYNC_BATCH_SIZE * PACKET_JSON_
 inline constexpr uint32_t SYNC_INTERVAL_MS = 15000;
 
 inline constexpr char NTP_SERVER[] = "pool.ntp.org";
+
+// ---- Reconnaissance faciale embarquée (ESP-WHO) — pointage 100% facial en
+// principal, BLE/QR (ci-dessus) en secours si le visage n'est pas reconnu.
+// Voir hardware/README.md § "Reconnaissance faciale embarquée".
+
+// GPIO du buzzer piezo (bip de confirmation) — À CÂBLER/AJUSTER selon la
+// carte, aucun GPIO libre documenté par défaut (même disclaimer que les pins
+// caméra ci-dessus).
+#define BUZZER_GPIO 21
+
+// Score de similarité minimal (cosine, [0,1]) pour considérer un visage
+// reconnu. Point de départ, PAS calibré : à ajuster sur le matériel réel
+// (éclairage, angle/distance caméra) — voir hardware/README.md.
+inline constexpr float RECOGNITION_THRESHOLD = 0.72f;
+
+// Anti-doublon : un même enseignant reconnu deux fois dans cette fenêtre ne
+// déclenche qu'un seul pointage (bip silencieux ensuite, le premier a déjà
+// été mis en file).
+inline constexpr uint32_t RECOGNITION_DEBOUNCE_MS = 5 * 60 * 1000;
+
+// Cadence de capture de la boucle de reconnaissance continue.
+inline constexpr uint32_t RECOGNITION_LOOP_INTERVAL_MS = 250;
+
+// Cadence de synchro du manifest (photos à enrôler + embeddings partagés).
+inline constexpr uint32_t FACE_MANIFEST_SYNC_INTERVAL_MS = 60 * 1000;
+
+inline constexpr char API_KIOSK_MANIFEST_PATH[] = "/api/kiosks/manifest";
+inline constexpr char API_VISAGES_ENROLL_PATH[] = "/api/visages/enroll";
+
+// Token Sanctum du device kiosk_facial, obtenu une fois via
+// POST /api/devices/provision-kiosk (voir hardware/README.md), puis codé en
+// dur ici — même principe que RELAY_API_TOKEN ci-dessus.
+inline constexpr char KIOSK_API_TOKEN[] = "";
+
+// Fichier SD où le cache local des visages enrôlés (id, nom, embedding) est
+// persisté — survit à un reboot sans réseau (voir face_engine.h).
+inline constexpr char FACE_CACHE_FILE[] = "/faces.jsonl";

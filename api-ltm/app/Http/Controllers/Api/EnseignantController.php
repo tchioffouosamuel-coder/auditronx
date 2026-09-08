@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Traits\AccessibleEnseignants;
 use App\Models\Enseignant;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 /** Gestion du personnel (§4.2 — équivalent JSON de PersonnelController). */
 class EnseignantController extends Controller
@@ -75,6 +76,34 @@ class EnseignantController extends Controller
         }
 
         $enseignant->update($data);
+
+        return response()->json($enseignant);
+    }
+
+    /**
+     * POST /api/personnel/{enseignant}/photo — charge/remplace la photo de
+     * référence pour l'enrôlement facial (§5). Réutilise le disque
+     * `public_direct` (pas de symlink en prod), déjà utilisé pour les photos
+     * de preuve de pointage (voir AttendanceRecorder::storePhoto).
+     */
+    public function uploadPhoto(Request $request, Enseignant $enseignant)
+    {
+        abort_unless($this->peutAccederA($request->user(), $enseignant), 403);
+
+        $data = $request->validate([
+            'photo' => ['required', 'image', 'max:5120'],
+        ]);
+
+        if ($enseignant->photo_path) {
+            Storage::disk('public_direct')->delete($enseignant->photo_path);
+        }
+
+        $path = $data['photo']->store('teacher-photos', 'public_direct');
+
+        $enseignant->update([
+            'photo_path' => $path,
+            'photo_updated_at' => now(),
+        ]);
 
         return response()->json($enseignant);
     }

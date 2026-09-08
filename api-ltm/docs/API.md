@@ -47,7 +47,7 @@ Horodatage toujours généré côté serveur. Chaque scan crée ou complète la 
 |---|---|---|---|---|
 | POST | `/attendance/scan` | Enseignant (device mobile) | `{ qr_code, bssid }` | `201 Presence` |
 | POST | `/attendance/admin-proxy` | Enseignant (device mobile, rôle restreint) | `{ enseignant_id, qr_code, bssid, motif }` | `201 Presence` |
-| POST | `/attendance/facial-scan` | Device (kiosk_facial) | `{ enseignant_id, score_confiance }` | `201 Presence` |
+| POST | `/attendance/facial-scan` | Device (kiosk_facial) | `{ enseignant_id, score_confiance, photo_base64? }` | `201 Presence` |
 
 Codes d'erreur spécifiques :
 - `422` sur `bssid` : borne WiFi non reconnue (validation serveur uniquement, jamais
@@ -55,15 +55,33 @@ Codes d'erreur spécifiques :
 - `404` sur `qr_code` : point QR inconnu.
 - `403` : device kiosk révoqué ou de mauvais type sur `/attendance/facial-scan`.
 
+`/relay/sync` (voir plus bas) accepte aussi un paquet de type `facial_scan` rejouant
+cette même logique — c'est le chemin normal pour une borne kiosque hors-ligne.
+
 ## Reconnaissance faciale (§5, §6.4)
+
+Le poste de reconnaissance est aujourd'hui une borne **ESP32-S3 + caméra OV5640 +
+ESP-WHO**, embarquant elle-même la détection/reconnaissance (le contrat API,
+initialement pensé pour un kiosque Raspberry Pi, reste identique : seul un embedding
+déjà calculé transite, jamais une image brute).
 
 | Méthode | Route | Auth | Payload | Réponse |
 |---|---|---|---|---|
 | POST | `/visages/enroll` | oui | `{ enseignant_id, device_id?, embedding: number[] }` | `201 VisageEmbedding` (sans le champ embedding) |
 | DELETE | `/visages/{enseignant}` | oui | — | `200` — révoque l'embedding actif (droit de suppression, §7) |
+| POST | `/personnel/{enseignant}/photo` | oui | multipart `{ photo }` | `200 Enseignant` (avec `photo_url`) — photo de référence chargée depuis la plateforme web, à enrôler côté borne |
+| GET | `/kiosks/manifest?since=` | Device (kiosk_facial) | — | `200 { server_time, enseignants: [{id, nom, photo_url, photo_updated_at}], embeddings: [{enseignant_id, embedding, enrolled_at}] }` |
+
+Si `device_id` est omis sur `/visages/enroll` et que l'appelant est lui-même un
+`Device` (borne kiosque), il est déduit automatiquement du token authentifié — une
+borne ne peut pas s'attribuer l'enrôlement au nom d'un autre device.
 
 L'embedding est chiffré au repos (cast Eloquent `encrypted`). Aucune image brute
-n'est jamais transmise à l'API.
+n'est jamais transmise à l'API sur `/visages/enroll` — uniquement sur
+`/personnel/{enseignant}/photo` (photo de référence admin, distincte de l'embedding
+calculé ensuite par la borne). `/kiosks/manifest` permet à toute borne kiosque de
+récupérer à la fois les photos en attente d'enrôlement local et les embeddings déjà
+calculés par d'autres bornes (référentiel partagé, pas de recalcul redondant).
 
 ## Cahier de texte & fiche de progression (§4.2, §4.3, §6.3)
 

@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\EmploiDuTempsController;
 use App\Http\Controllers\Api\EnseignantController;
 use App\Http\Controllers\Api\FerieController;
 use App\Http\Controllers\Api\FicheProgressionController;
+use App\Http\Controllers\Api\KioskManifestController;
 use App\Http\Controllers\Api\MyPresenceController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OtpController;
@@ -66,6 +67,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/visages/enroll', [VisageController::class, 'enroll']);
     Route::delete('/visages/{enseignant}', [VisageController::class, 'revoke']);
 
+    // Synchro borne facial (§5, ESP32-S3 + ESP-WHO) : photos à enrôler + embeddings partagés.
+    Route::get('/kiosks/manifest', [KioskManifestController::class, 'index']);
+
     Route::get('/cahier-texte/{enseignant}', [CahierTexteController::class, 'index']);
     Route::post('/cahier-texte', [CahierTexteController::class, 'store']);
 
@@ -76,6 +80,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Gestion (§4.2 / §4.3) — équivalent JSON des routes web de gestion existantes
     Route::apiResource('personnel', EnseignantController::class)
         ->parameters(['personnel' => 'enseignant']);
+    Route::post('/personnel/{enseignant}/photo', [EnseignantController::class, 'uploadPhoto']);
     Route::apiResource('classes', ClasseController::class)
         ->parameters(['classes' => 'classe']);
     Route::apiResource('disciplines', DisciplineController::class);

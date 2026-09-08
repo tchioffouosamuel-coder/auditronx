@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Device;
 use App\Models\VisageEmbedding;
 use Illuminate\Http\Request;
 
@@ -21,6 +22,12 @@ class VisageController extends Controller
             'embedding' => ['required', 'array'],
         ]);
 
+        // Si l'appelant est lui-même un device (borne kiosque), on ignore le
+        // device_id du body et on utilise celui authentifié : une borne ne
+        // doit pas pouvoir attribuer l'enrôlement à un autre device.
+        $principal = $request->user();
+        $deviceId = $principal instanceof Device ? $principal->id : ($data['device_id'] ?? null);
+
         // Un seul embedding actif par enseignant : on révoque le précédent avant d'enrôler.
         VisageEmbedding::where('enseignant_id', $data['enseignant_id'])
             ->whereNull('revoked_at')
@@ -28,7 +35,7 @@ class VisageController extends Controller
 
         $visage = VisageEmbedding::create([
             'enseignant_id' => $data['enseignant_id'],
-            'device_id' => $data['device_id'] ?? null,
+            'device_id' => $deviceId,
             'embedding' => $data['embedding'],
             'enrolled_at' => now(),
         ]);

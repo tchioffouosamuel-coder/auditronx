@@ -1,0 +1,21 @@
+# Composants IDF managés (téléchargés par `pio run`/`idf.py` depuis le
+# Component Registry Espressif) — voir hardware/README.md §
+# "Reconnaissance faciale embarquée (ESP-WHO)".
+#
+# `arduino-esp32` : conserve les API Arduino (WiFi.h, HTTPClient.h, SD_MMC.h,
+# setup()/loop()) au sein d'un projet ESP-IDF.
+#
+# `human_face_detect` + `human_face_recognition` : successeurs actuels
+# d'ESP-WHO dans le Component Registry (le nom `espressif/esp-who` n'existe
+# plus tel quel — vérifié en interrogeant
+# https://components.espressif.com/api/components?q=face). Détection +
+# reconnaissance (modèle MFN), basées sur `esp-dl` (tirée automatiquement en
+# dépendance transitive), exploitent le PSRAM octal déjà configuré dans
+# platformio.ini.
+dependencies:
+  espressif/arduino-esp32: "*"
+  espressif/human_face_detect: "*"
+  espressif/human_face_recognition: "*"
+  # `esp_camera.h` (driver OV5640, §hardware) — pas inclus automatiquement par
+  # `arduino-esp32` sous ce mode hybride, doit être déclaré explicitement.
+  espressif/esp32-camera: "*"

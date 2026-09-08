@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import ResourceTable from '../components/ResourceTable'
 import SpreadsheetActions from '../components/SpreadsheetActions'
+import TeacherPhotoCell from '../components/TeacherPhotoCell'
 
 export default function PersonnelPage() {
   const [refreshKey, setRefreshKey] = useState(0)
@@ -26,6 +27,14 @@ export default function PersonnelPage() {
           { key: 'est_admin', label: 'Accès direct à l’app sans OTP (admin)', type: 'checkbox' },
         ]}
         columns={[
+          {
+            key: 'photo',
+            label: 'Photo',
+            sortable: false,
+            render: (row) => (
+              <TeacherPhotoCell enseignant={row} onUploaded={() => setRefreshKey((k) => k + 1)} />
+            ),
+          },
           { key: 'nom', label: 'Nom' },
           { key: 'matricule', label: 'Matricule' },
           { key: 'email', label: 'Email' },

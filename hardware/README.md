@@ -83,6 +83,11 @@ valeur différente à enregistrer dans le backoffice (voir « Mise en service »
   [`RelaySyncController`](../api-ltm/app/Http/Controllers/Api/RelaySyncController.php).
   Réponse : `{"results":[{"local_id","status":"ok"|"rejected"|"retry","message"?}]}`.
 
+Depuis le pivot reconnaissance faciale (voir plus bas), `/api/relay/sync` accepte
+aussi `type: "facial_scan"` — payload `{enseignant_id, score_confiance}`, pas de
+`teacher_token`/`qr_code`/`bssid` (le kiosk lui-même fait office de point d'accès).
+Ce paquet est accepté aussi bien pour un device `relay_gateway` que `kiosk_facial`.
+
 Seule chose facultative : le `device_type` s'appelle encore
 `relay_gateway` et le endpoint `provision-relay` — ces noms datent de
 l'architecture à deux modules mais restent corrects fonctionnellement
@@ -164,6 +169,70 @@ mobile n'utilise plus ce chemin.
 hardware/
   esp32_borne/   # firmware unique (BLE + WiFi STA + caméra + file persistante + sync API)
 ```
+
+## Reconnaissance faciale embarquée (ESP-WHO) — pointage 100% facial en principal
+
+Depuis ce pivot, la borne reconnaît elle-même les visages (ESP-WHO, embarqué sur
+l'ESP32-S3 — pas de service cloud) : elle scanne en continu, bipe et pointe
+automatiquement dès qu'un enseignant enrôlé est reconnu. **Le flux BLE/QR ci-dessus
+reste actif en parallèle, en secours** si la reconnaissance faciale échoue (nouvelle
+coiffure, lumière, masque, visage non enrôlé...) — rien n'est retiré côté firmware ni
+côté app mobile.
+
+```
+[Admin, plateforme web] --upload photo--> [API] <--GET manifest-- [Borne ESP32-S3+ESP-WHO]
+                                             ^                            |
+                                             |--POST embedding calculé---|
+                                             |                            |
+                                    [Boucle de reconnaissance continue, caméra]
+                                             |
+                                    visage reconnu -> bip + pointage (file SD -> /relay/sync)
+```
+
+### Principe
+
+1. **Enrôlement** : l'admin charge la photo de référence d'un enseignant sur la
+   plateforme web (`POST /api/personnel/{enseignant}/photo`). La borne récupère
+   périodiquement la liste des photos nouvelles/modifiées via
+   `GET /api/kiosks/manifest`, télécharge chaque photo, calcule l'embedding
+   localement (ESP-WHO) et le transmet à `POST /api/visages/enroll` — l'image brute
+   n'est jamais stockée côté API, seul l'embedding chiffré l'est. Le même manifest
+   renvoie aussi les embeddings déjà enrôlés par d'autres bornes, pour un
+   référentiel partagé sans recalcul redondant.
+2. **Reconnaissance** : une tâche dédiée capture une frame en continu (~200-300 ms),
+   détecte un visage, calcule son embedding et le compare au cache local. Au-dessus
+   du seuil de similarité (`RECOGNITION_THRESHOLD`, config.h — **à calibrer sur le
+   matériel réel**), et hors période d'anti-doublon (`RECOGNITION_DEBOUNCE_MS`), la
+   borne bipe (`BUZZER_GPIO` — pin à câbler/choisir selon la carte, comme les pins
+   caméra) et écrit un paquet `type: "facial_scan"` dans la même file SD que le flux
+   BLE/QR, poussé ensuite par le même moteur de synchro (`POST /api/relay/sync`).
+
+### Provisionnement
+
+`POST /api/devices/provision-kiosk` (admin, `auth:sanctum`) — crée le `Device`
+(`device_type = kiosk_facial`) et renvoie son token Sanctum, à coller dans
+`config.h` (`KIOSK_API_TOKEN`), sur le même principe que `RELAY_API_TOKEN`.
+
+### Build (composants IDF, pas de lib Arduino classique)
+
+Le détecteur/extracteur de features embarqué cible ESP-IDF, pas le framework Arduino
+seul — successeurs actuels d'« ESP-WHO » dans le Component Registry Espressif :
+`espressif/human_face_detect` (détection, modèles MSR+MNP ou ESPDet) et
+`espressif/human_face_recognition` (extraction du vecteur de features, modèle MFN/MBF,
+classe `HumanFaceFeat`). `platformio.ini` passe donc à `framework = espidf`, avec
+`espressif/arduino-esp32` intégré comme composant IDF managé pour conserver `WiFi.h`,
+`HTTPClient.h`, `SD_MMC.h`, `ArduinoJson` inchangés (`setup()`/`loop()` restent
+utilisables). Voir `src/idf_component.yml` (déclaration des composants) et
+`src/face_engine.cpp` (détection + extraction du vecteur d'embedding, comparaison
+cosine contre le cache local — pas `HumanFaceRecognizer`, qui gère sa propre base sur
+flash/SD : notre comparaison se fait contre le cache synchronisé avec l'API, voir
+`src/face_cache.cpp`).
+
+> **Calibration** : `RECOGNITION_THRESHOLD` (similarité cosine, config.h) doit être
+> ajusté sur le matériel réel (éclairage, angle de caméra, distance) — la valeur par
+> défaut est un point de départ, pas une valeur validée en conditions réelles. Le
+> premier `pio run` télécharge aussi les poids des modèles (plusieurs Mo) : prévoir
+> une connexion internet correcte au premier build.
 
 ## Ce qui a changé (WiFi local → BLE)
 

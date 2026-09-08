@@ -1,0 +1,25 @@
+# Requis par le composant IDF managé arduino-esp32 (voir hardware/README.md §
+# "Reconnaissance faciale embarquée") : sans ce réglage, la configure CMake
+# échoue avec "esp32-arduino requires CONFIG_FREERTOS_HZ=1000 (currently 100)".
+CONFIG_FREERTOS_HZ=1000
+
+# Module 8 Mo (voir platformio.ini board_upload.flash_size) — sous
+# framework=espidf, ce réglage ne se déduit PAS automatiquement de
+# platformio.ini comme sous framework=arduino ; sans lui, le build échoue
+# avec "Flash memory size mismatch detected. Expected 8MB, found 2MB!".
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+
+# Table de partitions custom (voir partitions.csv) : le binaire (WiFi+BLE+
+# SD_MMC+caméra+esp-dl/ESP-WHO) dépasse largement la table par défaut d'IDF.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# Pile de la tâche loop() : la poignée de main TLS de mbedTLS (syncWithApi(),
+# HTTPS vers l'API) combinée aux buffers JSON locaux dépasse la pile par
+# défaut (8 Ko) — provoquait un débordement de pile ("Guru Meditation Error:
+# Double exception", crash en boucle ~15s après boot, pile décodée via `pio
+# device monitor --filter esp32_exception_decoder` jusqu'à ecp_drbg_seed/
+# stack_check.c). Anciennement une build_flag `-D...` (platformio.ini) sous
+# framework=arduino ; c'est ici un symbole Kconfig sous ce mode hybride
+# espidf+arduino-esp32.
+CONFIG_ARDUINO_LOOP_STACK_SIZE=16384
