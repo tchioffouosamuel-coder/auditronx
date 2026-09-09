@@ -28,7 +28,10 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
-#include <NimBLEDevice.h>
+
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
 #include <algorithm>
 
 #include "config.h"
@@ -39,10 +42,24 @@ static WebServer server(80);
 static uint32_t g_local_id_counter = 0;
 static bool g_time_ready = false;
 static bool g_camera_ready = false;
+static volatile bool g_qrScanInProgress = false;
+static volatile bool g_hw201Armed = true;
+
+static bool hw201IsHigh()
+{
+    return digitalRead(HW201_GPIO) == HIGH;
+}
+
+static bool shouldRunRecognition()
+{
+    return hw201IsHigh() && !g_qrScanInProgress;
+}
 
 /** Horodatage ISO8601 (UTC) à partir de l'heure NTP propre de la borne, ou chaîne vide si pas encore synchronisée. */
-static String currentIsoTimestamp() {
-    if (!g_time_ready) return "";
+static String currentIsoTimestamp()
+{
+    if (!g_time_ready)
+        return "";
     time_t now;
     time(&now);
     struct tm tmVal;
@@ -54,19 +71,25 @@ static String currentIsoTimestamp() {
 
 // Déclarée ici (utilisée par processScan() pour notifier avant la capture
 // photo, voir plus bas) ; assignée dans setupBle().
-static NimBLECharacteristic *g_bleResultChar = nullptr;
+static BLECharacteristic *g_bleResultChar = nullptr;
 
-static void makeLocalId(char *out, size_t outLen) {
-    snprintf(out, outLen, "borne-%lu-%lu", (unsigned long) millis(), (unsigned long) (++g_local_id_counter));
+static void makeLocalId(char *out, size_t outLen)
+{
+    snprintf(out, outLen, "borne-%lu-%lu", (unsigned long)millis(), (unsigned long)(++g_local_id_counter));
 }
 
 /** RAII pour un sémaphore FreeRTOS — évite d'oublier un xSemaphoreGive() sur un retour anticipé. */
-struct MutexGuard {
-    explicit MutexGuard(SemaphoreHandle_t sem) : _sem(sem) {
-        if (_sem) xSemaphoreTake(_sem, portMAX_DELAY);
+struct MutexGuard
+{
+    explicit MutexGuard(SemaphoreHandle_t sem) : _sem(sem)
+    {
+        if (_sem)
+            xSemaphoreTake(_sem, portMAX_DELAY);
     }
-    ~MutexGuard() {
-        if (_sem) xSemaphoreGive(_sem);
+    ~MutexGuard()
+    {
+        if (_sem)
+            xSemaphoreGive(_sem);
     }
     SemaphoreHandle_t _sem;
 };
@@ -75,7 +98,8 @@ struct MutexGuard {
 // Caméra OV5640
 // ---------------------------------------------------------------------------
 
-static bool initCamera() {
+static bool initCamera()
+{
     camera_config_t config{};
     config.ledc_channel = LEDC_CHANNEL_0;
     config.ledc_timer = LEDC_TIMER_0;
@@ -91,23 +115,25 @@ static bool initCamera() {
     config.pin_pclk = CAMERA_PCLK_GPIO;
     config.pin_vsync = CAMERA_VSYNC_GPIO;
     config.pin_href = CAMERA_HREF_GPIO;
-    config.pin_sscb_sda = CAMERA_SIOD_GPIO;
-    config.pin_sscb_scl = CAMERA_SIOC_GPIO;
+    config.pin_sccb_sda = CAMERA_SIOD_GPIO;
+    config.pin_sccb_scl = CAMERA_SIOC_GPIO;
     config.pin_pwdn = CAMERA_PWDN_GPIO;
     config.pin_reset = CAMERA_RESET_GPIO;
     config.xclk_freq_hz = CAMERA_XCLK_FREQ_HZ;
     config.pixel_format = PIXFORMAT_JPEG;
+    // La PSRAM porte le framebuffer caméra afin de conserver la RAM interne
+    // disponible pour le décodage RGB888 et les modèles de reconnaissance.
     config.frame_size = CAMERA_FRAME_SIZE;
     config.jpeg_quality = CAMERA_JPEG_QUALITY;
-    // 2 frame buffers en PSRAM : le second permet de capturer pendant que le
-    // précédent est encore en cours d'envoi/encodage, sans quoi la borne
-    // servirait souvent une image périmée (celle d'un scan précédent).
-    config.fb_count = psramFound() ? 2 : 1;
-    config.fb_location = psramFound() ? CAMERA_FB_IN_PSRAM : CAMERA_FB_IN_DRAM;
-    config.grab_mode = CAMERA_GRAB_LATEST;
+    config.fb_count = 1;
+    config.fb_location = CAMERA_FB_IN_PSRAM;
+    // Un seul buffer et capture à la demande : aucun écrasement pendant le
+    // décodage d'une frame déclenchée par HW201.
+    config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
 
     esp_err_t err = esp_camera_init(&config);
-    if (err != ESP_OK) {
+    if (err != ESP_OK)
+    {
         Serial.printf("[cam] échec init caméra (0x%x)\n", err);
         return false;
     }
@@ -121,14 +147,16 @@ static bool initCamera() {
 static SemaphoreHandle_t g_cameraMutex = nullptr;
 
 /** Encode une frame déjà grabbée en base64 (ne la libère PAS — à la charge de l'appelant). */
-static String encodeFbToBase64(camera_fb_t *fb) {
+static String encodeFbToBase64(camera_fb_t *fb)
+{
     size_t encodedLen = 0;
     mbedtls_base64_encode(nullptr, 0, &encodedLen, fb->buf, fb->len);
 
     std::vector<unsigned char> buf(encodedLen);
     size_t written = 0;
     int rc = mbedtls_base64_encode(buf.data(), buf.size(), &written, fb->buf, fb->len);
-    if (rc != 0) {
+    if (rc != 0)
+    {
         Serial.println("[cam] échec encodage base64");
         return "";
     }
@@ -136,12 +164,15 @@ static String encodeFbToBase64(camera_fb_t *fb) {
 }
 
 /** Capture une photo et la renvoie encodée en base64 ; chaîne vide si la caméra est indisponible/échoue. */
-static String capturePhotoBase64() {
-    if (!g_camera_ready) return "";
+static String capturePhotoBase64()
+{
+    if (!g_camera_ready)
+        return "";
 
     MutexGuard guard(g_cameraMutex);
     camera_fb_t *fb = esp_camera_fb_get();
-    if (!fb) {
+    if (!fb)
+    {
         Serial.println("[cam] échec capture");
         return "";
     }
@@ -160,25 +191,32 @@ static String capturePhotoBase64() {
 // loop()/webserver), qui touche le même fichier sur la carte SD.
 static SemaphoreHandle_t g_sdMutex = nullptr;
 
-static size_t queueLength() {
+static size_t queueLength()
+{
     MutexGuard guard(g_sdMutex);
-    if (!SD_MMC.exists(QUEUE_FILE)) return 0;
+    if (!SD_MMC.exists(QUEUE_FILE))
+        return 0;
     File f = SD_MMC.open(QUEUE_FILE, "r");
-    if (!f) return 0;
+    if (!f)
+        return 0;
     size_t n = 0;
-    while (f.available()) {
+    while (f.available())
+    {
         String line = f.readStringUntil('\n');
         line.trim();
-        if (line.length() > 0) n++;
+        if (line.length() > 0)
+            n++;
     }
     f.close();
     return n;
 }
 
-static void appendToQueue(const String &json) {
+static void appendToQueue(const String &json)
+{
     MutexGuard guard(g_sdMutex);
     File f = SD_MMC.open(QUEUE_FILE, "a");
-    if (!f) {
+    if (!f)
+    {
         Serial.println("[queue] échec ouverture carte SD en écriture");
         return;
     }
@@ -186,25 +224,32 @@ static void appendToQueue(const String &json) {
     f.close();
 }
 
-struct QueuedPacket {
+struct QueuedPacket
+{
     String local_id;
     String raw_json;
 };
 
-static bool readQueueBatch(std::vector<QueuedPacket> &out) {
+static bool readQueueBatch(std::vector<QueuedPacket> &out)
+{
     MutexGuard guard(g_sdMutex);
-    if (!SD_MMC.exists(QUEUE_FILE)) return true;
+    if (!SD_MMC.exists(QUEUE_FILE))
+        return true;
 
     File f = SD_MMC.open(QUEUE_FILE, "r");
-    if (!f) return false;
+    if (!f)
+        return false;
 
-    while (f.available() && out.size() < SYNC_BATCH_SIZE) {
+    while (f.available() && out.size() < SYNC_BATCH_SIZE)
+    {
         String line = f.readStringUntil('\n');
         line.trim();
-        if (line.length() == 0) continue;
+        if (line.length() == 0)
+            continue;
 
         DynamicJsonDocument doc(PACKET_JSON_CAPACITY);
-        if (deserializeJson(doc, line) != DeserializationError::Ok) continue;
+        if (deserializeJson(doc, line) != DeserializationError::Ok)
+            continue;
 
         QueuedPacket p;
         p.local_id = doc["local_id"].as<String>();
@@ -216,23 +261,30 @@ static bool readQueueBatch(std::vector<QueuedPacket> &out) {
 }
 
 /** Réécrit la file sans les local_id passés en paramètre (terminaux : ok ou rejected). */
-static void removeFromQueue(const std::vector<String> &idsToRemove) {
-    if (idsToRemove.empty()) return;
+static void removeFromQueue(const std::vector<String> &idsToRemove)
+{
+    if (idsToRemove.empty())
+        return;
     MutexGuard guard(g_sdMutex);
-    if (!SD_MMC.exists(QUEUE_FILE)) return;
+    if (!SD_MMC.exists(QUEUE_FILE))
+        return;
 
     File in = SD_MMC.open(QUEUE_FILE, "r");
-    if (!in) return;
+    if (!in)
+        return;
 
     String kept;
-    while (in.available()) {
+    while (in.available())
+    {
         String line = in.readStringUntil('\n');
         String trimmed = line;
         trimmed.trim();
-        if (trimmed.length() == 0) continue;
+        if (trimmed.length() == 0)
+            continue;
 
         DynamicJsonDocument doc(PACKET_JSON_CAPACITY);
-        if (deserializeJson(doc, trimmed) != DeserializationError::Ok) {
+        if (deserializeJson(doc, trimmed) != DeserializationError::Ok)
+        {
             kept += trimmed;
             kept += '\n';
             continue;
@@ -240,10 +292,16 @@ static void removeFromQueue(const std::vector<String> &idsToRemove) {
 
         String id = doc["local_id"].as<String>();
         bool remove = false;
-        for (const auto &rid : idsToRemove) {
-            if (rid == id) { remove = true; break; }
+        for (const auto &rid : idsToRemove)
+        {
+            if (rid == id)
+            {
+                remove = true;
+                break;
+            }
         }
-        if (!remove) {
+        if (!remove)
+        {
             kept += trimmed;
             kept += '\n';
         }
@@ -251,7 +309,8 @@ static void removeFromQueue(const std::vector<String> &idsToRemove) {
     in.close();
 
     File out = SD_MMC.open(QUEUE_FILE, "w");
-    if (!out) return;
+    if (!out)
+        return;
     out.print(kept);
     out.close();
 }
@@ -261,25 +320,31 @@ static void removeFromQueue(const std::vector<String> &idsToRemove) {
  * processScan(), qui répond au téléphone avant de capturer. No-op silencieux
  * si le paquet a déjà été synchronisé/retiré entre-temps.
  */
-static void attachPhotoToQueue(const String &localId, const String &photoBase64) {
+static void attachPhotoToQueue(const String &localId, const String &photoBase64)
+{
     MutexGuard guard(g_sdMutex);
-    if (!SD_MMC.exists(QUEUE_FILE)) return;
+    if (!SD_MMC.exists(QUEUE_FILE))
+        return;
 
     File in = SD_MMC.open(QUEUE_FILE, "r");
-    if (!in) return;
+    if (!in)
+        return;
 
     String rebuilt;
     bool found = false;
-    while (in.available()) {
+    while (in.available())
+    {
         String line = in.readStringUntil('\n');
         String trimmed = line;
         trimmed.trim();
-        if (trimmed.length() == 0) continue;
+        if (trimmed.length() == 0)
+            continue;
 
-        if (!found) {
+        if (!found)
+        {
             DynamicJsonDocument doc(PACKET_JSON_CAPACITY);
-            if (deserializeJson(doc, trimmed) == DeserializationError::Ok
-                && doc["local_id"].as<String>() == localId) {
+            if (deserializeJson(doc, trimmed) == DeserializationError::Ok && doc["local_id"].as<String>() == localId)
+            {
                 doc["payload"]["photo_base64"] = photoBase64;
                 String updated;
                 serializeJson(doc, updated);
@@ -294,10 +359,12 @@ static void attachPhotoToQueue(const String &localId, const String &photoBase64)
     }
     in.close();
 
-    if (!found) return;
+    if (!found)
+        return;
 
     File out = SD_MMC.open(QUEUE_FILE, "w");
-    if (!out) return;
+    if (!out)
+        return;
     out.print(rebuilt);
     out.close();
 }
@@ -306,17 +373,22 @@ static void attachPhotoToQueue(const String &localId, const String &photoBase64)
 // Moteur de pull périodique vers l'API
 // ---------------------------------------------------------------------------
 
-static void syncWithApi() {
-    if (WiFi.status() != WL_CONNECTED) return;
+static void syncWithApi()
+{
+    if (WiFi.status() != WL_CONNECTED)
+        return;
 
     std::vector<QueuedPacket> batch;
-    if (!readQueueBatch(batch) || batch.empty()) return;
+    if (!readQueueBatch(batch) || batch.empty())
+        return;
 
     DynamicJsonDocument body(SYNC_BODY_JSON_CAPACITY);
     JsonArray packets = body.createNestedArray("packets");
-    for (const auto &p : batch) {
+    for (const auto &p : batch)
+    {
         DynamicJsonDocument item(PACKET_JSON_CAPACITY);
-        if (deserializeJson(item, p.raw_json) != DeserializationError::Ok) continue;
+        if (deserializeJson(item, p.raw_json) != DeserializationError::Ok)
+            continue;
         packets.add(item.as<JsonObject>());
     }
 
@@ -331,7 +403,8 @@ static void syncWithApi() {
     http.setTimeout(20000); // paquets plus lourds avec la photo : marge sur le timeout
 
     int status = http.POST(payload);
-    if (status != 200) {
+    if (status != 200)
+    {
         Serial.printf("[sync] échec HTTP %d, on retentera au prochain cycle\n", status);
         http.end();
         return; // rien n'est retiré de la file : nouvelle tentative plus tard
@@ -341,24 +414,27 @@ static void syncWithApi() {
     http.end();
 
     StaticJsonDocument<4096> resp;
-    if (deserializeJson(resp, respBody) != DeserializationError::Ok) {
+    if (deserializeJson(resp, respBody) != DeserializationError::Ok)
+    {
         Serial.println("[sync] réponse API illisible, on retentera au prochain cycle");
         return;
     }
 
     std::vector<String> toRemove;
-    for (JsonObject result : resp["results"].as<JsonArray>()) {
+    for (JsonObject result : resp["results"].as<JsonArray>())
+    {
         const char *status_ = result["status"] | "";
         const char *localId = result["local_id"] | "";
         // "ok" (accepté) et "rejected" (invalide, inutile de réessayer) sont
         // terminaux : on purge. "retry" reste en file pour le prochain cycle.
-        if (strcmp(status_, "ok") == 0 || strcmp(status_, "rejected") == 0) {
+        if (strcmp(status_, "ok") == 0 || strcmp(status_, "rejected") == 0)
+        {
             toRemove.push_back(String(localId));
         }
     }
 
     removeFromQueue(toRemove);
-    Serial.printf("[sync] %u paquet(s) envoyés, %u confirmé(s)/rejeté(s)\n", (unsigned) batch.size(), (unsigned) toRemove.size());
+    Serial.printf("[sync] %u paquet(s) envoyés, %u confirmé(s)/rejeté(s)\n", (unsigned)batch.size(), (unsigned)toRemove.size());
 }
 
 /**
@@ -368,10 +444,13 @@ static void syncWithApi() {
  * débordement de pile ("Guru Meditation Error: Double exception" pendant
  * ecp_drbg_seed, ~15s après le boot, à chaque premier cycle de synchro).
  */
-static void syncTask(void *) {
-    for (;;) {
+static void syncTask(void *)
+{
+    for (;;)
+    {
         vTaskDelay(pdMS_TO_TICKS(SYNC_INTERVAL_MS));
-        if (WiFi.status() == WL_CONNECTED) syncWithApi();
+        if (WiFi.status() == WL_CONNECTED)
+            syncWithApi();
     }
 }
 
@@ -388,24 +467,31 @@ static std::vector<EnrolledFace> g_faceCache;
 // enseignant. Petite liste linéaire : le nombre d'enseignants enrôlés reste
 // modeste (quelques dizaines à centaines), pas besoin d'une structure plus
 // élaborée.
-struct LastCheckin {
+struct LastCheckin
+{
     uint32_t enseignant_id;
     uint32_t at_millis;
 };
 static std::vector<LastCheckin> g_lastCheckins;
 
-static bool recentlyCheckedIn(uint32_t enseignantId) {
-    for (const auto &c : g_lastCheckins) {
-        if (c.enseignant_id == enseignantId) {
+static bool recentlyCheckedIn(uint32_t enseignantId)
+{
+    for (const auto &c : g_lastCheckins)
+    {
+        if (c.enseignant_id == enseignantId)
+        {
             return (millis() - c.at_millis) < RECOGNITION_DEBOUNCE_MS;
         }
     }
     return false;
 }
 
-static void markCheckedIn(uint32_t enseignantId) {
-    for (auto &c : g_lastCheckins) {
-        if (c.enseignant_id == enseignantId) {
+static void markCheckedIn(uint32_t enseignantId)
+{
+    for (auto &c : g_lastCheckins)
+    {
+        if (c.enseignant_id == enseignantId)
+        {
             c.at_millis = millis();
             return;
         }
@@ -413,26 +499,31 @@ static void markCheckedIn(uint32_t enseignantId) {
     g_lastCheckins.push_back({enseignantId, millis()});
 }
 
-static void initBuzzer() {
+static void initBuzzer()
+{
     pinMode(BUZZER_GPIO, OUTPUT);
     digitalWrite(BUZZER_GPIO, LOW);
 }
 
-static void beep(uint32_t durationMs = 150) {
+static void beep(uint32_t durationMs = 150)
+{
     digitalWrite(BUZZER_GPIO, HIGH);
     vTaskDelay(pdMS_TO_TICKS(durationMs));
     digitalWrite(BUZZER_GPIO, LOW);
 }
 
 /** Met en file un paquet `facial_scan` — même file/moteur de synchro que le flux BLE/QR (voir appendToQueue/syncWithApi). */
-static void enqueueFacialScan(uint32_t enseignantId, float score, const String &photoBase64) {
-    if (queueLength() >= MAX_QUEUE_SIZE) {
+static void enqueueFacialScan(uint32_t enseignantId, float score, const String &photoBase64)
+{
+    if (queueLength() >= MAX_QUEUE_SIZE)
+    {
         Serial.println("[face] file locale saturée, pointage facial abandonné");
         return;
     }
 
     String capturedAt = currentIsoTimestamp();
-    if (capturedAt.length() == 0) return; // pas encore synchronisé en heure
+    if (capturedAt.length() == 0)
+        return; // pas encore synchronisé en heure
 
     char localId[40];
     makeLocalId(localId, sizeof(localId));
@@ -444,7 +535,8 @@ static void enqueueFacialScan(uint32_t enseignantId, float score, const String &
     JsonObject payload = out.createNestedObject("payload");
     payload["enseignant_id"] = enseignantId;
     payload["score_confiance"] = score;
-    if (photoBase64.length() > 0) payload["photo_base64"] = photoBase64;
+    if (photoBase64.length() > 0)
+        payload["photo_base64"] = photoBase64;
 
     String serialized;
     serializeJson(out, serialized);
@@ -452,20 +544,24 @@ static void enqueueFacialScan(uint32_t enseignantId, float score, const String &
 }
 
 /** Capture une frame, tente une reconnaissance, bipe + pointe si un enseignant enrôlé est identifié. */
-static void recognitionTick() {
-    if (!g_camera_ready) return;
+static void recognitionTick()
+{
+    if (!g_camera_ready || !shouldRunRecognition())
+        return;
 
     camera_fb_t *fb = nullptr;
     {
         MutexGuard guard(g_cameraMutex);
         fb = esp_camera_fb_get();
     }
-    if (!fb) return;
+    if (!fb)
+        return;
 
     FaceEmbedding probe;
     bool detected = faceEngineExtractEmbedding(fb, probe);
 
-    if (!detected) {
+    if (!detected)
+    {
         MutexGuard guard(g_cameraMutex);
         esp_camera_fb_return(fb);
         return;
@@ -480,13 +576,15 @@ static void recognitionTick() {
         // Copie l'entrée trouvée avant de relâcher le mutex : `match`
         // référence un élément de g_faceCache, pas sûr de rester valide après
         // un upsert concurrent côté syncFaceManifestTask.
-        if (match) {
+        if (match)
+        {
             matchCopy = *match;
             found = true;
         }
     }
 
-    if (found && !recentlyCheckedIn(matchCopy.enseignant_id)) {
+    if (found && !recentlyCheckedIn(matchCopy.enseignant_id))
+    {
         String photoBase64 = encodeFbToBase64(fb);
         {
             MutexGuard guard(g_cameraMutex);
@@ -495,7 +593,7 @@ static void recognitionTick() {
         beep();
         markCheckedIn(matchCopy.enseignant_id);
         enqueueFacialScan(matchCopy.enseignant_id, score, photoBase64);
-        Serial.printf("[face] reconnu enseignant_id=%u score=%.2f\n", (unsigned) matchCopy.enseignant_id, score);
+        Serial.printf("[face] reconnu enseignant_id=%u score=%.2f\n", (unsigned)matchCopy.enseignant_id, score);
         return;
     }
 
@@ -503,20 +601,57 @@ static void recognitionTick() {
     esp_camera_fb_return(fb);
 }
 
-static void recognitionTask(void *) {
-    for (;;) {
-        vTaskDelay(pdMS_TO_TICKS(RECOGNITION_LOOP_INTERVAL_MS));
-        recognitionTick();
+static void recognitionTask(void *)
+{
+    bool lastRawState = hw201IsHigh();
+    bool stableState = lastRawState;
+    uint32_t stateChangedAt = millis();
+
+    // Si HW201 est déjà haut au démarrage, il constitue un seul événement.
+    g_hw201Armed = true;
+
+    for (;;)
+    {
+        vTaskDelay(pdMS_TO_TICKS(HW201_POLL_INTERVAL_MS));
+        bool rawState = hw201IsHigh();
+        uint32_t now = millis();
+
+        if (rawState != lastRawState)
+        {
+            lastRawState = rawState;
+            stateChangedAt = now;
+        }
+
+        if (rawState != stableState && now - stateChangedAt >= HW201_DEBOUNCE_MS)
+        {
+            stableState = rawState;
+            if (!stableState)
+            {
+                // Seul un LOW stable réarme le prochain front montant.
+                g_hw201Armed = true;
+            }
+        }
+
+        if (stableState && g_hw201Armed && !g_qrScanInProgress)
+        {
+            // Consomme le front montant avant la capture : un niveau HIGH
+            // maintenu, ou des rebonds, ne relancent pas la reconnaissance.
+            g_hw201Armed = false;
+            Serial.println("[hw201] HIGH détecté, reconnaissance faciale déclenchée");
+            recognitionTick();
+        }
     }
 }
 
 /** Télécharge une photo (URL renvoyée par le manifest) dans un buffer PSRAM. */
-static bool downloadPhoto(const String &url, std::vector<uint8_t> &out) {
+static bool downloadPhoto(const String &url, std::vector<uint8_t> &out)
+{
     HTTPClient http;
     http.begin(url);
     http.setTimeout(10000);
     int status = http.GET();
-    if (status != 200) {
+    if (status != 200)
+    {
         Serial.printf("[face-sync] échec téléchargement photo HTTP %d\n", status);
         http.end();
         return false;
@@ -525,31 +660,40 @@ static bool downloadPhoto(const String &url, std::vector<uint8_t> &out) {
     WiFiClient *stream = http.getStreamPtr();
     out.resize(len > 0 ? len : 0);
     size_t got = 0;
-    while (http.connected() && (int) got < len) {
+    while (http.connected() && (int)got < len)
+    {
         size_t avail = stream->available();
-        if (avail == 0) { vTaskDelay(pdMS_TO_TICKS(10)); continue; }
-        size_t toRead = std::min(avail, (size_t) (len - got));
+        if (avail == 0)
+        {
+            vTaskDelay(pdMS_TO_TICKS(10));
+            continue;
+        }
+        size_t toRead = std::min(avail, (size_t)(len - got));
         got += stream->readBytes(out.data() + got, toRead);
     }
     http.end();
-    return got == (size_t) len && len > 0;
+    return got == (size_t)len && len > 0;
 }
 
 /** Enrôle un enseignant depuis sa photo de référence : embedding calculé localement, puis transmis à l'API. */
-static void enrollFromPhoto(uint32_t enseignantId, const String &nom, const String &photoUrl) {
+static void enrollFromPhoto(uint32_t enseignantId, const String &nom, const String &photoUrl)
+{
     std::vector<uint8_t> jpeg;
-    if (!downloadPhoto(photoUrl, jpeg)) return;
+    if (!downloadPhoto(photoUrl, jpeg))
+        return;
 
     FaceEmbedding embedding;
-    if (!faceEngineExtractEmbeddingFromJpeg(jpeg.data(), jpeg.size(), embedding)) {
-        Serial.printf("[face-sync] aucun visage détecté sur la photo de l'enseignant %u\n", (unsigned) enseignantId);
+    if (!faceEngineExtractEmbeddingFromJpeg(jpeg.data(), jpeg.size(), embedding))
+    {
+        Serial.printf("[face-sync] aucun visage détecté sur la photo de l'enseignant %u\n", (unsigned)enseignantId);
         return;
     }
 
     DynamicJsonDocument body(8192);
     body["enseignant_id"] = enseignantId;
     JsonArray emb = body.createNestedArray("embedding");
-    for (float v : embedding) emb.add(v);
+    for (float v : embedding)
+        emb.add(v);
     String payload;
     serializeJson(body, payload);
 
@@ -560,8 +704,9 @@ static void enrollFromPhoto(uint32_t enseignantId, const String &nom, const Stri
     int status = http.POST(payload);
     http.end();
 
-    if (status != 201) {
-        Serial.printf("[face-sync] échec enrôlement API HTTP %d (enseignant %u)\n", status, (unsigned) enseignantId);
+    if (status != 201)
+    {
+        Serial.printf("[face-sync] échec enrôlement API HTTP %d (enseignant %u)\n", status, (unsigned)enseignantId);
         return;
     }
 
@@ -574,19 +719,22 @@ static void enrollFromPhoto(uint32_t enseignantId, const String &nom, const Stri
         faceCacheUpsert(g_faceCache, face);
         faceCacheSave(g_faceCache);
     }
-    Serial.printf("[face-sync] enseignant %u enrôlé localement\n", (unsigned) enseignantId);
+    Serial.printf("[face-sync] enseignant %u enrôlé localement\n", (unsigned)enseignantId);
 }
 
 /** Récupère le manifest (photos à enrôler + embeddings déjà partagés par d'autres bornes) et met à jour le cache local. */
-static void syncFaceManifest() {
-    if (WiFi.status() != WL_CONNECTED) return;
+static void syncFaceManifest()
+{
+    if (WiFi.status() != WL_CONNECTED)
+        return;
 
     HTTPClient http;
     http.begin(String(API_BASE_URL) + API_KIOSK_MANIFEST_PATH);
     http.addHeader("Authorization", String("Bearer ") + KIOSK_API_TOKEN);
     http.setTimeout(15000);
     int status = http.GET();
-    if (status != 200) {
+    if (status != 200)
+    {
         Serial.printf("[face-sync] échec manifest HTTP %d\n", status);
         http.end();
         return;
@@ -595,29 +743,36 @@ static void syncFaceManifest() {
     http.end();
 
     DynamicJsonDocument doc(65536);
-    if (deserializeJson(doc, body) != DeserializationError::Ok) {
+    if (deserializeJson(doc, body) != DeserializationError::Ok)
+    {
         Serial.println("[face-sync] manifest illisible");
         return;
     }
 
-    for (JsonObject e : doc["enseignants"].as<JsonArray>()) {
+    for (JsonObject e : doc["enseignants"].as<JsonArray>())
+    {
         uint32_t id = e["id"] | 0;
         String nom = e["nom"] | "";
         String photoUrl = e["photo_url"] | "";
-        if (id == 0 || photoUrl.length() == 0) continue;
+        if (id == 0 || photoUrl.length() == 0)
+            continue;
         enrollFromPhoto(id, nom, photoUrl);
     }
 
-    for (JsonObject emb : doc["embeddings"].as<JsonArray>()) {
+    for (JsonObject emb : doc["embeddings"].as<JsonArray>())
+    {
         uint32_t id = emb["enseignant_id"] | 0;
-        if (id == 0) continue;
+        if (id == 0)
+            continue;
 
         EnrolledFace face;
         face.enseignant_id = id;
         JsonArray arr = emb["embedding"].as<JsonArray>();
         face.embedding.reserve(arr.size());
-        for (JsonVariant v : arr) face.embedding.push_back(v.as<float>());
-        if (face.embedding.empty()) continue;
+        for (JsonVariant v : arr)
+            face.embedding.push_back(v.as<float>());
+        if (face.embedding.empty())
+            continue;
 
         MutexGuard guard(g_faceCacheMutex);
         faceCacheUpsert(g_faceCache, face);
@@ -627,11 +782,13 @@ static void syncFaceManifest() {
         MutexGuard guard(g_faceCacheMutex);
         faceCacheSave(g_faceCache);
     }
-    Serial.printf("[face-sync] cache local : %u visage(s) enrôlé(s)\n", (unsigned) g_faceCache.size());
+    Serial.printf("[face-sync] cache local : %u visage(s) enrôlé(s)\n", (unsigned)g_faceCache.size());
 }
 
-static void syncFaceManifestTask(void *) {
-    for (;;) {
+static void syncFaceManifestTask(void *)
+{
+    for (;;)
+    {
         vTaskDelay(pdMS_TO_TICKS(FACE_MANIFEST_SYNC_INTERVAL_MS));
         syncFaceManifest();
     }
@@ -654,32 +811,48 @@ static void syncFaceManifestTask(void *) {
  * (payload.photo_base64), écrit sur flash, puis répond — l'envoi vers l'API
  * est différé au prochain cycle de `syncWithApi()`.
  */
-static String processScan(const String &rawJson) {
-    if (queueLength() >= MAX_QUEUE_SIZE) {
+static String processScan(const String &rawJson)
+{
+    g_qrScanInProgress = true;
+
+    if (queueLength() >= MAX_QUEUE_SIZE)
+    {
+        g_qrScanInProgress = false;
         return "{\"error\":\"file locale saturée, réessayez plus tard\"}";
     }
 
     DynamicJsonDocument in(4096);
-    if (deserializeJson(in, rawJson) != DeserializationError::Ok) {
+    if (deserializeJson(in, rawJson) != DeserializationError::Ok)
+    {
+        g_qrScanInProgress = false;
         return "{\"error\":\"JSON invalide\"}";
     }
 
     const char *type = in["type"] | "";
-    if (strcmp(type, "scan") != 0 && strcmp(type, "admin_proxy") != 0) {
+    if (strcmp(type, "scan") != 0 && strcmp(type, "admin_proxy") != 0)
+    {
+        g_qrScanInProgress = false;
         return "{\"error\":\"type invalide\"}";
     }
-    if (!in.containsKey("teacher_token") || !in.containsKey("payload")) {
+    if (!in.containsKey("teacher_token") || !in.containsKey("payload"))
+    {
+        g_qrScanInProgress = false;
         return "{\"error\":\"teacher_token et payload requis\"}";
     }
 
     String capturedAt;
-    if (in.containsKey("captured_at")) {
+    if (in.containsKey("captured_at"))
+    {
         capturedAt = in["captured_at"].as<String>();
-    } else {
+    }
+    else
+    {
         // Cet ESP32 a son propre accès au modem : il fait son propre NTP, pas
         // besoin de synchro horaire par un second module.
         capturedAt = currentIsoTimestamp();
-        if (capturedAt.length() == 0) {
+        if (capturedAt.length() == 0)
+        {
+            g_qrScanInProgress = false;
             return "{\"error\":\"borne non synchronisée en heure, réessayez dans un instant\"}";
         }
     }
@@ -692,8 +865,9 @@ static String processScan(const String &rawJson) {
     out["type"] = type;
     out["teacher_token"] = in["teacher_token"];
     out["payload"] = in["payload"];
-    if (!out["payload"].containsKey("bssid") || out["payload"]["bssid"].as<String>().length() == 0) {
-        out["payload"]["bssid"] = NimBLEDevice::getAddress().toString();
+    if (!out["payload"].containsKey("bssid") || out["payload"]["bssid"].as<String>().length() == 0)
+    {
+        out["payload"]["bssid"] = BLEDevice::getAddress().toString();
     }
     out["captured_at"] = capturedAt;
 
@@ -719,7 +893,8 @@ static String processScan(const String &rawJson) {
     // l'exposition caméra + l'encodage JPEG/base64 (plusieurs centaines de ms)
     // pour fermer son overlay de transmission — seule l'écriture SD ci-dessus,
     // déjà faite, conditionnait la durabilité du scan.
-    if (g_bleResultChar) {
+    if (g_bleResultChar)
+    {
         g_bleResultChar->setValue(respStr);
         g_bleResultChar->notify();
     }
@@ -731,11 +906,16 @@ static String processScan(const String &rawJson) {
     // entre-temps (fenêtre de course avec syncTask), le pointage reste valide,
     // simplement sans preuve photo pour ce scan.
     String photoBase64 = capturePhotoBase64();
-    if (photoBase64.length() == 0) {
+    if (photoBase64.length() == 0)
+    {
         Serial.println("[cam] photo indisponible pour ce scan, paquet envoyé sans preuve visuelle");
-    } else {
+    }
+    else
+    {
         attachPhotoToQueue(localId, photoBase64);
     }
+
+    g_qrScanInProgress = false;
 
     return respStr;
 }
@@ -746,7 +926,7 @@ static String processScan(const String &rawJson) {
 
 // processScan() écrit sur la carte SD et capture une photo : trop lent
 // pour tourner dans le callback GATT lui-même, qui s'exécute sur la tâche
-// hôte NimBLE. L'y bloquer perturbe le timing de la connexion BLE (le
+// hôte BLE. L'y bloquer perturbe le timing de la connexion BLE (le
 // contrôleur ne peut plus servir les événements de connexion à temps) et fait
 // tomber la liaison (LINK_SUPERVISION_TIMEOUT), avec une erreur GATT_ERROR
 // (133) côté téléphone sur l'écriture en cours — de façon systématique, pas
@@ -759,8 +939,10 @@ static SemaphoreHandle_t g_pendingScanMutex = nullptr;
 static String g_pendingScanJson;
 static volatile bool g_pendingScan = false;
 
-class ScanCharCallbacks : public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic *characteristic) override {
+class ScanCharCallbacks : public BLECharacteristicCallbacks
+{
+    void onWrite(BLECharacteristic *characteristic) override
+    {
         MutexGuard guard(g_pendingScanMutex);
         g_pendingScanJson = String(characteristic->getValue().c_str());
         g_pendingScan = true;
@@ -768,8 +950,10 @@ class ScanCharCallbacks : public NimBLECharacteristicCallbacks {
 };
 
 /** Appelé depuis loop() : traite la requête en attente (s'il y en a une) hors du callback GATT. */
-static void processPendingBleScan() {
-    if (!g_pendingScan) return;
+static void processPendingBleScan()
+{
+    if (!g_pendingScan)
+        return;
 
     String rawJson;
     {
@@ -778,85 +962,108 @@ static void processPendingBleScan() {
         g_pendingScan = false;
     }
 
+    g_qrScanInProgress = true;
+
     // processScan() a déjà notifié le résultat en BLE avant la capture photo
     // (voir plus haut) ; sa valeur de retour n'est utile qu'au débogage HTTP.
     processScan(rawJson);
+    g_qrScanInProgress = false;
 }
 
-static void setupBle() {
-    NimBLEDevice::init(BLE_DEVICE_NAME);
+static void setupBle()
+{
+    BLEDevice::init(BLE_DEVICE_NAME);
 
-    NimBLEServer *bleServer = NimBLEDevice::createServer();
-    NimBLEService *service = bleServer->createService(BLE_SERVICE_UUID);
+    BLEServer *bleServer = BLEDevice::createServer();
+    BLEService *service = bleServer->createService(BLE_SERVICE_UUID);
 
-    NimBLECharacteristic *scanChar = service->createCharacteristic(
-        BLE_CHAR_SCAN_UUID, NIMBLE_PROPERTY::WRITE);
+    BLECharacteristic *scanChar = service->createCharacteristic(
+        BLE_CHAR_SCAN_UUID, BLECharacteristic::PROPERTY_WRITE);
     scanChar->setCallbacks(new ScanCharCallbacks());
 
     g_bleResultChar = service->createCharacteristic(
-        BLE_CHAR_RESULT_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+        BLE_CHAR_RESULT_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
 
     service->start();
 
-    NimBLEAdvertising *advertising = NimBLEDevice::getAdvertising();
+    BLEAdvertising *advertising = BLEDevice::getAdvertising();
     advertising->addServiceUUID(BLE_SERVICE_UUID);
     advertising->start();
 
     Serial.print("[ble] serveur démarré, adresse=");
-    Serial.println(NimBLEDevice::getAddress().toString().c_str());
+    Serial.println(BLEDevice::getAddress().toString().c_str());
 }
 
 // ---------------------------------------------------------------------------
 // Serveur HTTP local — legacy/débogage uniquement (voir processScan ci-dessus)
 // ---------------------------------------------------------------------------
 
-static void handleScan() {
-    if (!server.hasArg("plain")) {
+static void handleScan()
+{
+    g_qrScanInProgress = true;
+    if (!server.hasArg("plain"))
+    {
         server.send(400, "application/json", "{\"error\":\"corps JSON manquant\"}");
+        g_qrScanInProgress = false;
         return;
     }
     String resp = processScan(server.arg("plain"));
     bool queued = resp.indexOf("\"queued\"") >= 0;
     server.send(queued ? 202 : 400, "application/json", resp);
+    g_qrScanInProgress = false;
 }
 
-static void handleNotFound() {
+static void handleNotFound()
+{
     server.send(404, "application/json", "{\"error\":\"not found\"}");
 }
 
 // ---------------------------------------------------------------------------
 
-static void connectWifiIfNeeded() {
-    if (WiFi.status() == WL_CONNECTED) return;
+static void connectWifiIfNeeded()
+{
+    if (WiFi.status() == WL_CONNECTED)
+        return;
 
     static uint32_t lastAttempt = 0;
-    if (millis() - lastAttempt < 10000) return;
+    if (millis() - lastAttempt < 10000)
+        return;
     lastAttempt = millis();
 
     Serial.println("[wifi] tentative de connexion au modem...");
     WiFi.begin(STA_SSID, STA_PASSWORD);
 }
 
-static void onWifiConnected() {
+static void onWifiConnected()
+{
     Serial.print("[wifi] connecté au modem, IP=");
     Serial.println(WiFi.localIP());
 
     configTime(0, 0, NTP_SERVER);
     struct tm timeinfo;
-    if (getLocalTime(&timeinfo, 5000)) {
+    if (getLocalTime(&timeinfo, 5000))
+    {
         g_time_ready = true;
         Serial.println("[time] NTP synchronisé");
     }
 }
 
-void setup() {
+void setup()
+{
     Serial.begin(115200);
+    Serial.printf("[mem] PSRAM détectée: %s\n", psramFound() ? "oui" : "non");
+    Serial.printf("[mem] PSRAM totale: %lu octets\n", (unsigned long)ESP.getPsramSize());
+    Serial.printf("[mem] PSRAM libre: %lu octets\n", (unsigned long)ESP.getFreePsram());
+    Serial.printf("[mem] heap interne libre: %lu octets\n", (unsigned long)ESP.getFreeHeap());
+
+    pinMode(HW201_GPIO, INPUT_PULLDOWN);
 
     SD_MMC.setPins(SD_MMC_CLK_GPIO, SD_MMC_CMD_GPIO, SD_MMC_D0_GPIO);
-    if (!SD_MMC.begin("/sdcard", true)) { // true = mode 1 bit (3 IOs)
+    if (!SD_MMC.begin("/sdcard", true))
+    { // true = mode 1 bit (3 IOs)
         Serial.println("[fs] échec montage carte SD");
     }
-    Serial.printf("[queue] %u paquet(s) en attente au démarrage\n", (unsigned) queueLength());
+    Serial.printf("[queue] %u paquet(s) en attente au démarrage\n", (unsigned)queueLength());
 
     g_camera_ready = initCamera();
     Serial.println(g_camera_ready ? "[cam] caméra initialisée" : "[cam] caméra indisponible — les scans continueront sans photo");
@@ -886,26 +1093,32 @@ void setup() {
     // Reconnaissance faciale embarquée (ESP-WHO) — voir hardware/README.md.
     // BLE/QR (ci-dessus) reste actif en parallèle comme secours.
     initBuzzer();
-    if (faceEngineInit()) {
+    if (faceEngineInit())
+    {
         faceCacheLoad(g_faceCache);
-        Serial.printf("[face] cache local chargé : %u visage(s)\n", (unsigned) g_faceCache.size());
+        Serial.printf("[face] cache local chargé : %u visage(s)\n", (unsigned)g_faceCache.size());
         xTaskCreatePinnedToCore(recognitionTask, "recognition_task", 8192, nullptr, 1, nullptr, 1);
         xTaskCreatePinnedToCore(syncFaceManifestTask, "face_sync_task", 16384, nullptr, 1, nullptr, 1);
-    } else {
+    }
+    else
+    {
         Serial.println("[face] moteur de reconnaissance indisponible — pointage facial désactivé, BLE/QR reste seul actif");
     }
 }
 
-void loop() {
+void loop()
+{
     server.handleClient();
     processPendingBleScan();
 
     static bool wasConnected = false;
     bool isConnected = WiFi.status() == WL_CONNECTED;
-    if (isConnected && !wasConnected) onWifiConnected();
+    if (isConnected && !wasConnected)
+        onWifiConnected();
     wasConnected = isConnected;
 
-    if (!isConnected) connectWifiIfNeeded();
+    if (!isConnected)
+        connectWifiIfNeeded();
 
     // La synchro périodique tourne dans sa propre tâche (syncTask, voir
     // setup()) — pile dédiée assez grande pour la poignée de main TLS.
@@ -918,11 +1131,22 @@ void loop() {
     // l'attraper même si la borne replante peu après le boot.
     static uint32_t lastBleAddrPrint = 0;
     static bool bleAddrPrintedOnce = false;
-    if (!bleAddrPrintedOnce || millis() - lastBleAddrPrint > 3000) {
+    if (!bleAddrPrintedOnce || millis() - lastBleAddrPrint > 3000)
+    {
         bleAddrPrintedOnce = true;
         lastBleAddrPrint = millis();
         Serial.print("[ble] adresse=");
-        Serial.println(NimBLEDevice::getAddress().toString().c_str());
+        Serial.println(BLEDevice::getAddress().toString().c_str());
         Serial.flush();
+    }
+}
+extern "C" void app_main()
+{
+    initArduino(); // initialise le runtime Arduino (HAL, millis(), Serial, etc.) au sein d'ESP-IDF
+    setup();
+    for (;;)
+    {
+        loop();
+        vTaskDelay(pdMS_TO_TICKS(1)); // laisse respirer le watchdog de tâche (actif par défaut sous IDF pur, contrairement au framework Arduino)
     }
 }

@@ -16,8 +16,8 @@ class EnseignantController extends Controller
     public function index(Request $request)
     {
         $query = $this->enseignantsAccessibles($request->user())
-            ->when($request->query('section'), fn ($q, $v) => $q->where('section', $v))
-            ->when($request->query('q'), fn ($q, $v) => $q->where(function ($q) use ($v) {
+            ->when($request->query('section'), fn($q, $v) => $q->where('section', $v))
+            ->when($request->query('q'), fn($q, $v) => $q->where(function ($q) use ($v) {
                 $q->where('nom', 'like', "%{$v}%")->orWhere('matricule', 'like', "%{$v}%");
             }));
 
@@ -60,12 +60,12 @@ class EnseignantController extends Controller
 
         $data = $request->validate([
             'nom' => ['sometimes', 'string', 'max:255'],
-            'matricule' => ['sometimes', 'string', 'max:50', 'unique:enseignants,matricule,'.$enseignant->id],
-            'email' => ['nullable', 'email', 'unique:enseignants,email,'.$enseignant->id],
+            'matricule' => ['sometimes', 'string', 'max:50', 'unique:enseignants,matricule,' . $enseignant->id],
+            'email' => ['nullable', 'email', 'unique:enseignants,email,' . $enseignant->id],
             'fonction' => ['nullable', 'string', 'max:255'],
             'section' => ['nullable', 'string', 'max:255'],
             'grade' => ['nullable', 'string', 'max:255'],
-            'tel' => ['nullable', 'string', 'max:50', 'unique:enseignants,tel,'.$enseignant->id],
+            'tel' => ['nullable', 'string', 'max:50', 'unique:enseignants,tel,' . $enseignant->id],
             'poste' => ['nullable', 'string', 'max:255'],
             'password' => ['nullable', 'string', 'min:6'],
             'est_admin' => ['sometimes', 'boolean'],
@@ -103,6 +103,22 @@ class EnseignantController extends Controller
         $enseignant->update([
             'photo_path' => $path,
             'photo_updated_at' => now(),
+        ]);
+
+        return response()->json($enseignant);
+    }
+
+    public function deletePhoto(Request $request, Enseignant $enseignant)
+    {
+        abort_unless($this->peutAccederA($request->user(), $enseignant), 403);
+
+        if ($enseignant->photo_path) {
+            Storage::disk('public_direct')->delete($enseignant->photo_path);
+        }
+
+        $enseignant->update([
+            'photo_path' => null,
+            'photo_updated_at' => null,
         ]);
 
         return response()->json($enseignant);

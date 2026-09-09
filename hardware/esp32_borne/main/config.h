@@ -22,11 +22,11 @@
 #define CAMERA_PCLK_GPIO 13
 #define CAMERA_XCLK_FREQ_HZ 20000000
 
-// QVGA (320x240) suffit pour une photo d'identification, et garde chaque
-// paquet raisonnable (JSON + base64 + file d'attente flash + bande passante
-// de synchro) malgré le capteur 5 Mpx de l'OV5640, capable de bien plus.
-#define CAMERA_FRAME_SIZE FRAMESIZE_QVGA
-#define CAMERA_JPEG_QUALITY 15 // 0 (meilleure qualité) à 63 (plus compressé)
+// QQVGA (160x120) est le point de départ stable pour l'ESP32-S3 + modèle
+// de détection faciale embarquée : il réduit fortement le coût mémoire du
+// décodage JPEG, sans sacrifier le nécessaire à la reconnaissance.
+#define CAMERA_FRAME_SIZE FRAMESIZE_QQVGA
+#define CAMERA_JPEG_QUALITY 20 // 0 (meilleure qualité) à 63 (plus compressé)
 
 // ---- Nom BLE annoncé, auquel le téléphone de l'enseignant se connecte ----
 // Le WiFi local (AP) a été remplacé par le BLE comme transport téléphone
@@ -37,7 +37,7 @@ inline constexpr char BLE_DEVICE_NAME[] = "AUDITRON-BORNE-01";
 // UUIDs du service/caractéristiques BLE — DOIVENT correspondre exactement à
 // ceux déclarés côté app mobile (mobile/lib/services/ble_service.dart).
 inline constexpr char BLE_SERVICE_UUID[] = "b3a1a100-2c33-4e6f-9a1e-5f6a2e6c2b01";
-inline constexpr char BLE_CHAR_SCAN_UUID[] = "b3a1a101-2c33-4e6f-9a1e-5f6a2e6c2b01"; // écriture : requête du téléphone
+inline constexpr char BLE_CHAR_SCAN_UUID[] = "b3a1a101-2c33-4e6f-9a1e-5f6a2e6c2b01";   // écriture : requête du téléphone
 inline constexpr char BLE_CHAR_RESULT_UUID[] = "b3a1a102-2c33-4e6f-9a1e-5f6a2e6c2b01"; // lecture/notify : réponse de la borne
 
 // ---- WiFi du modem/routeur qui fournit l'accès internet ----
@@ -97,6 +97,11 @@ inline constexpr char NTP_SERVER[] = "pool.ntp.org";
 // caméra ci-dessus).
 #define BUZZER_GPIO 21
 
+// GPIO du signal HW201 : HIGH = présence d'un individu à traiter.
+// La reconnaissance reste inactive tant que ce signal est bas ou qu'un scan
+// QR est déjà en cours.
+#define HW201_GPIO 14
+
 // Score de similarité minimal (cosine, [0,1]) pour considérer un visage
 // reconnu. Point de départ, PAS calibré : à ajuster sur le matériel réel
 // (éclairage, angle/distance caméra) — voir hardware/README.md.
@@ -107,8 +112,14 @@ inline constexpr float RECOGNITION_THRESHOLD = 0.72f;
 // été mis en file).
 inline constexpr uint32_t RECOGNITION_DEBOUNCE_MS = 5 * 60 * 1000;
 
-// Cadence de capture de la boucle de reconnaissance continue.
-inline constexpr uint32_t RECOGNITION_LOOP_INTERVAL_MS = 250;
+// Fréquence de surveillance du trigger HW201. La reconnaissance elle-même
+// reste déclenchée une seule fois par front montant.
+inline constexpr uint32_t HW201_POLL_INTERVAL_MS = 10;
+inline constexpr uint32_t HW201_DEBOUNCE_MS = 250;
+
+// Délai conservé pour les opérations faciales lentes et les autres usages
+// éventuels de la boucle de reconnaissance.
+inline constexpr uint32_t RECOGNITION_LOOP_INTERVAL_MS = 3000;
 
 // Cadence de synchro du manifest (photos à enrôler + embeddings partagés).
 inline constexpr uint32_t FACE_MANIFEST_SYNC_INTERVAL_MS = 60 * 1000;

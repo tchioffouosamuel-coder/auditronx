@@ -4,6 +4,6 @@
 # managé `arduino-esp32` déclaré dans idf_component.yml.
 idf_component_register(
     SRCS "main.cpp" "face_engine.cpp" "face_cache.cpp"
-    INCLUDE_DIRS "." "../include"
+    INCLUDE_DIRS "."
     REQUIRES arduino-esp32 human_face_detect human_face_recognition esp32-camera
 )

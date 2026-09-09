@@ -41,7 +41,7 @@ Route::post('/devices/request-activation', [DeviceController::class, 'requestAct
 Route::post('/devices/activate', [DeviceController::class, 'activate']);
 
 Route::middleware('auth:sanctum')->group(function () {
-    Route::get('/user', fn (Request $request) => $request->user());
+    Route::get('/user', fn(Request $request) => $request->user());
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/me/fcm-token', [AuthController::class, 'updateFcmToken']);
@@ -81,6 +81,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('personnel', EnseignantController::class)
         ->parameters(['personnel' => 'enseignant']);
     Route::post('/personnel/{enseignant}/photo', [EnseignantController::class, 'uploadPhoto']);
+    Route::delete('/personnel/{enseignant}/photo', [EnseignantController::class, 'deletePhoto']);
     Route::apiResource('classes', ClasseController::class)
         ->parameters(['classes' => 'classe']);
     Route::apiResource('disciplines', DisciplineController::class);

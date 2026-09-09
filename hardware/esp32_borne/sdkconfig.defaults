@@ -3,11 +3,24 @@
 # échoue avec "esp32-arduino requires CONFIG_FREERTOS_HZ=1000 (currently 100)".
 CONFIG_FREERTOS_HZ=1000
 
-# Module 8 Mo (voir platformio.ini board_upload.flash_size) — sous
+# Les headers ESP-IDF 6.0.1 utilisés par arduino-esp32 contiennent des
+# initialisations partielles valides mais signalées par GCC. Ne pas convertir
+# ces avertissements du framework en erreurs de compilation.
+CONFIG_COMPILER_WARNINGS_AS_ERRORS=n
+
+# Module 16 Mo (voir le profil board N16R8 dans platformio.ini) — sous
 # framework=espidf, ce réglage ne se déduit PAS automatiquement de
-# platformio.ini comme sous framework=arduino ; sans lui, le build échoue
-# avec "Flash memory size mismatch detected. Expected 8MB, found 2MB!".
-CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+# platformio.ini comme sous framework=arduino.
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+
+# ESP32-S3 N16R8 : active la PSRAM octale externe utilisée par la caméra et
+# les buffers de décodage ESP-DL.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_SUPPORT=y
+CONFIG_ESP32S3_SPIRAM_SUPPORT=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_TYPE_AUTO=y
+CONFIG_SPIRAM_USE_MEMMAP=y
 
 # Table de partitions custom (voir partitions.csv) : le binaire (WiFi+BLE+
 # SD_MMC+caméra+esp-dl/ESP-WHO) dépasse largement la table par défaut d'IDF.
@@ -24,19 +37,28 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 # espidf+arduino-esp32.
 CONFIG_ARDUINO_LOOP_STACK_SIZE=16384
 
+# NetworkClientSecure compiles the PSK TLS paths and requires the matching
+# mbedTLS key-exchange modes when warnings are treated as errors.
+CONFIG_MBEDTLS_PSK_MODES=y
+CONFIG_MBEDTLS_KEY_EXCHANGE_PSK=y
+
+# Load ESP-DL face models from the SD card to avoid PlatformIO's generated
+# .espdl.S path handling for flash-embedded model data.
+CONFIG_HUMAN_FACE_DETECT_MODEL_IN_FLASH_RODATA=n
+CONFIG_HUMAN_FACE_DETECT_MODEL_IN_SDCARD=y
+CONFIG_HUMAN_FACE_FEAT_MODEL_IN_FLASH_RODATA=n
+CONFIG_HUMAN_FACE_FEAT_MODEL_IN_SDCARD=y
+
 # --- Bluetooth / NimBLE (serveur BLE local, transport téléphone<->borne) ---
-# Requis pour que h2zero/NimBLE-Arduino compile ET lie correctement sous ce
-# mode hybride espidf+arduino-esp32 : sans CONFIG_BT_ENABLED / 
-# CONFIG_BT_CONTROLLER_ENABLED, le header est trouvé mais l'édition de liens
-# échoue avec des symboles NimBLE manquants (ble_gap_*, ble_hs_*, etc.).
+# Requis pour que le backend BLE NimBLE fourni par arduino-esp32 compile et
+# lie correctement sous ce mode hybride espidf+arduino-esp32.
 CONFIG_BT_ENABLED=y
 CONFIG_BT_CONTROLLER_ENABLED=y
 CONFIG_BT_CONTROLLER_ENABLED_DEFAULT=y
 
-# Sélectionne la stack NimBLE plutôt que Bluedroid (défaut d'arduino-esp32
-# selon les versions) — les deux ne peuvent pas coexister. Nécessaire car on
-# utilise NimBLE-Arduino et non le BLE bluedroid natif d'Arduino-ESP32
-# (empreinte RAM/flash bien plus légère, importante ici avec caméra+SD_MMC+
-# WiFi(STA)+ESP-WHO déjà actifs simultanément).
+CONFIG_BT_NIMBLE_USE_ESP_TIMER=n
+
+# Sélectionne la stack NimBLE plutôt que Bluedroid : les deux ne peuvent pas
+# coexister et NimBLE conserve une empreinte adaptée à cette application.
 CONFIG_BT_NIMBLE_ENABLED=y
 CONFIG_BT_BLUEDROID_ENABLED=n

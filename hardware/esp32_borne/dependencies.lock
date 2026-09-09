@@ -421,6 +421,6 @@ direct_dependencies:
 - espressif/esp32-camera
 - espressif/human_face_detect
 - espressif/human_face_recognition
-manifest_hash: de98da440b9ddb506718617b4eaa5f74c5c818f371eb32fdf3d4488a3ee49bc5
+manifest_hash: d40820c14aae8e4e422501ad4db7e39fa77c4ae6eb0e086474f363bd0d02e149
 target: esp32s3
 version: 2.0.0

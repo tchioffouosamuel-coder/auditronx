@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// Identité visuelle Auditron X — palette extraite du logo (vert circuit + or),
-/// partagée avec le backoffice React. Police Lato bundlée hors-ligne (§7 — pas
-/// de dépendance réseau pour le rendu de l'UI).
+/// partagée avec le backoffice React. Police Roboto utilisée par Material.
 class AuditronColors {
   static const brand900 = Color(0xFF00281A);
   static const brand800 = Color(0xFF003B27);
@@ -34,7 +33,7 @@ ThemeData buildAuditronTheme() {
 
   return ThemeData(
     useMaterial3: true,
-    fontFamily: 'Lato',
+    fontFamily: 'Roboto',
     colorScheme: colorScheme,
     scaffoldBackgroundColor: AuditronColors.ink50,
     appBarTheme: const AppBarTheme(
@@ -80,24 +79,46 @@ ThemeData buildAuditronTheme() {
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: Colors.white,
       indicatorColor: AuditronColors.brand100,
-      labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
-            fontSize: 12,
-            fontWeight: states.contains(WidgetState.selected) ? FontWeight.w700 : FontWeight.w500,
-            color: states.contains(WidgetState.selected) ? AuditronColors.brand800 : AuditronColors.ink500,
-          )),
-      iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
-            color: states.contains(WidgetState.selected) ? AuditronColors.brand800 : AuditronColors.ink500,
-          )),
+      labelTextStyle: WidgetStateProperty.resolveWith(
+        (states) => TextStyle(
+          fontSize: 12,
+          fontWeight: states.contains(WidgetState.selected)
+              ? FontWeight.w700
+              : FontWeight.w500,
+          color: states.contains(WidgetState.selected)
+              ? AuditronColors.brand800
+              : AuditronColors.ink500,
+        ),
+      ),
+      iconTheme: WidgetStateProperty.resolveWith(
+        (states) => IconThemeData(
+          color: states.contains(WidgetState.selected)
+              ? AuditronColors.brand800
+              : AuditronColors.ink500,
+        ),
+      ),
     ),
     chipTheme: ChipThemeData(
       backgroundColor: AuditronColors.gold100,
-      labelStyle: const TextStyle(color: AuditronColors.gold600, fontWeight: FontWeight.w600),
+      labelStyle: const TextStyle(
+        color: AuditronColors.gold600,
+        fontWeight: FontWeight.w600,
+      ),
       side: BorderSide.none,
     ),
     textTheme: const TextTheme(
-      headlineSmall: TextStyle(fontWeight: FontWeight.w900, color: AuditronColors.ink900),
-      titleLarge: TextStyle(fontWeight: FontWeight.w700, color: AuditronColors.ink900),
-      titleMedium: TextStyle(fontWeight: FontWeight.w700, color: AuditronColors.ink900),
+      headlineSmall: TextStyle(
+        fontWeight: FontWeight.w900,
+        color: AuditronColors.ink900,
+      ),
+      titleLarge: TextStyle(
+        fontWeight: FontWeight.w700,
+        color: AuditronColors.ink900,
+      ),
+      titleMedium: TextStyle(
+        fontWeight: FontWeight.w700,
+        color: AuditronColors.ink900,
+      ),
       bodyMedium: TextStyle(color: AuditronColors.ink700),
     ),
   );

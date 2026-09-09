@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import api from '../lib/api'
+import { useRef, useState } from "react";
+import api from "../lib/api";
 
 /**
  * Aperçu + upload de la photo de référence d'un enseignant (§5 — enrôlement
@@ -8,28 +8,47 @@ import api from '../lib/api'
  * `POST /api/personnel/{id}/photo`.
  */
 export default function TeacherPhotoCell({ enseignant, onUploaded }) {
-  const inputRef = useRef(null)
-  const [uploading, setUploading] = useState(false)
-  const [error, setError] = useState(null)
+  const inputRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
 
   async function handleChange(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    setUploading(true)
-    setError(null)
+    setBusy(true);
+    setError(null);
     try {
-      const formData = new FormData()
-      formData.append('photo', file)
-      const { data } = await api.post(`/personnel/${enseignant.id}/photo`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      onUploaded?.(data)
+      const formData = new FormData();
+      formData.append("photo", file);
+      const { data } = await api.post(
+        `/personnel/${enseignant.id}/photo`,
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        },
+      );
+      onUploaded?.(data);
     } catch {
-      setError('Échec du téléversement.')
+      setError("Échec du téléversement.");
     } finally {
-      setUploading(false)
-      if (inputRef.current) inputRef.current.value = ''
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  async function handleDelete() {
+    if (!window.confirm("Supprimer cette photo ?")) return;
+
+    setBusy(true);
+    setError(null);
+    try {
+      const { data } = await api.delete(`/personnel/${enseignant.id}/photo`);
+      onUploaded?.(data);
+    } catch {
+      setError("Échec de la suppression.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -49,11 +68,21 @@ export default function TeacherPhotoCell({ enseignant, onUploaded }) {
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
-        disabled={uploading}
+        disabled={busy}
         className="text-xs text-brand-700 hover:text-brand-800 disabled:opacity-40"
       >
-        {uploading ? 'Envoi…' : enseignant.photo_url ? 'Changer' : 'Ajouter'}
+        {busy ? "Envoi…" : enseignant.photo_url ? "Changer" : "Ajouter"}
       </button>
+      {enseignant.photo_url && (
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={busy}
+          className="text-xs text-red-600 hover:text-red-700 disabled:opacity-40"
+        >
+          Supprimer
+        </button>
+      )}
       <input
         ref={inputRef}
         type="file"
@@ -63,5 +92,5 @@ export default function TeacherPhotoCell({ enseignant, onUploaded }) {
       />
       {error && <span className="text-xs text-red-600">{error}</span>}
     </div>
-  )
+  );
 }

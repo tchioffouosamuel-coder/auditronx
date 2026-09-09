@@ -1,4 +1,4 @@
-# Table de partitions (8 Mo de flash) — voir hardware/README.md §
+# Table de partitions (16 Mo de flash) — voir hardware/README.md §
 # "Reconnaissance faciale embarquée". Une seule partition "factory", large
 # (4 Mo) : le binaire embarque désormais WiFi+BLE+SD_MMC+caméra+esp-dl (ESP-WHO)
 # et dépasse largement la table par défaut d'ESP-IDF (~1 Mo) — pas d'OTA

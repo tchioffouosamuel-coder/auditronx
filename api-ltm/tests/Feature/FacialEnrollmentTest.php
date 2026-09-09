@@ -56,6 +56,27 @@ class FacialEnrollmentTest extends TestCase
         $this->assertStringNotContainsString('/storage/', $enseignant->photo_url);
     }
 
+    public function test_suppression_de_la_photo_efface_le_fichier_et_les_metadonnees(): void
+    {
+        Storage::fake('public_direct', ['url' => rtrim(config('app.url'), '/')]);
+
+        $this->actingAsBackoffice();
+        $enseignant = Enseignant::factory()->create([
+            'photo_path' => 'teacher-photos/existing.jpg',
+            'photo_updated_at' => now(),
+        ]);
+        Storage::disk('public_direct')->put($enseignant->photo_path, 'photo');
+
+        $this->deleteJson("/api/personnel/{$enseignant->id}/photo")
+            ->assertOk()
+            ->assertJsonPath('photo_url', null);
+
+        $enseignant->refresh();
+        $this->assertNull($enseignant->photo_path);
+        $this->assertNull($enseignant->photo_updated_at);
+        Storage::disk('public_direct')->assertMissing('teacher-photos/existing.jpg');
+    }
+
     public function test_le_manifest_kiosque_liste_les_photos_a_enroler_et_les_embeddings_actifs(): void
     {
         Storage::fake('public_direct', ['url' => rtrim(config('app.url'), '/')]);
