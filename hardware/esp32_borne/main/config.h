@@ -115,7 +115,7 @@ inline constexpr uint32_t RECOGNITION_DEBOUNCE_MS = 5 * 60 * 1000;
 // Fréquence de surveillance du trigger HW201. La reconnaissance elle-même
 // reste déclenchée une seule fois par front montant.
 inline constexpr uint32_t HW201_POLL_INTERVAL_MS = 10;
-inline constexpr uint32_t HW201_DEBOUNCE_MS = 20;
+inline constexpr uint32_t HW201_DEBOUNCE_MS = 300;
 
 // Délai conservé pour les opérations faciales lentes et les autres usages
 // éventuels de la boucle de reconnaissance.

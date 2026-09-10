@@ -45,6 +45,7 @@ static bool g_time_ready = false;
 static bool g_camera_ready = false;
 static volatile bool g_qrScanInProgress = false;
 static volatile bool g_hw201Armed = true;
+static volatile bool g_recognitionInProgress = false;
 static SemaphoreHandle_t g_apiMutex = nullptr;
 
 static bool hw201IsHigh()
@@ -554,24 +555,36 @@ static void enqueueFacialScan(uint32_t enseignantId, float score, const String &
 /** Capture une frame, tente une reconnaissance, bipe + pointe si un enseignant enrôlé est identifié. */
 static void recognitionTick()
 {
-    if (!g_camera_ready || !shouldRunRecognition())
+    if (g_recognitionInProgress)
         return;
+    g_recognitionInProgress = true;
 
-    camera_fb_t *fb = nullptr;
+    if (!g_camera_ready || !shouldRunRecognition())
     {
-        MutexGuard guard(g_cameraMutex);
-        fb = esp_camera_fb_get();
-    }
-    if (!fb)
+        g_recognitionInProgress = false;
         return;
+    }
+
+    // Le driver caméra continue à remplir le buffer DMA. Copier rapidement la
+    // JPEG permet de le rendre immédiatement au driver avant l'inférence lente.
+    MutexGuard cameraGuard(g_cameraMutex);
+    camera_fb_t *fb = esp_camera_fb_get();
+    if (!fb)
+    {
+        g_recognitionInProgress = false;
+        return;
+    }
+
+    std::vector<uint8_t> jpeg(fb->len);
+    memcpy(jpeg.data(), fb->buf, fb->len);
+    esp_camera_fb_return(fb);
 
     FaceEmbedding probe;
-    bool detected = faceEngineExtractEmbedding(fb, probe);
+    bool detected = faceEngineExtractEmbeddingFromJpeg(jpeg.data(), jpeg.size(), probe);
 
     if (!detected)
     {
-        MutexGuard guard(g_cameraMutex);
-        esp_camera_fb_return(fb);
+        g_recognitionInProgress = false;
         return;
     }
 
@@ -593,19 +606,22 @@ static void recognitionTick()
 
     if (found && !recentlyCheckedIn(matchCopy.enseignant_id))
     {
-        String photoBase64 = encodeFbToBase64(fb);
+        String photoBase64;
+        if (!jpeg.empty())
         {
-            MutexGuard guard(g_cameraMutex);
-            esp_camera_fb_return(fb);
+            camera_fb_t photoFrame{};
+            photoFrame.buf = jpeg.data();
+            photoFrame.len = jpeg.size();
+            photoBase64 = encodeFbToBase64(&photoFrame);
         }
         markCheckedIn(matchCopy.enseignant_id);
         enqueueFacialScan(matchCopy.enseignant_id, score, photoBase64);
         Serial.printf("[face] reconnu enseignant_id=%u score=%.2f\n", (unsigned)matchCopy.enseignant_id, score);
+        g_recognitionInProgress = false;
         return;
     }
 
-    MutexGuard guard(g_cameraMutex);
-    esp_camera_fb_return(fb);
+    g_recognitionInProgress = false;
 }
 
 static void recognitionTask(void *)
