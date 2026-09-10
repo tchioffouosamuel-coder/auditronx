@@ -45,6 +45,7 @@ static bool g_time_ready = false;
 static bool g_camera_ready = false;
 static volatile bool g_qrScanInProgress = false;
 static volatile bool g_hw201Armed = true;
+static SemaphoreHandle_t g_apiMutex = nullptr;
 
 static bool hw201IsHigh()
 {
@@ -122,14 +123,10 @@ static bool initCamera()
     config.pin_reset = CAMERA_RESET_GPIO;
     config.xclk_freq_hz = CAMERA_XCLK_FREQ_HZ;
     config.pixel_format = PIXFORMAT_JPEG;
-    // La PSRAM porte le framebuffer caméra afin de conserver la RAM interne
-    // disponible pour le décodage RGB888 et les modèles de reconnaissance.
     config.frame_size = CAMERA_FRAME_SIZE;
     config.jpeg_quality = CAMERA_JPEG_QUALITY;
     config.fb_count = 1;
     config.fb_location = CAMERA_FB_IN_PSRAM;
-    // Un seul buffer et capture à la demande : aucun écrasement pendant le
-    // décodage d'une frame déclenchée par HW201.
     config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
 
     esp_err_t err = esp_camera_init(&config);
@@ -378,6 +375,8 @@ static void syncWithApi()
 {
     if (WiFi.status() != WL_CONNECTED)
         return;
+
+    MutexGuard apiGuard(g_apiMutex);
 
     std::vector<QueuedPacket> batch;
     if (!readQueueBatch(batch) || batch.empty())
@@ -655,14 +654,18 @@ static void recognitionTask(void *)
 /** Télécharge une photo (URL renvoyée par le manifest) dans un buffer PSRAM. */
 static bool downloadPhoto(const String &url, std::vector<uint8_t> &out)
 {
+    MutexGuard apiGuard(g_apiMutex);
     for (uint8_t attempt = 1; attempt <= 3; ++attempt)
     {
         WiFiClientSecure client;
         client.setInsecure();
+        client.setHandshakeTimeout(20);
         HTTPClient http;
-        http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+        http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
+        http.setReuse(false);
+        http.useHTTP10(true);
         http.begin(client, url);
-        http.setTimeout(10000);
+        http.setTimeout(20000);
         int status = http.GET();
         if (status != 200)
         {
@@ -725,6 +728,7 @@ static void enrollFromPhoto(uint32_t enseignantId, const String &nom, const Stri
     String payload;
     serializeJson(body, payload);
 
+    MutexGuard apiGuard(g_apiMutex);
     WiFiClientSecure client;
     client.setInsecure();
     HTTPClient http;
@@ -758,27 +762,31 @@ static void syncFaceManifest()
     if (WiFi.status() != WL_CONNECTED)
         return;
 
-    WiFiClientSecure client;
-    client.setInsecure();
-    client.setHandshakeTimeout(20);
-    HTTPClient http;
-    http.begin(client, String(API_BASE_URL) + API_KIOSK_MANIFEST_PATH);
-    http.addHeader("Authorization", String("Bearer ") + KIOSK_API_TOKEN);
-    http.setTimeout(15000);
-    int status = http.GET();
-    if (status != 200)
+    String body;
     {
-        Serial.printf("[face-sync] échec manifest HTTP %d (%s), url=%s, ip=%s, passerelle=%s\n",
-                      status,
-                      http.errorToString(status).c_str(),
-                      (String(API_BASE_URL) + API_KIOSK_MANIFEST_PATH).c_str(),
-                      WiFi.localIP().toString().c_str(),
-                      WiFi.gatewayIP().toString().c_str());
+        MutexGuard apiGuard(g_apiMutex);
+        WiFiClientSecure client;
+        client.setInsecure();
+        client.setHandshakeTimeout(20);
+        HTTPClient http;
+        http.begin(client, String(API_BASE_URL) + API_KIOSK_MANIFEST_PATH);
+        http.addHeader("Authorization", String("Bearer ") + KIOSK_API_TOKEN);
+        http.setTimeout(15000);
+        int status = http.GET();
+        if (status != 200)
+        {
+            Serial.printf("[face-sync] échec manifest HTTP %d (%s), url=%s, ip=%s, passerelle=%s\n",
+                          status,
+                          http.errorToString(status).c_str(),
+                          (String(API_BASE_URL) + API_KIOSK_MANIFEST_PATH).c_str(),
+                          WiFi.localIP().toString().c_str(),
+                          WiFi.gatewayIP().toString().c_str());
+            http.end();
+            return;
+        }
+        body = http.getString();
         http.end();
-        return;
     }
-    String body = http.getString();
-    http.end();
 
     DynamicJsonDocument doc(65536);
     DeserializationError manifestError = deserializeJson(doc, body);
@@ -1061,7 +1069,12 @@ static void handleNotFound()
 
 static void connectWifiIfNeeded()
 {
-    if (WiFi.status() == WL_CONNECTED)
+    wl_status_t status = WiFi.status();
+    // WL_IDLE_STATUS signifie qu'une tentative est encore en cours. Un
+    // nouvel appel à WiFi.begin() dans cet état provoque ESP_ERR_WIFI_STATE
+    // et interrompt l'authentification en cours.
+    if (status != WL_DISCONNECTED && status != WL_CONNECT_FAILED &&
+        status != WL_CONNECTION_LOST && status != WL_NO_SSID_AVAIL)
         return;
 
     static uint32_t lastAttempt = 0;
@@ -1122,6 +1135,7 @@ void setup()
     Serial.println("[http] serveur local démarré sur le port 80 (débogage)");
 
     g_sdMutex = xSemaphoreCreateMutex();
+    g_apiMutex = xSemaphoreCreateMutex();
     g_pendingScanMutex = xSemaphoreCreateMutex();
     g_cameraMutex = xSemaphoreCreateMutex();
     g_faceCacheMutex = xSemaphoreCreateMutex();

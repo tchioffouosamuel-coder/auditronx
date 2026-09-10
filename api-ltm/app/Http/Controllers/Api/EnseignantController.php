@@ -7,6 +7,7 @@ use App\Http\Controllers\Traits\AccessibleEnseignants;
 use App\Models\Enseignant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 /** Gestion du personnel (§4.2 — équivalent JSON de PersonnelController). */
 class EnseignantController extends Controller
@@ -98,7 +99,16 @@ class EnseignantController extends Controller
             Storage::disk('public_direct')->delete($enseignant->photo_path);
         }
 
-        $path = $data['photo']->store('teacher-photos', 'public_direct');
+        $source = imagecreatefromstring($data['photo']->get());
+        abort_unless($source !== false, 422, 'La photo ne peut pas être décodée.');
+
+        ob_start();
+        imagejpeg($source, null, 90);
+        $jpeg = ob_get_clean();
+        imagedestroy($source);
+
+        $path = 'teacher-photos/' . Str::uuid() . '.jpg';
+        Storage::disk('public_direct')->put($path, $jpeg);
 
         $enseignant->update([
             'photo_path' => $path,
