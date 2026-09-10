@@ -29,9 +29,9 @@ class KioskManifestController extends Controller
 
         $enseignants = Enseignant::query()
             ->whereNotNull('photo_path')
-            ->when($since, fn ($q, $v) => $q->where('photo_updated_at', '>', $v))
+            ->when($since, fn($q, $v) => $q->where('photo_updated_at', '>', $v))
             ->get(['id', 'nom', 'photo_path', 'photo_updated_at'])
-            ->map(fn (Enseignant $e) => [
+            ->map(fn(Enseignant $e) => [
                 'id' => $e->id,
                 'nom' => $e->nom,
                 // La borne peut joindre l'API, mais pas forcément l'hôte
@@ -44,9 +44,9 @@ class KioskManifestController extends Controller
 
         $embeddings = VisageEmbedding::query()
             ->whereNull('revoked_at')
-            ->when($since, fn ($q, $v) => $q->where('enrolled_at', '>', $v))
+            ->when($since, fn($q, $v) => $q->where('enrolled_at', '>', $v))
             ->get(['enseignant_id', 'embedding', 'enrolled_at'])
-            ->map(fn (VisageEmbedding $v) => [
+            ->map(fn(VisageEmbedding $v) => [
                 'enseignant_id' => $v->enseignant_id,
                 'embedding' => $v->embedding,
                 'enrolled_at' => $v->enrolled_at,
