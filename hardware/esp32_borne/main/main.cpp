@@ -398,6 +398,7 @@ static void syncWithApi()
 
     WiFiClientSecure client;
     client.setInsecure();
+    client.setHandshakeTimeout(20);
     HTTPClient http;
     String url = String(API_BASE_URL) + API_RELAY_SYNC_PATH;
     http.begin(client, url);
@@ -408,7 +409,12 @@ static void syncWithApi()
     int status = http.POST(payload);
     if (status != 200)
     {
-        Serial.printf("[sync] échec HTTP %d, on retentera au prochain cycle\n", status);
+        Serial.printf("[sync] échec HTTP %d (%s), url=%s, ip=%s, passerelle=%s\n",
+                      status,
+                      http.errorToString(status).c_str(),
+                      url.c_str(),
+                      WiFi.localIP().toString().c_str(),
+                      WiFi.gatewayIP().toString().c_str());
         http.end();
         return; // rien n'est retiré de la file : nouvelle tentative plus tard
     }
@@ -754,6 +760,7 @@ static void syncFaceManifest()
 
     WiFiClientSecure client;
     client.setInsecure();
+    client.setHandshakeTimeout(20);
     HTTPClient http;
     http.begin(client, String(API_BASE_URL) + API_KIOSK_MANIFEST_PATH);
     http.addHeader("Authorization", String("Bearer ") + KIOSK_API_TOKEN);
@@ -761,7 +768,12 @@ static void syncFaceManifest()
     int status = http.GET();
     if (status != 200)
     {
-        Serial.printf("[face-sync] échec manifest HTTP %d\n", status);
+        Serial.printf("[face-sync] échec manifest HTTP %d (%s), url=%s, ip=%s, passerelle=%s\n",
+                      status,
+                      http.errorToString(status).c_str(),
+                      (String(API_BASE_URL) + API_KIOSK_MANIFEST_PATH).c_str(),
+                      WiFi.localIP().toString().c_str(),
+                      WiFi.gatewayIP().toString().c_str());
         http.end();
         return;
     }

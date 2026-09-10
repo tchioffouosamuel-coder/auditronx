@@ -9,6 +9,8 @@ use App\Models\Classe;
 use App\Models\Discipline;
 use App\Models\EmploiDuTemps;
 use App\Models\Enseignant;
+use App\Models\Programme;
+use App\Models\ProgressionLecon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
@@ -28,8 +30,15 @@ class SpreadsheetController extends Controller
         return match ($entity) {
             'personnel' => [
                 'headings' => ['nom', 'matricule', 'email', 'fonction', 'section', 'grade', 'tel', 'poste'],
-                'export' => fn () => Enseignant::orderBy('nom')->get()->map(fn (Enseignant $e) => [
-                    $e->nom, $e->matricule, $e->email, $e->fonction, $e->section, $e->grade, $e->tel, $e->poste,
+                'export' => fn() => Enseignant::orderBy('nom')->get()->map(fn(Enseignant $e) => [
+                    $e->nom,
+                    $e->matricule,
+                    $e->email,
+                    $e->fonction,
+                    $e->section,
+                    $e->grade,
+                    $e->tel,
+                    $e->poste,
                 ])->all(),
                 'import' => function (array $row) {
                     $nom = trim((string) ($row['nom'] ?? ''));
@@ -56,8 +65,12 @@ class SpreadsheetController extends Controller
             ],
             'classes' => [
                 'headings' => ['nom', 'code', 'niveau', 'specialite', 'effectif'],
-                'export' => fn () => Classe::orderBy('nom')->get()->map(fn (Classe $c) => [
-                    $c->nom, $c->code, $c->niveau, $c->specialite, $c->effectif,
+                'export' => fn() => Classe::orderBy('nom')->get()->map(fn(Classe $c) => [
+                    $c->nom,
+                    $c->code,
+                    $c->niveau,
+                    $c->specialite,
+                    $c->effectif,
                 ])->all(),
                 'import' => function (array $row) {
                     $nom = trim((string) ($row['nom'] ?? ''));
@@ -81,8 +94,11 @@ class SpreadsheetController extends Controller
             ],
             'disciplines' => [
                 'headings' => ['nom', 'code', 'coefficient', 'departement'],
-                'export' => fn () => Discipline::orderBy('nom')->get()->map(fn (Discipline $d) => [
-                    $d->nom, $d->code, $d->coefficient, $d->departement,
+                'export' => fn() => Discipline::orderBy('nom')->get()->map(fn(Discipline $d) => [
+                    $d->nom,
+                    $d->code,
+                    $d->coefficient,
+                    $d->departement,
                 ])->all(),
                 'import' => function (array $row) {
                     $nom = trim((string) ($row['nom'] ?? ''));
@@ -105,10 +121,16 @@ class SpreadsheetController extends Controller
             ],
             'emplois' => [
                 'headings' => ['matricule_enseignant', 'code_classe', 'code_discipline', 'jour', 'heure_debut', 'heure_fin', 'salle', 'type_cours'],
-                'export' => fn () => EmploiDuTemps::with(['enseignant', 'classe', 'discipline'])->orderBy('jour')->get()
-                    ->map(fn (EmploiDuTemps $e) => [
-                        $e->enseignant?->matricule, $e->classe?->code, $e->discipline?->code,
-                        $e->jour, $e->heure_debut, $e->heure_fin, $e->salle, $e->type_cours,
+                'export' => fn() => EmploiDuTemps::with(['enseignant', 'classe', 'discipline'])->orderBy('jour')->get()
+                    ->map(fn(EmploiDuTemps $e) => [
+                        $e->enseignant?->matricule,
+                        $e->classe?->code,
+                        $e->discipline?->code,
+                        $e->jour,
+                        $e->heure_debut,
+                        $e->heure_fin,
+                        $e->salle,
+                        $e->type_cours,
                     ])->all(),
                 'import' => function (array $row) {
                     $enseignant = Enseignant::where('matricule', trim((string) ($row['matricule_enseignant'] ?? '')))->first();
@@ -140,6 +162,74 @@ class SpreadsheetController extends Controller
                     return null;
                 },
             ],
+            'progressions' => [
+                'headings' => [
+                    'annee_scolaire',
+                    'code_classe',
+                    'code_discipline',
+                    'trimestre',
+                    'semaine_numero',
+                    'periode',
+                    'unite_apprentissage',
+                    'unite_enseignement',
+                    'theorique',
+                    'pratique',
+                    'duree',
+                    'digitalisee',
+                    'ordre',
+                ],
+                'export' => fn() => ProgressionLecon::with('programme.classe', 'programme.discipline')
+                    ->orderBy('programme_id')->orderBy('ordre')->get()
+                    ->map(fn(ProgressionLecon $lecon) => [
+                        $lecon->programme->annee_scolaire,
+                        $lecon->programme->classe->code,
+                        $lecon->programme->discipline->code,
+                        $lecon->trimestre,
+                        $lecon->semaine_numero,
+                        $lecon->periode,
+                        $lecon->unite_apprentissage,
+                        $lecon->unite_enseignement,
+                        $lecon->theorique ? 1 : 0,
+                        $lecon->pratique ? 1 : 0,
+                        $lecon->duree,
+                        $lecon->digitalisee ? 1 : 0,
+                        $lecon->ordre,
+                    ])->all(),
+                'import' => function (array $row) {
+                    $classe = Classe::where('code', trim((string) ($row['code_classe'] ?? '')))->first();
+                    $discipline = Discipline::where('code', trim((string) ($row['code_discipline'] ?? '')))->first();
+                    $annee = trim((string) ($row['annee_scolaire'] ?? ''));
+                    $uniteEnseignement = trim((string) ($row['unite_enseignement'] ?? ''));
+                    $ordre = $row['ordre'] ?? null;
+
+                    if (! $classe || ! $discipline || $annee === '' || $uniteEnseignement === '' || ! is_numeric($ordre)) {
+                        return 'classe/matiere introuvable, annee, unite_enseignement ou ordre manquant';
+                    }
+
+                    $programme = Programme::updateOrCreate(
+                        ['classe_id' => $classe->id, 'discipline_id' => $discipline->id, 'annee_scolaire' => $annee],
+                        ['nb_seances_prevues' => 0]
+                    );
+
+                    ProgressionLecon::updateOrCreate(
+                        ['programme_id' => $programme->id, 'ordre' => (int) $ordre],
+                        [
+                            'trimestre' => $this->integerOrNull($row['trimestre'] ?? null),
+                            'semaine_numero' => $this->integerOrNull($row['semaine_numero'] ?? null),
+                            'periode' => $this->blankToNull($row['periode'] ?? null),
+                            'unite_apprentissage' => $this->blankToNull($row['unite_apprentissage'] ?? null),
+                            'unite_enseignement' => $uniteEnseignement,
+                            'theorique' => $this->toBool($row['theorique'] ?? false),
+                            'pratique' => $this->toBool($row['pratique'] ?? false),
+                            'duree' => $this->blankToNull($row['duree'] ?? null),
+                            'digitalisee' => $this->toBool($row['digitalisee'] ?? false),
+                        ]
+                    );
+                    $programme->update(['nb_seances_prevues' => $programme->lecons()->count()]);
+
+                    return null;
+                },
+            ],
             default => abort(404, "Entité inconnue : {$entity}"),
         };
     }
@@ -149,6 +239,16 @@ class SpreadsheetController extends Controller
         $value = is_string($value) ? trim($value) : $value;
 
         return $value === '' || $value === null ? null : (string) $value;
+    }
+
+    private function integerOrNull(mixed $value): ?int
+    {
+        return $value === '' || $value === null || ! is_numeric($value) ? null : (int) $value;
+    }
+
+    private function toBool(mixed $value): bool
+    {
+        return in_array(strtolower(trim((string) $value)), ['1', 'oui', 'o', 'x', 'true', 'yes'], true);
     }
 
     /** GET /api/{entity}/template — fichier XLSX vierge avec les bons en-têtes. */
@@ -182,7 +282,7 @@ class SpreadsheetController extends Controller
 
         foreach ($rows as $index => $row) {
             // Ligne entièrement vide (fin de feuille) : on l'ignore silencieusement.
-            if (count(array_filter($row, fn ($v) => $v !== null && $v !== '')) === 0) {
+            if (count(array_filter($row, fn($v) => $v !== null && $v !== '')) === 0) {
                 continue;
             }
 

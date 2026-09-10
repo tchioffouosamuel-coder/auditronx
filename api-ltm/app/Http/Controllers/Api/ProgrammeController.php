@@ -11,7 +11,7 @@ class ProgrammeController extends Controller
 {
     public function index()
     {
-        return response()->json(Programme::with(['classe', 'discipline'])->get());
+        return response()->json(Programme::with(['classe', 'discipline', 'lecons'])->get());
     }
 
     public function store(Request $request)

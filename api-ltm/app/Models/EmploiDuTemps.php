@@ -14,7 +14,14 @@ class EmploiDuTemps extends Model
     protected $table = 'emploi_du_temps';
 
     protected $fillable = [
-        'enseignant_id', 'classe_id', 'discipline_id', 'jour', 'heure_debut', 'heure_fin', 'salle', 'type_cours',
+        'enseignant_id',
+        'classe_id',
+        'discipline_id',
+        'jour',
+        'heure_debut',
+        'heure_fin',
+        'salle',
+        'type_cours',
     ];
 
     public function enseignant(): BelongsTo
@@ -40,5 +47,10 @@ class EmploiDuTemps extends Model
     public function cahierTexteEntrees(): HasMany
     {
         return $this->hasMany(CahierTexteEntree::class);
+    }
+
+    public function leconsRealisees(): HasMany
+    {
+        return $this->hasMany(LeconRealisee::class);
     }
 }

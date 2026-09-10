@@ -6,6 +6,7 @@ import 'historique_screen.dart';
 import 'notifications_screen.dart';
 import 'procuration_screen.dart';
 import 'scan_screen.dart';
+import 'cours_du_jour_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,7 +21,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openSelfScan() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => const ScanScreen(title: 'Scanner ma présence', type: 'scan'),
+        builder: (_) =>
+            const ScanScreen(title: 'Scanner ma présence', type: 'scan'),
       ),
     );
   }
@@ -36,18 +38,23 @@ class _HomeScreenState extends State<HomeScreen> {
     final pages = [
       _ScanTab(onScan: _openSelfScan, nom: session.nom),
       const HistoriqueScreen(),
+      const CoursDuJourScreen(),
       if (isAdmin) const ProcurationScreen(),
       const NotificationsScreen(),
     ];
 
-    final titles = ['Auditron X', 'Mon historique', if (isAdmin) 'Procuration', 'Notifications'];
+    final titles = [
+      'Auditron X',
+      'Mon historique',
+      'Mes cours du jour',
+      if (isAdmin) 'Procuration',
+      'Notifications',
+    ];
 
     if (_tab >= pages.length) _tab = 0;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(titles[_tab]),
-      ),
+      appBar: AppBar(title: Text(titles[_tab])),
       body: Column(
         children: [
           const SyncStatusBanner(),
@@ -58,10 +65,27 @@ class _HomeScreenState extends State<HomeScreen> {
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
         destinations: [
-          const NavigationDestination(icon: Icon(Icons.qr_code_scanner), label: 'Scanner'),
-          const NavigationDestination(icon: Icon(Icons.history), label: 'Historique'),
-          if (isAdmin) const NavigationDestination(icon: Icon(Icons.badge), label: 'Procuration'),
-          const NavigationDestination(icon: Icon(Icons.notifications), label: 'Alertes'),
+          const NavigationDestination(
+            icon: Icon(Icons.qr_code_scanner),
+            label: 'Scanner',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.history),
+            label: 'Historique',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.menu_book),
+            label: 'Mes cours',
+          ),
+          if (isAdmin)
+            const NavigationDestination(
+              icon: Icon(Icons.badge),
+              label: 'Procuration',
+            ),
+          const NavigationDestination(
+            icon: Icon(Icons.notifications),
+            label: 'Alertes',
+          ),
         ],
       ),
     );
@@ -88,7 +112,9 @@ class _ScanTab extends StatelessWidget {
             onPressed: onScan,
             icon: const Icon(Icons.qr_code_scanner),
             label: const Text('Scanner ma présence'),
-            style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20)),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
+            ),
           ),
         ],
       ),

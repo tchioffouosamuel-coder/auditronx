@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\CoursValidation;
+use App\Models\LeconRealisee;
 use App\Models\Programme;
 use Illuminate\Http\Request;
 
@@ -23,18 +24,24 @@ class FicheProgressionController extends Controller
         ]);
 
         $programmes = Programme::with(['classe', 'discipline'])
-            ->when($filters['classe_id'] ?? null, fn ($q, $v) => $q->where('classe_id', $v))
-            ->when($filters['discipline_id'] ?? null, fn ($q, $v) => $q->where('discipline_id', $v))
-            ->when($filters['annee_scolaire'] ?? null, fn ($q, $v) => $q->where('annee_scolaire', $v))
+            ->when($filters['classe_id'] ?? null, fn($q, $v) => $q->where('classe_id', $v))
+            ->when($filters['discipline_id'] ?? null, fn($q, $v) => $q->where('discipline_id', $v))
+            ->when($filters['annee_scolaire'] ?? null, fn($q, $v) => $q->where('annee_scolaire', $v))
             ->get();
 
         $fiche = $programmes->map(function (Programme $programme) {
-            $seancesRealisees = CoursValidation::where('status', 'fait')
-                ->whereHas('emploiDuTemps', function ($q) use ($programme) {
-                    $q->where('classe_id', $programme->classe_id)
-                        ->where('discipline_id', $programme->discipline_id);
-                })
-                ->count();
+            $seancesRealisees = LeconRealisee::whereHas('lecon', fn($q) => $q->where('programme_id', $programme->id))
+                ->distinct('progression_lecon_id')
+                ->count('progression_lecon_id');
+
+            if ($seancesRealisees === 0) {
+                $seancesRealisees = CoursValidation::where('status', 'fait')
+                    ->whereHas('emploiDuTemps', function ($q) use ($programme) {
+                        $q->where('classe_id', $programme->classe_id)
+                            ->where('discipline_id', $programme->discipline_id);
+                    })
+                    ->count();
+            }
 
             $taux = $programme->nb_seances_prevues > 0
                 ? round($seancesRealisees / $programme->nb_seances_prevues * 100, 1)

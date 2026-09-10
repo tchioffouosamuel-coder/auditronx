@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\EmploiDuTempsController;
 use App\Http\Controllers\Api\EnseignantController;
 use App\Http\Controllers\Api\FerieController;
 use App\Http\Controllers\Api\FicheProgressionController;
+use App\Http\Controllers\Api\CoursEnseignantController;
 use App\Http\Controllers\Api\KioskManifestController;
 use App\Http\Controllers\Api\MyPresenceController;
 use App\Http\Controllers\Api\NotificationController;
@@ -72,6 +73,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/cahier-texte/{enseignant}', [CahierTexteController::class, 'index']);
     Route::post('/cahier-texte', [CahierTexteController::class, 'store']);
+    Route::get('/mes-cours-du-jour', [CoursEnseignantController::class, 'index']);
+    Route::post('/mes-cours-du-jour/lecon-toggle', [CoursEnseignantController::class, 'toggleLecon']);
 
     Route::get('/fiche-progression', [FicheProgressionController::class, 'index']);
     Route::apiResource('programmes', ProgrammeController::class)
@@ -97,7 +100,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Import/export/modèle XLSX génériques (§4.2) pour les entités principales.
     // Préfixées `/spreadsheet/...` pour ne pas entrer en collision avec les
     // apiResource `/personnel/{enseignant}` etc. déclarées ci-dessus.
-    Route::pattern('spreadsheetEntity', 'personnel|classes|disciplines|emplois');
+    Route::pattern('spreadsheetEntity', 'personnel|classes|disciplines|emplois|progressions');
     Route::get('/spreadsheet/{spreadsheetEntity}/template', [SpreadsheetController::class, 'template']);
     Route::get('/spreadsheet/{spreadsheetEntity}/export', [SpreadsheetController::class, 'export']);
     Route::post('/spreadsheet/{spreadsheetEntity}/import', [SpreadsheetController::class, 'import']);
