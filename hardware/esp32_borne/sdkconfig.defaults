@@ -21,6 +21,8 @@ CONFIG_ESP32S3_SPIRAM_SUPPORT=y
 CONFIG_SPIRAM_MODE_OCT=y
 CONFIG_SPIRAM_TYPE_AUTO=y
 CONFIG_SPIRAM_USE_MEMMAP=y
+CONFIG_SPIRAM_USE_CAPS_ALLOC=y
+CONFIG_SPIRAM_USE_MALLOC=y
 
 # Table de partitions custom (voir partitions.csv) : le binaire (WiFi+BLE+
 # SD_MMC+caméra+esp-dl/ESP-WHO) dépasse largement la table par défaut d'IDF.

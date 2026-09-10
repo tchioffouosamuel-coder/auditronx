@@ -16,6 +16,7 @@
  */
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <WebServer.h>
 #include <HTTPClient.h>
 #include <FS.h>
@@ -47,7 +48,7 @@ static volatile bool g_hw201Armed = true;
 
 static bool hw201IsHigh()
 {
-    return digitalRead(HW201_GPIO) == HIGH;
+    return digitalRead(HW201_GPIO) == LOW;
 }
 
 static bool shouldRunRecognition()
@@ -395,9 +396,11 @@ static void syncWithApi()
     String payload;
     serializeJson(body, payload);
 
+    WiFiClientSecure client;
+    client.setInsecure();
     HTTPClient http;
     String url = String(API_BASE_URL) + API_RELAY_SYNC_PATH;
-    http.begin(url);
+    http.begin(client, url);
     http.addHeader("Content-Type", "application/json");
     http.addHeader("Authorization", String("Bearer ") + RELAY_API_TOKEN);
     http.setTimeout(20000); // paquets plus lourds avec la photo : marge sur le timeout
@@ -590,7 +593,6 @@ static void recognitionTick()
             MutexGuard guard(g_cameraMutex);
             esp_camera_fb_return(fb);
         }
-        beep();
         markCheckedIn(matchCopy.enseignant_id);
         enqueueFacialScan(matchCopy.enseignant_id, score, photoBase64);
         Serial.printf("[face] reconnu enseignant_id=%u score=%.2f\n", (unsigned)matchCopy.enseignant_id, score);
@@ -638,6 +640,7 @@ static void recognitionTask(void *)
             // maintenu, ou des rebonds, ne relancent pas la reconnaissance.
             g_hw201Armed = false;
             Serial.println("[hw201] HIGH détecté, reconnaissance faciale déclenchée");
+            beep();
             recognitionTick();
         }
     }
@@ -646,33 +649,52 @@ static void recognitionTask(void *)
 /** Télécharge une photo (URL renvoyée par le manifest) dans un buffer PSRAM. */
 static bool downloadPhoto(const String &url, std::vector<uint8_t> &out)
 {
-    HTTPClient http;
-    http.begin(url);
-    http.setTimeout(10000);
-    int status = http.GET();
-    if (status != 200)
+    for (uint8_t attempt = 1; attempt <= 3; ++attempt)
     {
-        Serial.printf("[face-sync] échec téléchargement photo HTTP %d\n", status);
-        http.end();
-        return false;
-    }
-    int len = http.getSize();
-    WiFiClient *stream = http.getStreamPtr();
-    out.resize(len > 0 ? len : 0);
-    size_t got = 0;
-    while (http.connected() && (int)got < len)
-    {
-        size_t avail = stream->available();
-        if (avail == 0)
+        WiFiClientSecure client;
+        client.setInsecure();
+        HTTPClient http;
+        http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+        http.begin(client, url);
+        http.setTimeout(10000);
+        int status = http.GET();
+        if (status != 200)
         {
-            vTaskDelay(pdMS_TO_TICKS(10));
+            Serial.printf("[face-sync] échec photo tentative %u/3 HTTP %d\n", (unsigned)attempt, status);
+            http.end();
+            vTaskDelay(pdMS_TO_TICKS(250));
             continue;
         }
-        size_t toRead = std::min(avail, (size_t)(len - got));
-        got += stream->readBytes(out.data() + got, toRead);
+
+        int len = http.getSize();
+        WiFiClient *stream = http.getStreamPtr();
+        out.resize(len > 0 ? len : 0);
+        size_t got = 0;
+        while (http.connected() && (int)got < len)
+        {
+            size_t avail = stream->available();
+            if (avail == 0)
+            {
+                vTaskDelay(pdMS_TO_TICKS(10));
+                continue;
+            }
+            size_t toRead = std::min(avail, (size_t)(len - got));
+            got += stream->readBytes(out.data() + got, toRead);
+        }
+        http.end();
+
+        if (got == (size_t)len && len > 0)
+            return true;
+
+        Serial.printf("[face-sync] photo incomplète tentative %u/3 (%u/%d octets)\n", (unsigned)attempt, (unsigned)got, len);
+        if (attempt < 3)
+        {
+            vTaskDelay(pdMS_TO_TICKS(250));
+        }
     }
-    http.end();
-    return got == (size_t)len && len > 0;
+
+    Serial.println("[face-sync] abandon téléchargement photo après 3 tentatives");
+    return false;
 }
 
 /** Enrôle un enseignant depuis sa photo de référence : embedding calculé localement, puis transmis à l'API. */
@@ -697,8 +719,10 @@ static void enrollFromPhoto(uint32_t enseignantId, const String &nom, const Stri
     String payload;
     serializeJson(body, payload);
 
+    WiFiClientSecure client;
+    client.setInsecure();
     HTTPClient http;
-    http.begin(String(API_BASE_URL) + API_VISAGES_ENROLL_PATH);
+    http.begin(client, String(API_BASE_URL) + API_VISAGES_ENROLL_PATH);
     http.addHeader("Content-Type", "application/json");
     http.addHeader("Authorization", String("Bearer ") + KIOSK_API_TOKEN);
     int status = http.POST(payload);
@@ -728,8 +752,10 @@ static void syncFaceManifest()
     if (WiFi.status() != WL_CONNECTED)
         return;
 
+    WiFiClientSecure client;
+    client.setInsecure();
     HTTPClient http;
-    http.begin(String(API_BASE_URL) + API_KIOSK_MANIFEST_PATH);
+    http.begin(client, String(API_BASE_URL) + API_KIOSK_MANIFEST_PATH);
     http.addHeader("Authorization", String("Bearer ") + KIOSK_API_TOKEN);
     http.setTimeout(15000);
     int status = http.GET();
@@ -743,9 +769,10 @@ static void syncFaceManifest()
     http.end();
 
     DynamicJsonDocument doc(65536);
-    if (deserializeJson(doc, body) != DeserializationError::Ok)
+    DeserializationError manifestError = deserializeJson(doc, body);
+    if (manifestError != DeserializationError::Ok)
     {
-        Serial.println("[face-sync] manifest illisible");
+        Serial.printf("[face-sync] manifest illisible (%s, %u octets)\n", manifestError.c_str(), (unsigned)body.length());
         return;
     }
 

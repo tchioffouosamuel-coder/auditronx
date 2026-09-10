@@ -34,7 +34,11 @@ class KioskManifestController extends Controller
             ->map(fn (Enseignant $e) => [
                 'id' => $e->id,
                 'nom' => $e->nom,
-                'photo_url' => $e->photo_url,
+                // La borne peut joindre l'API, mais pas forcément l'hôte
+                // historique contenu dans APP_URL. Servir la photo depuis
+                // le même hôte public que la requête du manifest évite ce
+                // second handshake TLS fragile ou mal configuré.
+                'photo_url' => rtrim($request->getSchemeAndHttpHost() . $request->getBaseUrl(), '/') . '/' . ltrim($e->photo_path, '/'),
                 'photo_updated_at' => $e->photo_updated_at,
             ]);
 

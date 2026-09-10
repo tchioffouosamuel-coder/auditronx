@@ -115,11 +115,11 @@ inline constexpr uint32_t RECOGNITION_DEBOUNCE_MS = 5 * 60 * 1000;
 // Fréquence de surveillance du trigger HW201. La reconnaissance elle-même
 // reste déclenchée une seule fois par front montant.
 inline constexpr uint32_t HW201_POLL_INTERVAL_MS = 10;
-inline constexpr uint32_t HW201_DEBOUNCE_MS = 250;
+inline constexpr uint32_t HW201_DEBOUNCE_MS = 20;
 
 // Délai conservé pour les opérations faciales lentes et les autres usages
 // éventuels de la boucle de reconnaissance.
-inline constexpr uint32_t RECOGNITION_LOOP_INTERVAL_MS = 3000;
+inline constexpr uint32_t RECOGNITION_LOOP_INTERVAL_MS = 10;
 
 // Cadence de synchro du manifest (photos à enrôler + embeddings partagés).
 inline constexpr uint32_t FACE_MANIFEST_SYNC_INTERVAL_MS = 60 * 1000;
@@ -130,7 +130,7 @@ inline constexpr char API_VISAGES_ENROLL_PATH[] = "/api/visages/enroll";
 // Token Sanctum du device kiosk_facial, obtenu une fois via
 // POST /api/devices/provision-kiosk (voir hardware/README.md), puis codé en
 // dur ici — même principe que RELAY_API_TOKEN ci-dessus.
-inline constexpr char KIOSK_API_TOKEN[] = "";
+inline constexpr char KIOSK_API_TOKEN[] = "23|CwlY5IkxPX7wNVpnPrQ7QURkOvyeYuWmcFUpKale27f1cee5";
 
 // Fichier SD où le cache local des visages enrôlés (id, nom, embedding) est
 // persisté — survit à un reboot sans réseau (voir face_engine.h).
