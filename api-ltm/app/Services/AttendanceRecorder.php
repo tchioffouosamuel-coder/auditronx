@@ -26,6 +26,8 @@ use Illuminate\Validation\ValidationException;
  */
 class AttendanceRecorder
 {
+    private const MINIMUM_PRESENCE_DURATION_MINUTES = 50;
+
     public function __construct(private readonly PushNotificationService $push) {}
 
     public function recordSelfScan(
@@ -130,6 +132,15 @@ class AttendanceRecorder
         if ($estArrivee) {
             $presence->heure_arrivee = $timestamp;
         } else {
+            $heureArrivee = Carbon::parse($presence->heure_arrivee);
+            if ($heureArrivee->diffInMinutes($timestamp) < self::MINIMUM_PRESENCE_DURATION_MINUTES) {
+                throw ValidationException::withMessages([
+                    'attendance' => [
+                        'La sortie ne peut être enregistrée qu\'après 50 minutes de présence.',
+                    ],
+                ]);
+            }
+
             $presence->heure_depart = $timestamp;
         }
 

@@ -8,6 +8,7 @@ use App\Models\Enseignant;
 use App\Models\Otp;
 use App\Models\Presence;
 use App\Models\QrPoint;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
@@ -76,6 +77,44 @@ class AttendanceScanTest extends TestCase
 
         $scan->assertUnprocessable();
         $this->assertDatabaseCount('presences', 0);
+    }
+
+    public function test_une_sortie_est_refusee_avant_50_minutes_de_presence(): void
+    {
+        $enseignant = Enseignant::factory()->create();
+        $device = Device::factory()->for($enseignant, 'teacher')->create(['device_uuid' => 'device-uuid-4']);
+        $token = $enseignant->createToken($device->device_uuid)->plainTextToken;
+        $qrPoint = QrPoint::factory()->create();
+        $accessPoint = AccessPoint::factory()->create();
+
+        Carbon::setTestNow('2026-09-11 08:00:00');
+        $this->withToken($token)->postJson('/api/attendance/scan', [
+            'qr_code' => $qrPoint->code,
+            'bssid' => $accessPoint->bssid,
+        ])->assertCreated();
+
+        Carbon::setTestNow('2026-09-11 08:49:59');
+        $this->withToken($token)->postJson('/api/attendance/scan', [
+            'qr_code' => $qrPoint->code,
+            'bssid' => $accessPoint->bssid,
+        ])->assertUnprocessable();
+
+        $this->assertDatabaseHas('presences', [
+            'enseignant_id' => $enseignant->id,
+            'heure_depart' => null,
+        ]);
+
+        Carbon::setTestNow('2026-09-11 08:50:00');
+        $this->withToken($token)->postJson('/api/attendance/scan', [
+            'qr_code' => $qrPoint->code,
+            'bssid' => $accessPoint->bssid,
+        ])->assertCreated();
+
+        $this->assertDatabaseMissing('presences', [
+            'enseignant_id' => $enseignant->id,
+            'heure_depart' => null,
+        ]);
+        Carbon::setTestNow();
     }
 
     public function test_un_scan_par_procuration_journalise_lauteur_et_le_motif(): void
