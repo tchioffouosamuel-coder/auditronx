@@ -45,6 +45,29 @@ class DeviceActivationFlowTest extends TestCase
         $this->assertDatabaseCount('device_activation_requests', 0);
     }
 
+    public function test_un_admin_peut_renouveler_le_token_d_une_borne_relais(): void
+    {
+        $admin = User::factory()->create();
+        $relay = Device::factory()->create([
+            'device_type' => 'relay_gateway',
+            'device_uuid' => 'borne-relais-1',
+            'revoked_at' => now(),
+        ]);
+        $ancienToken = $relay->createToken($relay->device_uuid)->plainTextToken;
+
+        $response = $this->actingAs($admin)->postJson("/api/devices/{$relay->id}/rotate-token");
+
+        $response->assertOk()->assertJsonStructure(['token', 'device']);
+        $this->assertNotSame($ancienToken, $response->json('token'));
+        $this->assertDatabaseHas('personal_access_tokens', [
+            'tokenable_type' => Device::class,
+            'tokenable_id' => $relay->id,
+            'name' => $relay->device_uuid,
+        ]);
+        $this->assertNotNull($relay->fresh()->activated_at);
+        $this->assertNull($relay->fresh()->revoked_at);
+    }
+
     public function test_un_enseignant_non_admin_declenche_une_demande_sans_activation_immediate(): void
     {
         Enseignant::factory()->create([

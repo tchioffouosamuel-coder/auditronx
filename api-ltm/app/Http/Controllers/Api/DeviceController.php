@@ -231,6 +231,25 @@ class DeviceController extends Controller
         return response()->json($device);
     }
 
+    /** POST /api/devices/{device}/rotate-token — renouvelle le token d'une borne relais. */
+    public function rotateToken(Device $device)
+    {
+        abort_unless($device->device_type === 'relay_gateway', 422, 'Seule une borne relais peut recevoir ce type de token.');
+
+        $device->tokens()->delete();
+        $device->update([
+            'activated_at' => now(),
+            'revoked_at' => null,
+        ]);
+
+        $token = $device->createToken($device->device_uuid)->plainTextToken;
+
+        return response()->json([
+            'token' => $token,
+            'device' => $device,
+        ]);
+    }
+
     /**
      * POST /api/devices/provision-relay — provisionne la passerelle offline ESP2
      * (§hardware, seul le relais s'authentifie auprès de l'API ; ESP1 ne parle

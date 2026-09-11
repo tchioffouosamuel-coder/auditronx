@@ -47,6 +47,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/otp/generate', [OtpController::class, 'generate']);
     Route::post('/devices/{device}/revoke', [DeviceController::class, 'revoke']);
+    Route::post('/devices/{device}/rotate-token', [DeviceController::class, 'rotateToken']);
     Route::post('/devices/provision-relay', [DeviceController::class, 'provisionRelay']);
     Route::post('/devices/fcm-token', [DeviceController::class, 'updateFcmToken']);
 

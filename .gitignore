@@ -1,7 +1,43 @@
-# Racine du monorepo Auditron X (api/, frontend/, mobile/ ont chacun leur
-# propre .gitignore plus spécifique) — uniquement les artefacts communs ici.
+# Racine du monorepo Auditron X — artefacts communs aux sous-projets.
 .DS_Store
 Thumbs.db
 *.log
 .idea/
 .vscode/
+
+# Secrets et fichiers d'environnement locaux. Les modèles .env.example restent
+# versionnables dans les sous-projets.
+**/.env
+**/.env.*
+!**/.env.example
+
+# Dépendances et sorties de compilation générées localement.
+**/node_modules/
+**/vendor/
+**/dist/
+**/build/
+**/coverage/
+**/.cache/
+**/.phpunit.result.cache
+
+# PlatformIO / ESP-IDF.
+**/.pio/
+**/.pioenvs/
+**/.piolibdeps/
+**/managed_components/
+**/sdkconfig.*
+!**/sdkconfig.defaults
+
+# Flutter / Dart générés.
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/flutter_export_environment.sh
+**/Generated.xcconfig
+
+# Fichiers locaux contenant des identifiants ou certificats.
+**/*-service-account.json
+**/firebase-service-account.json
+**/*.p12
+**/*.jks
+**/*.keystore
