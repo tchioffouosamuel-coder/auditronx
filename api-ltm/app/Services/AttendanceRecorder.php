@@ -161,7 +161,7 @@ class AttendanceRecorder
                 return null;
             }
 
-            $path = 'scan-photos/'.date('Y/m/d').'/'.Str::uuid().'.jpg';
+            $path = 'scan-photos/' . date('Y/m/d') . '/' . Str::uuid() . '.jpg';
             Storage::disk('public_direct')->put($path, $binary);
 
             return $path;

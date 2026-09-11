@@ -21,8 +21,17 @@ class Enseignant extends Model implements AuthenticatableContract
     use Authenticatable, HasApiTokens, HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'nom', 'matricule', 'email', 'fonction', 'section', 'grade', 'tel', 'poste', 'rfid_uid',
-        'password', 'est_admin',
+        'nom',
+        'matricule',
+        'email',
+        'fonction',
+        'section',
+        'grade',
+        'tel',
+        'poste',
+        'rfid_uid',
+        'password',
+        'est_admin',
     ];
 
     protected $hidden = ['password'];

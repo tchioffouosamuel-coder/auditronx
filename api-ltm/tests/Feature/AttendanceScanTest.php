@@ -104,5 +104,4 @@ class AttendanceScanTest extends TestCase
             'reason' => 'Téléphone en panne',
         ]);
     }
-
 }

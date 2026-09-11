@@ -1141,7 +1141,6 @@ void setup()
     // Cœur 1 (APP_CPU), comme loopTask par défaut sur Arduino-ESP32 — la pile
     // dédiée de 16 Ko est la partie qui compte ici, pas l'affinité de cœur.
     xTaskCreatePinnedToCore(syncTask, "sync_task", 16384, nullptr, 1, nullptr, 1);
-
 }
 
 void loop()

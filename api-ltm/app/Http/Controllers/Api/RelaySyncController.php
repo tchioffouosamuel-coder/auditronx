@@ -73,7 +73,7 @@ class RelaySyncController extends Controller
         ]);
 
         $results = array_map(
-            fn (array $packet) => $this->processPacket($device, $packet),
+            fn(array $packet) => $this->processPacket($device, $packet),
             $data['packets'],
         );
 
