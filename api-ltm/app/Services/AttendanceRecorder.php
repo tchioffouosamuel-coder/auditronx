@@ -94,21 +94,6 @@ class AttendanceRecorder
         return $presence;
     }
 
-    /** Pointage par reconnaissance faciale embarquée (§5, ESP32-S3 + ESP-WHO) : pas de QR/BSSID, le kiosk fait office de point d'accès. */
-    public function recordFacialScan(
-        Enseignant $enseignant,
-        int $deviceId,
-        float $scoreConfiance,
-        Carbon $timestamp,
-        ?string $photoBase64 = null,
-    ): Presence {
-        return $this->record($enseignant->id, $timestamp, [
-            'source' => 'reconnaissance_faciale',
-            'device_id' => $deviceId,
-            'reason' => "score_confiance={$scoreConfiance}",
-        ], $photoBase64);
-    }
-
     private function resolveAccessPoint(string $qrCode, string $bssid): AccessPoint
     {
         // ValidationException (pas firstOrFail/ModelNotFoundException) : un QR

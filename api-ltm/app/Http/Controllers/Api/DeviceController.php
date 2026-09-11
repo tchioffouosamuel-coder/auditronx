@@ -32,7 +32,7 @@ class DeviceController extends Controller
             'tel' => ['required', 'string'],
             'password' => ['required', 'string'],
             'device_uuid' => ['required', 'string'],
-            'device_type' => ['sometimes', 'in:mobile,kiosk_facial'],
+            'device_type' => ['sometimes', 'in:mobile'],
             // Capturé avant toute authentification (pas encore de device
             // Sanctum) : seul moyen de pousser l'OTP par notification une fois
             // l'admin d'accord (§otp-approval) plutôt que de le remettre en
@@ -229,32 +229,6 @@ class DeviceController extends Controller
         $device->teacher?->tokens()->where('name', $device->device_uuid)->delete();
 
         return response()->json($device);
-    }
-
-    /**
-     * POST /api/devices/provision-kiosk — provisionne un poste de reconnaissance faciale
-     * (§5, administration des appareils, §4.2). Action admin : le device s'authentifie
-     * ensuite lui-même via son propre token, sans passer par un enseignant.
-     */
-    public function provisionKiosk(Request $request)
-    {
-        $data = $request->validate([
-            'device_uuid' => ['required', 'string', 'unique:devices,device_uuid'],
-            'label' => ['nullable', 'string'],
-        ]);
-
-        $device = Device::create([
-            'device_uuid' => $data['device_uuid'],
-            'device_type' => 'kiosk_facial',
-            'activated_at' => now(),
-        ]);
-
-        $token = $device->createToken($data['device_uuid'])->plainTextToken;
-
-        return response()->json([
-            'token' => $token,
-            'device' => $device,
-        ], 201);
     }
 
     /**

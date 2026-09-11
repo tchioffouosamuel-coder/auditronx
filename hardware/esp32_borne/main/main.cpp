@@ -36,27 +36,12 @@
 #include <algorithm>
 
 #include "config.h"
-#include "face_engine.h"
-#include "face_cache.h"
-
 static WebServer server(80);
 static uint32_t g_local_id_counter = 0;
 static bool g_time_ready = false;
 static bool g_camera_ready = false;
 static volatile bool g_qrScanInProgress = false;
-static volatile bool g_hw201Armed = true;
-static volatile bool g_recognitionInProgress = false;
 static SemaphoreHandle_t g_apiMutex = nullptr;
-
-static bool hw201IsHigh()
-{
-    return digitalRead(HW201_GPIO) == LOW;
-}
-
-static bool shouldRunRecognition()
-{
-    return hw201IsHigh() && !g_qrScanInProgress;
-}
 
 /** Horodatage ISO8601 (UTC) à partir de l'heure NTP propre de la borne, ou chaîne vide si pas encore synchronisée. */
 static String currentIsoTimestamp()
@@ -139,10 +124,7 @@ static bool initCamera()
     return true;
 }
 
-// La boucle de reconnaissance faciale continue (recognitionTask, voir plus
-// bas) et processScan() (photo de preuve BLE/QR) grabbent toutes les deux des
-// frames caméra — le driver esp_camera n'est pas thread-safe entre tâches
-// concurrentes, d'où ce mutex partagé.
+// processScan() capture la photo de preuve du scan QR.
 static SemaphoreHandle_t g_cameraMutex = nullptr;
 
 /** Encode une frame déjà grabbée en base64 (ne la libère PAS — à la charge de l'appelant). */
@@ -468,6 +450,8 @@ static void syncTask(void *)
 // principal, le flux BLE/QR ci-dessous reste actif en secours. Voir
 // hardware/README.md § "Reconnaissance faciale embarquée".
 // ---------------------------------------------------------------------------
+
+#if 0
 
 static SemaphoreHandle_t g_faceCacheMutex = nullptr;
 static std::vector<EnrolledFace> g_faceCache;
@@ -863,6 +847,8 @@ static void syncFaceManifestTask(void *)
 // synchro, ex. `curl http://<ip-sta>/scan`).
 // ---------------------------------------------------------------------------
 
+#endif
+
 /**
  * { "type": "scan"|"admin_proxy", "teacher_token": "...", "payload": {...}, "captured_at"?: "ISO8601" }
  *
@@ -1124,8 +1110,6 @@ void setup()
     Serial.printf("[mem] PSRAM libre: %lu octets\n", (unsigned long)ESP.getFreePsram());
     Serial.printf("[mem] heap interne libre: %lu octets\n", (unsigned long)ESP.getFreeHeap());
 
-    pinMode(HW201_GPIO, INPUT_PULLDOWN);
-
     SD_MMC.setPins(SD_MMC_CLK_GPIO, SD_MMC_CMD_GPIO, SD_MMC_D0_GPIO);
     if (!SD_MMC.begin("/sdcard", true))
     { // true = mode 1 bit (3 IOs)
@@ -1154,25 +1138,10 @@ void setup()
     g_apiMutex = xSemaphoreCreateMutex();
     g_pendingScanMutex = xSemaphoreCreateMutex();
     g_cameraMutex = xSemaphoreCreateMutex();
-    g_faceCacheMutex = xSemaphoreCreateMutex();
     // Cœur 1 (APP_CPU), comme loopTask par défaut sur Arduino-ESP32 — la pile
     // dédiée de 16 Ko est la partie qui compte ici, pas l'affinité de cœur.
     xTaskCreatePinnedToCore(syncTask, "sync_task", 16384, nullptr, 1, nullptr, 1);
 
-    // Reconnaissance faciale embarquée (ESP-WHO) — voir hardware/README.md.
-    // BLE/QR (ci-dessus) reste actif en parallèle comme secours.
-    initBuzzer();
-    if (faceEngineInit())
-    {
-        faceCacheLoad(g_faceCache);
-        Serial.printf("[face] cache local chargé : %u visage(s)\n", (unsigned)g_faceCache.size());
-        xTaskCreatePinnedToCore(recognitionTask, "recognition_task", 8192, nullptr, 1, nullptr, 1);
-        xTaskCreatePinnedToCore(syncFaceManifestTask, "face_sync_task", 16384, nullptr, 1, nullptr, 1);
-    }
-    else
-    {
-        Serial.println("[face] moteur de reconnaissance indisponible — pointage facial désactivé, BLE/QR reste seul actif");
-    }
 }
 
 void loop()

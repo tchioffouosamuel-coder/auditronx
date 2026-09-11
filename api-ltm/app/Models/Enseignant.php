@@ -9,7 +9,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\HasApiTokens;
 
 /**
@@ -23,7 +22,7 @@ class Enseignant extends Model implements AuthenticatableContract
 
     protected $fillable = [
         'nom', 'matricule', 'email', 'fonction', 'section', 'grade', 'tel', 'poste', 'rfid_uid',
-        'password', 'est_admin', 'photo_path', 'photo_updated_at',
+        'password', 'est_admin',
     ];
 
     protected $hidden = ['password'];
@@ -31,16 +30,7 @@ class Enseignant extends Model implements AuthenticatableContract
     protected $casts = [
         'password' => 'hashed',
         'est_admin' => 'boolean',
-        'photo_updated_at' => 'datetime',
     ];
-
-    protected $appends = ['photo_url'];
-
-    /** Photo de référence chargée depuis la plateforme web pour l'enrôlement facial (§5), ou null. */
-    public function getPhotoUrlAttribute(): ?string
-    {
-        return $this->photo_path ? Storage::disk('public_direct')->url($this->photo_path) : null;
-    }
 
     public function activationRequests(): HasMany
     {

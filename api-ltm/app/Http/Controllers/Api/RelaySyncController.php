@@ -48,8 +48,8 @@ class RelaySyncController extends Controller
     {
         $device = $request->user();
 
-        if (! $device instanceof Device || ! in_array($device->device_type, ['relay_gateway', 'kiosk_facial'], true) || $device->isRevoked()) {
-            abort(403, 'Authentification passerelle relais ou borne kiosque requise.');
+        if (! $device instanceof Device || $device->device_type !== 'relay_gateway' || $device->isRevoked()) {
+            abort(403, 'Authentification passerelle relais requise.');
         }
 
         // Chaque sous-champ de `payload` DOIT avoir sa propre règle explicite :
@@ -61,15 +61,14 @@ class RelaySyncController extends Controller
         $data = $request->validate([
             'packets' => ['required', 'array', 'min:1', 'max:100'],
             'packets.*.local_id' => ['required', 'string'],
-            'packets.*.type' => ['required', 'in:scan,admin_proxy,facial_scan'],
+            'packets.*.type' => ['required', 'in:scan,admin_proxy'],
             'packets.*.captured_at' => ['required', 'date'],
-            'packets.*.teacher_token' => ['required_unless:packets.*.type,facial_scan', 'string'],
+            'packets.*.teacher_token' => ['required', 'string'],
             'packets.*.payload' => ['required', 'array'],
-            'packets.*.payload.qr_code' => ['required_unless:packets.*.type,facial_scan', 'string'],
-            'packets.*.payload.bssid' => ['required_unless:packets.*.type,facial_scan', 'string'],
+            'packets.*.payload.qr_code' => ['required', 'string'],
+            'packets.*.payload.bssid' => ['required', 'string'],
             'packets.*.payload.enseignant_id' => ['sometimes', 'nullable', 'integer'],
             'packets.*.payload.motif' => ['sometimes', 'nullable', 'string'],
-            'packets.*.payload.score_confiance' => ['required_if:packets.*.type,facial_scan', 'numeric', 'min:0', 'max:1'],
             'packets.*.payload.photo_base64' => ['sometimes', 'nullable', 'string'],
         ]);
 
@@ -89,12 +88,6 @@ class RelaySyncController extends Controller
             $capturedAt = Carbon::parse($packet['captured_at']);
             $payload = $packet['payload'];
             $photoBase64 = $payload['photo_base64'] ?? null;
-
-            if ($packet['type'] === 'facial_scan') {
-                $presence = $this->recordFacialPacket($payload, $capturedAt, $relay, $photoBase64);
-
-                return ['local_id' => $localId, 'status' => 'ok', 'presence_id' => $presence->id];
-            }
 
             $acteur = $packet['type'] === 'scan'
                 ? $this->resolveTeacher($packet['teacher_token'])
@@ -124,29 +117,6 @@ class RelaySyncController extends Controller
             // : on ne renvoie pas "ok", ESP2 le retentera au prochain cycle.
             return ['local_id' => $localId, 'status' => 'retry', 'message' => 'Traitement impossible pour le moment.'];
         }
-    }
-
-    private function recordFacialPacket(array $payload, Carbon $capturedAt, Device $kiosk, ?string $photoBase64)
-    {
-        $enseignantId = $payload['enseignant_id'] ?? null;
-
-        if (! $enseignantId) {
-            throw ValidationException::withMessages(['payload' => ['enseignant_id requis pour un paquet facial_scan.']]);
-        }
-
-        $enseignant = Enseignant::find($enseignantId);
-
-        if (! $enseignant) {
-            throw ValidationException::withMessages(['payload' => ['Enseignant introuvable.']]);
-        }
-
-        return $this->recorder->recordFacialScan(
-            $enseignant,
-            $kiosk->id,
-            (float) $payload['score_confiance'],
-            $capturedAt,
-            $photoBase64,
-        );
     }
 
     private function recordProxyPacket(Enseignant|User $acteur, array $payload, Carbon $capturedAt, Device $relay, ?string $photoBase64)

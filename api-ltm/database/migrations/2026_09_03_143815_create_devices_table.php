@@ -12,7 +12,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('teacher_id')->nullable()->constrained('enseignants')->cascadeOnDelete();
             $table->string('device_uuid')->unique();
-            $table->enum('device_type', ['mobile', 'kiosk_facial'])->default('mobile');
+            $table->enum('device_type', ['mobile', 'relay_gateway'])->default('mobile');
             $table->dateTime('activated_at')->nullable();
             $table->foreignId('otp_id')->nullable()->constrained('otps')->nullOnDelete();
             $table->dateTime('revoked_at')->nullable();

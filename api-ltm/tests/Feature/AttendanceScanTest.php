@@ -105,27 +105,4 @@ class AttendanceScanTest extends TestCase
         ]);
     }
 
-    public function test_le_scan_facial_produit_une_ligne_presence_compatible(): void
-    {
-        $enseignant = Enseignant::factory()->create();
-        $kiosk = Device::factory()->create([
-            'teacher_id' => null,
-            'device_type' => 'kiosk_facial',
-            'device_uuid' => 'kiosk-1',
-        ]);
-        $token = $kiosk->createToken($kiosk->device_uuid)->plainTextToken;
-
-        $scan = $this->withToken($token)->postJson('/api/attendance/facial-scan', [
-            'enseignant_id' => $enseignant->id,
-            'score_confiance' => 0.92,
-        ]);
-
-        $scan->assertCreated();
-
-        $this->assertDatabaseHas('presences', [
-            'enseignant_id' => $enseignant->id,
-            'source' => 'reconnaissance_faciale',
-            'device_id' => $kiosk->id,
-        ]);
-    }
 }

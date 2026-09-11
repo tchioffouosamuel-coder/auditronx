@@ -8,10 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('enseignants', function (Blueprint $table) {
-            // Photo de référence pour l'enrôlement facial (§5), chargée depuis la
-            // plateforme web. photo_updated_at permet aux bornes de détecter une
-            // photo nouvelle/modifiée sans comparer le fichier lui-même.
+        Schema::table('enseignants', function (Blueprint $table): void {
             $table->string('photo_path')->nullable()->after('poste');
             $table->dateTime('photo_updated_at')->nullable()->after('photo_path');
         });
@@ -19,7 +16,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('enseignants', function (Blueprint $table) {
+        Schema::table('enseignants', function (Blueprint $table): void {
             $table->dropColumn(['photo_path', 'photo_updated_at']);
         });
     }

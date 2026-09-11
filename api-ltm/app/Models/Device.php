@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Laravel\Sanctum\HasApiTokens;
 
-/** Principal authentifiable côté poste kiosque (reconnaissance faciale, §5.4). */
+/** Principal authentifiable côté relais matériel. */
 class Device extends Model implements AuthenticatableContract
 {
     use Authenticatable, HasApiTokens, HasFactory;

@@ -8,11 +8,10 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('visages_embeddings', function (Blueprint $table) {
+        Schema::create('visages_embeddings', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('enseignant_id')->constrained('enseignants')->cascadeOnDelete();
             $table->foreignId('device_id')->nullable()->constrained('devices')->nullOnDelete();
-            // Vecteur d'embedding, chiffré au repos (cast Eloquent 'encrypted')
             $table->text('embedding');
             $table->dateTime('enrolled_at');
             $table->dateTime('revoked_at')->nullable();

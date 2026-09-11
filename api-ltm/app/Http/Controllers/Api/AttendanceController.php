@@ -73,35 +73,6 @@ class AttendanceController extends Controller
         return response()->json($presence, 201);
     }
 
-    /** POST /api/attendance/facial-scan — poste de reconnaissance faciale, authentifié comme lui-même (§5.3, §5.4). */
-    public function facialScan(Request $request)
-    {
-        $data = $request->validate([
-            'enseignant_id' => ['required', 'exists:enseignants,id'],
-            'score_confiance' => ['required', 'numeric', 'min:0', 'max:1'],
-            // Photo capturée par la borne au moment du match, preuve anti-fraude best-effort (§hardware).
-            'photo_base64' => ['sometimes', 'nullable', 'string'],
-        ]);
-
-        $device = $request->user();
-
-        if (! $device instanceof Device || $device->device_type !== 'kiosk_facial' || $device->isRevoked()) {
-            abort(403, 'Authentification poste de reconnaissance faciale requise.');
-        }
-
-        $enseignant = Enseignant::findOrFail($data['enseignant_id']);
-
-        $presence = $this->recorder->recordFacialScan(
-            $enseignant,
-            $device->id,
-            (float) $data['score_confiance'],
-            now(),
-            $data['photo_base64'] ?? null,
-        );
-
-        return response()->json($presence, 201);
-    }
-
     private function authenticatedEnseignant(Request $request): Enseignant
     {
         $user = $request->user();

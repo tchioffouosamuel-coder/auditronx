@@ -17,7 +17,6 @@ use App\Http\Controllers\Api\EnseignantController;
 use App\Http\Controllers\Api\FerieController;
 use App\Http\Controllers\Api\FicheProgressionController;
 use App\Http\Controllers\Api\CoursEnseignantController;
-use App\Http\Controllers\Api\KioskManifestController;
 use App\Http\Controllers\Api\MyPresenceController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OtpController;
@@ -29,7 +28,6 @@ use App\Http\Controllers\Api\RetardsController;
 use App\Http\Controllers\Api\SignalementController;
 use App\Http\Controllers\Api\SpreadsheetController;
 use App\Http\Controllers\Api\StatistiquesController;
-use App\Http\Controllers\Api\VisageController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -49,13 +47,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/otp/generate', [OtpController::class, 'generate']);
     Route::post('/devices/{device}/revoke', [DeviceController::class, 'revoke']);
-    Route::post('/devices/provision-kiosk', [DeviceController::class, 'provisionKiosk']);
     Route::post('/devices/provision-relay', [DeviceController::class, 'provisionRelay']);
     Route::post('/devices/fcm-token', [DeviceController::class, 'updateFcmToken']);
 
     Route::post('/attendance/scan', [AttendanceController::class, 'scan']);
     Route::post('/attendance/admin-proxy', [AttendanceController::class, 'adminProxy']);
-    Route::post('/attendance/facial-scan', [AttendanceController::class, 'facialScan']);
 
     // Passerelle offline ESP1/ESP2 (§hardware) : lots de pointages relayés en différé.
     Route::post('/relay/sync', [RelaySyncController::class, 'sync']);
@@ -64,12 +60,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/mes-presences', [MyPresenceController::class, 'index']);
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead']);
-
-    Route::post('/visages/enroll', [VisageController::class, 'enroll']);
-    Route::delete('/visages/{enseignant}', [VisageController::class, 'revoke']);
-
-    // Synchro borne facial (§5, ESP32-S3 + ESP-WHO) : photos à enrôler + embeddings partagés.
-    Route::get('/kiosks/manifest', [KioskManifestController::class, 'index']);
 
     Route::get('/cahier-texte/{enseignant}', [CahierTexteController::class, 'index']);
     Route::post('/cahier-texte', [CahierTexteController::class, 'store']);
@@ -83,8 +73,6 @@ Route::middleware('auth:sanctum')->group(function () {
     // Gestion (§4.2 / §4.3) — équivalent JSON des routes web de gestion existantes
     Route::apiResource('personnel', EnseignantController::class)
         ->parameters(['personnel' => 'enseignant']);
-    Route::post('/personnel/{enseignant}/photo', [EnseignantController::class, 'uploadPhoto']);
-    Route::delete('/personnel/{enseignant}/photo', [EnseignantController::class, 'deletePhoto']);
     Route::apiResource('classes', ClasseController::class)
         ->parameters(['classes' => 'classe']);
     Route::apiResource('disciplines', DisciplineController::class);

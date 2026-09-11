@@ -22,35 +22,6 @@ class RelaySyncTest extends TestCase
     }
 
     /**
-     * Depuis le pivot vers la reconnaissance faciale (§5), la borne kiosque
-     * (device_type kiosk_facial) réutilise elle aussi ce moteur de synchro
-     * pour ses paquets `facial_scan`, sans teacher_token/qr_code/bssid — voir
-     * RelaySyncController::recordFacialPacket.
-     */
-    public function test_un_paquet_facial_scan_relaye_est_accepte_sans_teacher_token(): void
-    {
-        $kiosk = Device::factory()->create(['device_type' => 'kiosk_facial', 'teacher_id' => null]);
-        $this->withToken($kiosk->createToken('esp32-kiosk-test')->plainTextToken);
-        $enseignant = Enseignant::factory()->create();
-
-        $response = $this->postJson('/api/relay/sync', [
-            'packets' => [[
-                'local_id' => 'borne-test-facial-1',
-                'type' => 'facial_scan',
-                'captured_at' => now()->toIso8601String(),
-                'payload' => ['enseignant_id' => $enseignant->id, 'score_confiance' => 0.87],
-            ]],
-        ])->assertOk();
-
-        $response->assertJsonPath('results.0.status', 'ok');
-        $this->assertDatabaseHas('presences', [
-            'enseignant_id' => $enseignant->id,
-            'source' => 'reconnaissance_faciale',
-            'device_id' => $kiosk->id,
-        ]);
-    }
-
-    /**
      * Régression : un QR code inconnu ne se "réparera" jamais tout seul — la
      * borne doit pouvoir le purger de sa file (statut "rejected"), pas le
      * garder en "retry" indéfiniment (voir AttendanceRecorder::resolveAccessPoint).

@@ -1,5 +1,4 @@
-# Requis par le composant IDF managé arduino-esp32 (voir hardware/README.md §
-# "Reconnaissance faciale embarquée") : sans ce réglage, la configure CMake
+# Requis par le composant IDF managé arduino-esp32 : sans ce réglage, la configure CMake
 # échoue avec "esp32-arduino requires CONFIG_FREERTOS_HZ=1000 (currently 100)".
 CONFIG_FREERTOS_HZ=1000
 
@@ -13,8 +12,7 @@ CONFIG_COMPILER_WARNINGS_AS_ERRORS=n
 # platformio.ini comme sous framework=arduino.
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 
-# ESP32-S3 N16R8 : active la PSRAM octale externe utilisée par la caméra et
-# les buffers de décodage ESP-DL.
+# ESP32-S3 N16R8 : active la PSRAM octale externe utilisée par la caméra.
 CONFIG_SPIRAM=y
 CONFIG_SPIRAM_SUPPORT=y
 CONFIG_ESP32S3_SPIRAM_SUPPORT=y
@@ -24,8 +22,8 @@ CONFIG_SPIRAM_USE_MEMMAP=y
 CONFIG_SPIRAM_USE_CAPS_ALLOC=y
 CONFIG_SPIRAM_USE_MALLOC=y
 
-# Table de partitions custom (voir partitions.csv) : le binaire (WiFi+BLE+
-# SD_MMC+caméra+esp-dl/ESP-WHO) dépasse largement la table par défaut d'IDF.
+# Table de partitions custom (voir partitions.csv) : le binaire WiFi+BLE+
+# SD_MMC+caméra dépasse largement la table par défaut d'IDF.
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 
@@ -43,13 +41,6 @@ CONFIG_ARDUINO_LOOP_STACK_SIZE=16384
 # mbedTLS key-exchange modes when warnings are treated as errors.
 CONFIG_MBEDTLS_PSK_MODES=y
 CONFIG_MBEDTLS_KEY_EXCHANGE_PSK=y
-
-# Load ESP-DL face models from the SD card to avoid PlatformIO's generated
-# .espdl.S path handling for flash-embedded model data.
-CONFIG_HUMAN_FACE_DETECT_MODEL_IN_FLASH_RODATA=n
-CONFIG_HUMAN_FACE_DETECT_MODEL_IN_SDCARD=y
-CONFIG_HUMAN_FACE_FEAT_MODEL_IN_FLASH_RODATA=n
-CONFIG_HUMAN_FACE_FEAT_MODEL_IN_SDCARD=y
 
 # --- Bluetooth / NimBLE (serveur BLE local, transport téléphone<->borne) ---
 # Requis pour que le backend BLE NimBLE fourni par arduino-esp32 compile et

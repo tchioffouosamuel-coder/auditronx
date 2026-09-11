@@ -6,8 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Traits\AccessibleEnseignants;
 use App\Models\Enseignant;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 
 /** Gestion du personnel (§4.2 — équivalent JSON de PersonnelController). */
 class EnseignantController extends Controller
@@ -77,59 +75,6 @@ class EnseignantController extends Controller
         }
 
         $enseignant->update($data);
-
-        return response()->json($enseignant);
-    }
-
-    /**
-     * POST /api/personnel/{enseignant}/photo — charge/remplace la photo de
-     * référence pour l'enrôlement facial (§5). Réutilise le disque
-     * `public_direct` (pas de symlink en prod), déjà utilisé pour les photos
-     * de preuve de pointage (voir AttendanceRecorder::storePhoto).
-     */
-    public function uploadPhoto(Request $request, Enseignant $enseignant)
-    {
-        abort_unless($this->peutAccederA($request->user(), $enseignant), 403);
-
-        $data = $request->validate([
-            'photo' => ['required', 'image', 'max:5120'],
-        ]);
-
-        if ($enseignant->photo_path) {
-            Storage::disk('public_direct')->delete($enseignant->photo_path);
-        }
-
-        $source = imagecreatefromstring($data['photo']->get());
-        abort_unless($source !== false, 422, 'La photo ne peut pas être décodée.');
-
-        ob_start();
-        imagejpeg($source, null, 90);
-        $jpeg = ob_get_clean();
-        imagedestroy($source);
-
-        $path = 'teacher-photos/' . Str::uuid() . '.jpg';
-        Storage::disk('public_direct')->put($path, $jpeg);
-
-        $enseignant->update([
-            'photo_path' => $path,
-            'photo_updated_at' => now(),
-        ]);
-
-        return response()->json($enseignant);
-    }
-
-    public function deletePhoto(Request $request, Enseignant $enseignant)
-    {
-        abort_unless($this->peutAccederA($request->user(), $enseignant), 403);
-
-        if ($enseignant->photo_path) {
-            Storage::disk('public_direct')->delete($enseignant->photo_path);
-        }
-
-        $enseignant->update([
-            'photo_path' => null,
-            'photo_updated_at' => null,
-        ]);
 
         return response()->json($enseignant);
     }

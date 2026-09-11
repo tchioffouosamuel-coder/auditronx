@@ -22,9 +22,7 @@
 #define CAMERA_PCLK_GPIO 13
 #define CAMERA_XCLK_FREQ_HZ 20000000
 
-// QQVGA (160x120) est le point de départ stable pour l'ESP32-S3 + modèle
-// de détection faciale embarquée : il réduit fortement le coût mémoire du
-// décodage JPEG, sans sacrifier le nécessaire à la reconnaissance.
+// QQVGA (160x120) réduit le coût mémoire de la photo de preuve QR.
 #define CAMERA_FRAME_SIZE FRAMESIZE_QQVGA
 #define CAMERA_JPEG_QUALITY 20 // 0 (meilleure qualité) à 63 (plus compressé)
 
@@ -88,50 +86,3 @@ inline constexpr uint32_t SYNC_INTERVAL_MS = 15000;
 
 inline constexpr char NTP_SERVER[] = "pool.ntp.org";
 
-// ---- Reconnaissance faciale embarquée (ESP-WHO) — pointage 100% facial en
-// principal, BLE/QR (ci-dessus) en secours si le visage n'est pas reconnu.
-// Voir hardware/README.md § "Reconnaissance faciale embarquée".
-
-// GPIO du buzzer piezo (bip de confirmation) — À CÂBLER/AJUSTER selon la
-// carte, aucun GPIO libre documenté par défaut (même disclaimer que les pins
-// caméra ci-dessus).
-#define BUZZER_GPIO 21
-
-// GPIO du signal HW201 : HIGH = présence d'un individu à traiter.
-// La reconnaissance reste inactive tant que ce signal est bas ou qu'un scan
-// QR est déjà en cours.
-#define HW201_GPIO 14
-
-// Score de similarité minimal (cosine, [0,1]) pour considérer un visage
-// reconnu. Point de départ, PAS calibré : à ajuster sur le matériel réel
-// (éclairage, angle/distance caméra) — voir hardware/README.md.
-inline constexpr float RECOGNITION_THRESHOLD = 0.72f;
-
-// Anti-doublon : un même enseignant reconnu deux fois dans cette fenêtre ne
-// déclenche qu'un seul pointage (bip silencieux ensuite, le premier a déjà
-// été mis en file).
-inline constexpr uint32_t RECOGNITION_DEBOUNCE_MS = 5 * 60 * 1000;
-
-// Fréquence de surveillance du trigger HW201. La reconnaissance elle-même
-// reste déclenchée une seule fois par front montant.
-inline constexpr uint32_t HW201_POLL_INTERVAL_MS = 10;
-inline constexpr uint32_t HW201_DEBOUNCE_MS = 300;
-
-// Délai conservé pour les opérations faciales lentes et les autres usages
-// éventuels de la boucle de reconnaissance.
-inline constexpr uint32_t RECOGNITION_LOOP_INTERVAL_MS = 10;
-
-// Cadence de synchro du manifest (photos à enrôler + embeddings partagés).
-inline constexpr uint32_t FACE_MANIFEST_SYNC_INTERVAL_MS = 60 * 1000;
-
-inline constexpr char API_KIOSK_MANIFEST_PATH[] = "/api/kiosks/manifest";
-inline constexpr char API_VISAGES_ENROLL_PATH[] = "/api/visages/enroll";
-
-// Token Sanctum du device kiosk_facial, obtenu une fois via
-// POST /api/devices/provision-kiosk (voir hardware/README.md), puis codé en
-// dur ici — même principe que RELAY_API_TOKEN ci-dessus.
-inline constexpr char KIOSK_API_TOKEN[] = "23|CwlY5IkxPX7wNVpnPrQ7QURkOvyeYuWmcFUpKale27f1cee5";
-
-// Fichier SD où le cache local des visages enrôlés (id, nom, embedding) est
-// persisté — survit à un reboot sans réseau (voir face_engine.h).
-inline constexpr char FACE_CACHE_FILE[] = "/faces.jsonl";
