@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../services/admin_api_client.dart';
 import '../../services/api_client.dart';
 import '../../services/offline/offline_cache.dart';
@@ -74,6 +75,45 @@ class _AdminDevicesScreenState extends State<AdminDevicesScreen> {
     }
   }
 
+  Future<void> _rotateToken(Map<String, dynamic> device) async {
+    try {
+      final response = await AdminApiClient.instance.post('/devices/${device['id']}/rotate-token', {});
+      final token = (response as Map<String, dynamic>)['token'] as String;
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Nouveau token'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("Ce token ne sera plus jamais affiché. Copiez-le maintenant et transmettez-le à la borne relais."),
+              const SizedBox(height: 12),
+              SelectableText(token, style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold)),
+            ],
+          ),
+          actions: [
+            Builder(
+              builder: (dialogContext) => TextButton(
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: token));
+                  if (!dialogContext.mounted) return;
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(content: Text('Token copié.')));
+                },
+                child: const Text('Copier'),
+              ),
+            ),
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fermer')),
+          ],
+        ),
+      );
+      await _refresh();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
@@ -98,10 +138,24 @@ class _AdminDevicesScreenState extends State<AdminDevicesScreen> {
               final d = devices[i] as Map<String, dynamic>;
               return Card(
                 child: ListTile(
-                  leading: const Icon(Icons.phone_android, color: AuditronColors.brand700),
-                  title: Text(d['teacher']?['nom'] ?? '—'),
+                  leading: Icon(
+                    d['device_type'] == 'relay_gateway' ? Icons.router : Icons.phone_android,
+                    color: AuditronColors.brand700,
+                  ),
+                  title: Text(d['teacher']?['nom'] ?? d['device_type'] ?? '—'),
                   subtitle: Text('${d['device_type']} · ${d['device_uuid']}'),
-                  trailing: TextButton(onPressed: () => _revoke(d), child: const Text('Révoquer')),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (d['device_type'] == 'relay_gateway')
+                        IconButton(
+                          tooltip: 'Régénérer le token',
+                          icon: const Icon(Icons.vpn_key_outlined, size: 20),
+                          onPressed: () => _rotateToken(d),
+                        ),
+                      TextButton(onPressed: () => _revoke(d), child: const Text('Révoquer')),
+                    ],
+                  ),
                 ),
               );
             },

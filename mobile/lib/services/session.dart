@@ -20,6 +20,7 @@ class Session extends ChangeNotifier {
   final _storage = const FlutterSecureStorage();
   static const _deviceUuidKey = 'auditron_device_uuid_local';
   static const _meCacheKey = 'auditron_me_cache';
+  static const _lastTelKey = 'auditron_last_tel';
 
   bool _loading = true;
   bool _activated = false;
@@ -29,6 +30,8 @@ class Session extends ChangeNotifier {
   bool get activated => _activated;
   Map<String, dynamic>? get me => _me;
   String get nom => _me?['nom'] as String? ?? '';
+
+  Future<String?> get lastTel => _storage.read(key: _lastTelKey);
 
   Future<void> bootstrap() async {
     _activated = await ApiClient.instance.isActivated;
@@ -76,21 +79,20 @@ class Session extends ChangeNotifier {
   /// enseignant admin est activé immédiatement ; sinon une demande est créée
   /// pour l'administration, qui remettra un OTP en personne.
   Future<bool> requestActivation(String tel, String password) async {
+    await _storage.write(key: _lastTelKey, value: tel);
     final uuid = await deviceUuid();
     // Capturé avant toute authentification (§otp-approval) : c'est le seul
     // moyen pour l'admin de pousser l'OTP par notification à ce téléphone une
     // fois la demande validée, plutôt que de le remettre en personne.
     final fcmToken = await PushNotifications.instance.getTokenOnly();
-    final response = await ApiClient.instance.post(
-      '/devices/request-activation',
-      {
-        'tel': tel,
-        'password': password,
-        'device_uuid': uuid,
-        'device_type': 'mobile',
-        if (fcmToken != null) 'fcm_token': fcmToken,
-      },
-    );
+    final response = await ApiClient.instance
+        .post('/devices/request-activation', {
+          'tel': tel,
+          'password': password,
+          'device_uuid': uuid,
+          'device_type': 'mobile',
+          if (fcmToken != null) 'fcm_token': fcmToken,
+        });
 
     final activated = response['activated'] as bool;
     if (activated) {

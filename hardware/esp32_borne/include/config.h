@@ -22,9 +22,11 @@
 #define CAMERA_PCLK_GPIO 13
 #define CAMERA_XCLK_FREQ_HZ 20000000
 
-// QQVGA (160x120) réduit le coût mémoire de la photo de preuve QR.
-#define CAMERA_FRAME_SIZE FRAMESIZE_QQVGA
-#define CAMERA_JPEG_QUALITY 20 // 0 (meilleure qualité) à 63 (plus compressé)
+// QVGA (320x240) suffit pour une photo d'identification, et garde chaque
+// paquet raisonnable (JSON + base64 + file d'attente flash + bande passante
+// de synchro) malgré le capteur 5 Mpx de l'OV5640, capable de bien plus.
+#define CAMERA_FRAME_SIZE FRAMESIZE_QVGA
+#define CAMERA_JPEG_QUALITY 15 // 0 (meilleure qualité) à 63 (plus compressé)
 
 // ---- Nom BLE annoncé, auquel le téléphone de l'enseignant se connecte ----
 // Le WiFi local (AP) a été remplacé par le BLE comme transport téléphone
@@ -41,8 +43,8 @@ inline constexpr char BLE_CHAR_RESULT_UUID[] = "b3a1a102-2c33-4e6f-9a1e-5f6a2e6c
 // ---- WiFi du modem/routeur qui fournit l'accès internet ----
 // Uniquement en client (WIFI_STA) désormais : plus besoin du rôle AP
 // puisque le téléphone parle en BLE, pas en WiFi local.
-inline constexpr char STA_SSID[] = "AC-inGit";
-inline constexpr char STA_PASSWORD[] = "12345678";
+inline constexpr char STA_SSID[] = "Galaxy S22 4D30";
+inline constexpr char STA_PASSWORD[] = "19750000";
 
 // Taille de la file d'attente locale. Bornée : au-delà, on refuse les
 // nouveaux scans côté HTTP local plutôt que de saturer la carte SD. Volontairement
@@ -69,7 +71,7 @@ inline constexpr char API_RELAY_SYNC_PATH[] = "/api/relay/sync";
 // POST /api/devices/provision-relay (voir hardware/README.md), puis codé en
 // dur ici (pas de flux d'activation OTP pour ce device : il n'a pas
 // d'écran ni d'utilisateur pour saisir un code).
-inline constexpr char RELAY_API_TOKEN[] = "6|1WPc9xWbDurVjcjqlf00px5uuKvPZtrRuHYLnW1q92f6b31f";
+inline constexpr char RELAY_API_TOKEN[] = "24|Zf1BeuFmfx3HiFb6JUPmNk6tM8nyR9IFPj2q4CHr2f4570e5";
 
 // <= 100 (limite validée côté API) ; réduit à 5 : avec la photo, un lot de 50
 // paquets pèserait ~1 Mo de JSON et dépasserait le tas ArduinoJson disponible.
@@ -85,4 +87,3 @@ inline constexpr size_t SYNC_BODY_JSON_CAPACITY = SYNC_BATCH_SIZE * PACKET_JSON_
 inline constexpr uint32_t SYNC_INTERVAL_MS = 15000;
 
 inline constexpr char NTP_SERVER[] = "pool.ntp.org";
-

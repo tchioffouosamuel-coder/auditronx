@@ -15,6 +15,10 @@ class PendingAction {
   final String label;
   final DateTime createdAt;
 
+  /// 'POST' (défaut, rétrocompatible avec les files déjà persistées avant
+  /// l'ajout des écrans CRUD admin), 'PUT', 'PATCH' ou 'DELETE'.
+  final String method;
+
   PendingAction({
     required this.id,
     required this.authMode,
@@ -22,6 +26,7 @@ class PendingAction {
     required this.body,
     required this.label,
     required this.createdAt,
+    this.method = 'POST',
   });
 
   Map<String, dynamic> toJson() => {
@@ -31,6 +36,7 @@ class PendingAction {
         'body': body,
         'label': label,
         'createdAt': createdAt.toIso8601String(),
+        'method': method,
       };
 
   factory PendingAction.fromJson(Map<String, dynamic> json) => PendingAction(
@@ -40,5 +46,6 @@ class PendingAction {
         body: Map<String, dynamic>.from(json['body'] as Map),
         label: json['label'] as String,
         createdAt: DateTime.parse(json['createdAt'] as String),
+        method: (json['method'] as String?) ?? 'POST',
       );
 }

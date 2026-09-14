@@ -88,9 +88,17 @@ class SyncEngine extends ChangeNotifier {
   }
 
   Future<void> _replay(PendingAction action) {
-    return switch (action.authMode) {
-      AuthMode.teacher => ApiClient.instance.post(action.path, action.body),
-      AuthMode.admin => AdminApiClient.instance.post(action.path, action.body),
+    // Seul l'espace admin expose actuellement des écrans CRUD PUT/DELETE ;
+    // le mode enseignant reste POST-only (bascules/validations).
+    if (action.authMode == AuthMode.teacher) {
+      return ApiClient.instance.post(action.path, action.body);
+    }
+
+    return switch (action.method) {
+      'PUT' => AdminApiClient.instance.put(action.path, action.body),
+      'PATCH' => AdminApiClient.instance.patch(action.path, action.body),
+      'DELETE' => AdminApiClient.instance.delete(action.path),
+      _ => AdminApiClient.instance.post(action.path, action.body),
     };
   }
 

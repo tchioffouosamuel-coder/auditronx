@@ -23,8 +23,27 @@ class _ActivationScreenState extends State<ActivationScreen> {
   bool _obscurePassword = true;
   String? _error;
 
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedTel();
+  }
+
+  Future<void> _loadSavedTel() async {
+    final tel = await context.read<Session>().lastTel;
+    if (mounted && tel != null) _telController.text = tel;
+  }
+
+  @override
+  void dispose() {
+    _telController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
   Future<void> _submit() async {
-    if (_telController.text.trim().isEmpty || _passwordController.text.isEmpty) return;
+    if (_telController.text.trim().isEmpty || _passwordController.text.isEmpty)
+      return;
 
     setState(() {
       _submitting = true;
@@ -33,12 +52,14 @@ class _ActivationScreenState extends State<ActivationScreen> {
 
     try {
       final activated = await context.read<Session>().requestActivation(
-            _telController.text.trim(),
-            _passwordController.text,
-          );
+        _telController.text.trim(),
+        _passwordController.text,
+      );
 
       if (!activated && mounted) {
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const OtpEntryScreen()));
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const OtpEntryScreen()));
       }
     } on ApiException catch (e) {
       setState(() => _error = e.message);
@@ -63,18 +84,29 @@ class _ActivationScreenState extends State<ActivationScreen> {
               const Text(
                 'Auditron X',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
               const SizedBox(height: 4),
               const Text(
                 "L'assiduité intelligente au service de l'éducation.",
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AuditronColors.gold500, fontSize: 13, fontStyle: FontStyle.italic),
+                style: TextStyle(
+                  color: AuditronColors.gold500,
+                  fontSize: 13,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
               const SizedBox(height: 32),
               Container(
                 padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -96,16 +128,28 @@ class _ActivationScreenState extends State<ActivationScreen> {
                       decoration: InputDecoration(
                         labelText: 'Mot de passe',
                         suffixIcon: IconButton(
-                          icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
-                          tooltip: _obscurePassword ? 'Afficher le mot de passe' : 'Masquer le mot de passe',
-                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                          ),
+                          tooltip: _obscurePassword
+                              ? 'Afficher le mot de passe'
+                              : 'Masquer le mot de passe',
+                          onPressed: () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
                         ),
                       ),
                       onSubmitted: (_) => _submit(),
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: 12),
-                      Text(_error!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center),
+                      Text(
+                        _error!,
+                        style: const TextStyle(color: Colors.red),
+                        textAlign: TextAlign.center,
+                      ),
                     ],
                     const SizedBox(height: 20),
                     FilledButton(
@@ -114,7 +158,10 @@ class _ActivationScreenState extends State<ActivationScreen> {
                           ? const SizedBox(
                               height: 20,
                               width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
                             )
                           : const Text('Se connecter'),
                     ),
@@ -123,17 +170,23 @@ class _ActivationScreenState extends State<ActivationScreen> {
                       onPressed: _submitting
                           ? null
                           : () => Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => const OtpEntryScreen()),
+                              MaterialPageRoute(
+                                builder: (_) => const OtpEntryScreen(),
                               ),
+                            ),
                       child: const Text("J'ai déjà reçu mon code d'activation"),
                     ),
                     TextButton(
                       onPressed: _submitting
                           ? null
                           : () => Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
+                              MaterialPageRoute(
+                                builder: (_) => const AdminLoginScreen(),
                               ),
-                      child: const Text('Se connecter en tant qu\'administrateur'),
+                            ),
+                      child: const Text(
+                        'Se connecter en tant qu\'administrateur',
+                      ),
                     ),
                   ],
                 ),

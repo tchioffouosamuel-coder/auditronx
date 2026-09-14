@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/api_client.dart';
+import '../../services/admin_api_client.dart';
 import '../../services/admin_session.dart';
 import '../../theme.dart';
 
@@ -21,8 +22,21 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   bool _obscurePassword = true;
   String? _error;
 
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedEmail();
+  }
+
+  Future<void> _loadSavedEmail() async {
+    final email = await AdminApiClient.instance.lastEmail;
+    if (mounted && email != null) _emailController.text = email;
+  }
+
   Future<void> _submit() async {
-    if (_emailController.text.trim().isEmpty || _passwordController.text.isEmpty) return;
+    if (_emailController.text.trim().isEmpty ||
+        _passwordController.text.isEmpty)
+      return;
 
     setState(() {
       _submitting = true;
@@ -30,13 +44,24 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     });
 
     try {
-      await context.read<AdminSession>().login(_emailController.text.trim(), _passwordController.text);
+      await context.read<AdminSession>().login(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
+      await AdminApiClient.instance.saveLastEmail(_emailController.text.trim());
       if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 
   @override
@@ -55,18 +80,29 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
               const Text(
                 'Espace administration',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
               const SizedBox(height: 4),
               const Text(
                 'Mêmes identifiants que le tableau de bord.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AuditronColors.gold500, fontSize: 13, fontStyle: FontStyle.italic),
+                style: TextStyle(
+                  color: AuditronColors.gold500,
+                  fontSize: 13,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
               const SizedBox(height: 32),
               Container(
                 padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -82,16 +118,28 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                       decoration: InputDecoration(
                         labelText: 'Mot de passe',
                         suffixIcon: IconButton(
-                          icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
-                          tooltip: _obscurePassword ? 'Afficher le mot de passe' : 'Masquer le mot de passe',
-                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                          ),
+                          tooltip: _obscurePassword
+                              ? 'Afficher le mot de passe'
+                              : 'Masquer le mot de passe',
+                          onPressed: () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
                         ),
                       ),
                       onSubmitted: (_) => _submit(),
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: 12),
-                      Text(_error!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center),
+                      Text(
+                        _error!,
+                        style: const TextStyle(color: Colors.red),
+                        textAlign: TextAlign.center,
+                      ),
                     ],
                     const SizedBox(height: 20),
                     FilledButton(
@@ -100,7 +148,10 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                           ? const SizedBox(
                               height: 20,
                               width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
                             )
                           : const Text('Se connecter'),
                     ),

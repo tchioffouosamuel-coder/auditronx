@@ -7,7 +7,7 @@ import '../../services/offline/pending_actions_queue.dart';
 import '../../services/offline/sync_engine.dart';
 import '../../theme.dart';
 
-const _cacheKey = 'admin_validation';
+const _cacheKeyPrefix = 'admin_validation';
 
 /// Validation des présences (§admin-mobile) — équivalent mobile de
 /// ValidationPage.jsx : calendrier des cours du jour, bascule fait/non_fait.
@@ -20,6 +20,7 @@ class AdminValidationScreen extends StatefulWidget {
 
 class _AdminValidationScreenState extends State<AdminValidationScreen> {
   late Future<List<dynamic>> _future;
+  DateTime _date = DateTime.now();
 
   @override
   void initState() {
@@ -27,10 +28,13 @@ class _AdminValidationScreenState extends State<AdminValidationScreen> {
     _future = _load();
   }
 
+  String get _dateStr => _date.toIso8601String().substring(0, 10);
+  String get _cacheKey => '${_cacheKeyPrefix}_$_dateStr';
+
   Future<List<dynamic>> _load() async {
     final data = await OfflineCache.instance.readThrough(
       _cacheKey,
-      () => AdminApiClient.instance.get('/presences/validation'),
+      () => AdminApiClient.instance.get('/presences/validation', query: {'date': _dateStr}),
     );
     return (data as Map<String, dynamic>)['cours'] as List<dynamic>;
   }
@@ -40,12 +44,26 @@ class _AdminValidationScreenState extends State<AdminValidationScreen> {
     await _future;
   }
 
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(_date.year - 1),
+      lastDate: DateTime(_date.year + 1),
+    );
+    if (picked != null) {
+      setState(() {
+        _date = picked;
+        _future = _load();
+      });
+    }
+  }
+
   /// Bascule optimiste (§offline-sync) : le statut change à l'écran tout de
   /// suite, hors-ligne ou pas — l'appel réseau qui échoue est mis en file
   /// d'attente plutôt que de faire échouer l'action pour l'utilisateur.
   Future<void> _toggle(Map<String, dynamic> cours) async {
-    final date = DateTime.now().toIso8601String().substring(0, 10);
-    final body = {'emploi_du_temps_id': cours['emploi_du_temps_id'], 'date': date};
+    final body = {'emploi_du_temps_id': cours['emploi_du_temps_id'], 'date': _dateStr};
 
     final cachedCours = List<dynamic>.from(await _future);
     final index = cachedCours.indexWhere((c) => c['emploi_du_temps_id'] == cours['emploi_du_temps_id']);
@@ -73,43 +91,59 @@ class _AdminValidationScreenState extends State<AdminValidationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return RefreshIndicator(
-      onRefresh: _refresh,
-      child: FutureBuilder<List<dynamic>>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Text('${snapshot.error}'))]);
-          }
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Row(
+            children: [
+              const Icon(Icons.calendar_today, size: 16, color: AuditronColors.ink500),
+              const SizedBox(width: 8),
+              TextButton(onPressed: _pickDate, child: Text(_dateStr)),
+            ],
+          ),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _refresh,
+            child: FutureBuilder<List<dynamic>>(
+              future: _future,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Text('${snapshot.error}'))]);
+                }
 
-          final cours = snapshot.data ?? [];
-          if (cours.isEmpty) {
-            return ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Text("Aucun cours aujourd'hui."))]);
-          }
+                final cours = snapshot.data ?? [];
+                if (cours.isEmpty) {
+                  return ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Text('Aucun cours ce jour-là.'))]);
+                }
 
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: cours.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 8),
-            itemBuilder: (context, i) {
-              final c = cours[i] as Map<String, dynamic>;
-              final fait = c['status'] == 'fait';
+                return ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: cours.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, i) {
+                    final c = cours[i] as Map<String, dynamic>;
+                    final fait = c['status'] == 'fait';
 
-              return Card(
-                child: ListTile(
-                  leading: Icon(fait ? Icons.check_circle : Icons.radio_button_unchecked, color: fait ? AuditronColors.brand600 : AuditronColors.ink500),
-                  title: Text('${c['discipline']} — ${c['classe']}'),
-                  subtitle: Text('${c['enseignant']} · ${c['heure_debut']}–${c['heure_fin']}'),
-                  onTap: () => _toggle(c),
-                ),
-              );
-            },
-          );
-        },
-      ),
+                    return Card(
+                      child: ListTile(
+                        leading: Icon(fait ? Icons.check_circle : Icons.radio_button_unchecked, color: fait ? AuditronColors.brand600 : AuditronColors.ink500),
+                        title: Text('${c['discipline']} — ${c['classe']}'),
+                        subtitle: Text('${c['enseignant']} · ${c['heure_debut']}–${c['heure_fin']}'),
+                        onTap: () => _toggle(c),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

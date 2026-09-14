@@ -141,12 +141,132 @@ class _CoursDuJourScreenState extends State<CoursDuJourScreen> {
                           'Aucune progression importée pour cette classe et cette matière.',
                         ),
                       ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: () => _openCahierTexteForm(coursDuJour),
+                          icon: const Icon(Icons.edit_note, size: 18),
+                          label: const Text('Cahier de texte'),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               );
             },
           );
         },
+      ),
+    );
+  }
+
+  Future<void> _openCahierTexteForm(Map<String, dynamic> cours) async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _CahierTexteForm(cours: cours),
+    );
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Entrée enregistrée dans le cahier de texte.')),
+      );
+    }
+  }
+}
+
+/// Saisie d'une entrée de cahier de texte par l'enseignant, pour son propre
+/// créneau (§pédagogie) — l'admin n'a plus qu'un rôle de visualisation sur ce
+/// module, la saisie se fait désormais ici, côté mobile.
+class _CahierTexteForm extends StatefulWidget {
+  final Map<String, dynamic> cours;
+
+  const _CahierTexteForm({required this.cours});
+
+  @override
+  State<_CahierTexteForm> createState() => _CahierTexteFormState();
+}
+
+class _CahierTexteFormState extends State<_CahierTexteForm> {
+  final _formKey = GlobalKey<FormState>();
+  final _contenuCtrl = TextEditingController();
+  final _referenceCtrl = TextEditingController();
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _contenuCtrl.dispose();
+    _referenceCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _busy = true);
+    try {
+      await ApiClient.instance.post('/cahier-texte', {
+        'emploi_du_temps_id': widget.cours['emploi_du_temps_id'],
+        'date': DateTime.now().toIso8601String().substring(0, 10),
+        'contenu': _contenuCtrl.text.trim(),
+        if (_referenceCtrl.text.trim().isNotEmpty) 'reference_programme': _referenceCtrl.text.trim(),
+      });
+      if (mounted) Navigator.pop(context, true);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
+      child: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Cahier de texte', style: Theme.of(context).textTheme.titleLarge),
+              Text(
+                '${widget.cours['discipline']} - ${widget.cours['classe']}',
+                style: const TextStyle(color: Colors.black54),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _contenuCtrl,
+                maxLines: 3,
+                decoration: const InputDecoration(labelText: 'Contenu de la séance *'),
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Champ requis' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _referenceCtrl,
+                decoration: const InputDecoration(labelText: 'Référence programme'),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _busy ? null : _submit,
+                  child: _busy
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Enregistrer'),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -52,6 +52,14 @@ dependencies:
   # empêche une montée de version majeure accidentelle vers cette licence.
   flutter_blue_plus: ^1.35.3
 
+  # Parité admin mobile (§admin-mobile) : import/export XLSX, partage de
+  # fichiers (export, bilans PDF, QR généré), graphique du dashboard.
+  file_picker: ^8.1.6
+  share_plus: ^10.1.2
+  path_provider: ^2.1.5
+  fl_chart: ^0.69.2
+  qr_flutter: ^4.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

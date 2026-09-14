@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../services/api_client.dart';
 import '../services/ble_service.dart';
+import '../services/presence_repository.dart';
 import '../theme.dart';
 
 /// Écran de scan générique (§4.1, §4.3, §hardware) : lecture du QR papier fixe
@@ -36,6 +37,7 @@ class ScanScreen extends StatefulWidget {
 class _ScanScreenState extends State<ScanScreen> {
   final _controller = MobileScannerController();
   final _ble = BleService();
+  final _presenceRepository = PresenceRepository();
   bool _processing = false;
 
   Future<void> _handleCode(String code) async {
@@ -49,9 +51,24 @@ class _ScanScreenState extends State<ScanScreen> {
 
     bool success = false;
     try {
-      final teacherToken = await (widget.tokenProvider ?? () => ApiClient.instance.token)();
+      final teacherToken =
+          await (widget.tokenProvider ?? () => ApiClient.instance.token)();
       if (teacherToken == null) {
         _showMessage('Session expirée, merci de vous réactiver.', error: true);
+        return;
+      }
+
+      final isPersonalScan = widget.type == 'scan';
+      final wasDeparture =
+          isPersonalScan && await _presenceRepository.hasOpenArrivalToday();
+      final departureTimeRemaining = isPersonalScan
+          ? await _presenceRepository.departureTimeRemainingToday()
+          : null;
+      if (departureTimeRemaining != null) {
+        _showMessage(
+          'Départ impossible : il reste ${_formatRemainingDuration(departureTimeRemaining)} avant de pouvoir pointer votre sortie.',
+          error: true,
+        );
         return;
       }
 
@@ -67,6 +84,12 @@ class _ScanScreenState extends State<ScanScreen> {
         enseignantId: widget.enseignantId,
         motif: widget.motif,
       );
+
+      if (isPersonalScan) {
+        await _presenceRepository.markSuccessfulScan(
+          wasDeparture: wasDeparture,
+        );
+      }
 
       _showMessage(
         result.photoCaptured
@@ -97,6 +120,20 @@ class _ScanScreenState extends State<ScanScreen> {
         backgroundColor: error ? Colors.red : Colors.green,
       ),
     );
+  }
+
+  String _formatRemainingDuration(Duration duration) {
+    final totalMinutes = (duration.inSeconds / 60).ceil();
+    if (totalMinutes < 1) return 'moins d’une minute';
+    if (totalMinutes == 1) return '1 minute';
+    if (totalMinutes < 60) return '$totalMinutes minutes';
+
+    final hours = totalMinutes ~/ 60;
+    final minutes = totalMinutes % 60;
+    if (minutes == 0) return hours == 1 ? '1 heure' : '$hours heures';
+    return hours == 1
+        ? '1 heure et $minutes minute${minutes > 1 ? 's' : ''}'
+        : '$hours heures et $minutes minute${minutes > 1 ? 's' : ''}';
   }
 
   /// Contrairement au WiFi, Android autorise une app à demander l'activation
@@ -177,7 +214,10 @@ class _QrProcessingOverlay extends StatelessWidget {
               SizedBox(
                 width: 32,
                 height: 32,
-                child: CircularProgressIndicator(strokeWidth: 3, color: AuditronColors.brand600),
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  color: AuditronColors.brand600,
+                ),
               ),
               SizedBox(height: 18),
               Text(

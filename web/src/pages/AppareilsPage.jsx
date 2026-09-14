@@ -102,19 +102,20 @@ function DevicesTable() {
         },
       ]}
       renderActions={(d) =>
-        !d.revoked_at && (
+        (d.device_type === "relay_gateway" || !d.revoked_at) && (
           <div className="flex gap-3">
             {d.device_type === "relay_gateway" && (
               <button
                 onClick={() => rotateToken(d)}
                 className="text-brand-700 hover:text-brand-900"
               >
-                Nouveau token
+                {d.revoked_at ? "Réactiver + nouveau token" : "Nouveau token"}
               </button>
             )}
             <button
               onClick={() => revoke(d)}
               className="text-red-500 hover:text-red-700"
+              hidden={Boolean(d.revoked_at)}
             >
               Révoquer
             </button>

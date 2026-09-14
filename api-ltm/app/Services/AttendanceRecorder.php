@@ -26,7 +26,7 @@ use Illuminate\Validation\ValidationException;
  */
 class AttendanceRecorder
 {
-    private const MINIMUM_PRESENCE_DURATION_MINUTES = 50;
+    private const MINIMUM_PRESENCE_DURATION_MINUTES = 40;
 
     public function __construct(private readonly PushNotificationService $push) {}
 
@@ -136,7 +136,7 @@ class AttendanceRecorder
             if ($heureArrivee->diffInMinutes($timestamp) < self::MINIMUM_PRESENCE_DURATION_MINUTES) {
                 throw ValidationException::withMessages([
                     'attendance' => [
-                        'La sortie ne peut être enregistrée qu\'après 50 minutes de présence.',
+                        'La sortie ne peut être enregistrée qu\'après 40 minutes de présence.',
                     ],
                 ]);
             }

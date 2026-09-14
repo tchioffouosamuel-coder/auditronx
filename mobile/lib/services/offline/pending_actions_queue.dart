@@ -33,6 +33,7 @@ class PendingActionsQueue {
     required String path,
     required Map<String, dynamic> body,
     required String label,
+    String method = 'POST',
   }) async {
     final action = PendingAction(
       id: _uuid.v4(),
@@ -41,6 +42,7 @@ class PendingActionsQueue {
       body: body,
       label: label,
       createdAt: DateTime.now(),
+      method: method,
     );
 
     final actions = await all()..add(action);

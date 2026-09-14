@@ -15,10 +15,17 @@ class AdminApiClient {
 
   final _storage = const FlutterSecureStorage();
   static const _tokenKey = 'auditron_admin_token';
+  static const _lastEmailKey = 'auditron_admin_last_email';
 
   Future<String?> get token => _storage.read(key: _tokenKey);
 
-  Future<void> saveToken(String token) => _storage.write(key: _tokenKey, value: token);
+  Future<String?> get lastEmail => _storage.read(key: _lastEmailKey);
+
+  Future<void> saveLastEmail(String email) =>
+      _storage.write(key: _lastEmailKey, value: email);
+
+  Future<void> saveToken(String token) =>
+      _storage.write(key: _tokenKey, value: token);
 
   Future<void> clearToken() => _storage.delete(key: _tokenKey);
 
@@ -34,28 +41,116 @@ class AdminApiClient {
   }
 
   Future<dynamic> get(String path, {Map<String, String>? query}) async {
-    final uri = Uri.parse('${ApiClient.baseUrl}$path').replace(queryParameters: query);
-    final response = await _guarded(() async => http.get(uri, headers: await _headers()));
+    final uri = Uri.parse(
+      '${ApiClient.baseUrl}$path',
+    ).replace(queryParameters: query);
+    final response = await _guarded(
+      () async => http.get(uri, headers: await _headers()),
+    );
     return _decode(response);
   }
 
   Future<dynamic> post(String path, Map<String, dynamic> body) async {
     final uri = Uri.parse('${ApiClient.baseUrl}$path');
     final response = await _guarded(
-      () async => http.post(uri, headers: await _headers(), body: jsonEncode(body)),
+      () async =>
+          http.post(uri, headers: await _headers(), body: jsonEncode(body)),
     );
     return _decode(response);
   }
 
-  Future<http.Response> _guarded(Future<http.Response> Function() request) async {
+  Future<dynamic> put(String path, Map<String, dynamic> body) async {
+    final uri = Uri.parse('${ApiClient.baseUrl}$path');
+    final response = await _guarded(
+      () async =>
+          http.put(uri, headers: await _headers(), body: jsonEncode(body)),
+    );
+    return _decode(response);
+  }
+
+  Future<dynamic> patch(String path, Map<String, dynamic> body) async {
+    final uri = Uri.parse('${ApiClient.baseUrl}$path');
+    final response = await _guarded(
+      () async =>
+          http.patch(uri, headers: await _headers(), body: jsonEncode(body)),
+    );
+    return _decode(response);
+  }
+
+  Future<dynamic> delete(String path) async {
+    final uri = Uri.parse('${ApiClient.baseUrl}$path');
+    final response = await _guarded(
+      () async => http.delete(uri, headers: await _headers()),
+    );
+    return _decode(response);
+  }
+
+  /// Envoi multipart (photo, import XLSX). [method] : 'POST' (par défaut) ou 'PUT'.
+  Future<dynamic> sendMultipart(
+    String path, {
+    required String fileField,
+    required List<int> fileBytes,
+    required String filename,
+    Map<String, String>? fields,
+    String method = 'POST',
+  }) async {
+    final uri = Uri.parse('${ApiClient.baseUrl}$path');
+    final response = await _guarded(() async {
+      final request = http.MultipartRequest(method, uri);
+      final t = await token;
+      request.headers['Accept'] = 'application/json';
+      if (t != null) request.headers['Authorization'] = 'Bearer $t';
+      request.fields.addAll(fields ?? {});
+      request.files.add(
+        http.MultipartFile.fromBytes(fileField, fileBytes, filename: filename),
+      );
+      final streamed = await request.send();
+      return http.Response.fromStream(streamed);
+    });
+    return _decode(response);
+  }
+
+  /// Récupère une réponse binaire (export XLSX, PDF bilan) sous forme d'octets bruts.
+  Future<List<int>> getBytes(String path, {Map<String, String>? query}) async {
+    final uri = Uri.parse(
+      '${ApiClient.baseUrl}$path',
+    ).replace(queryParameters: query);
+    final response = await _guarded(
+      () async => http.get(uri, headers: await _headers()),
+    );
+    if (response.statusCode == 401) {
+      clearToken();
+      throw ApiException(
+        'Session expirée, merci de vous reconnecter.',
+        response.statusCode,
+      );
+    }
+    if (response.statusCode >= 400) {
+      throw ApiException('Une erreur est survenue.', response.statusCode);
+    }
+    return response.bodyBytes;
+  }
+
+  Future<http.Response> _guarded(
+    Future<http.Response> Function() request,
+  ) async {
     try {
       return await request();
     } on SocketException {
-      throw ApiException("Pas de connexion internet. Vérifiez votre réseau et réessayez.", 0);
+      throw ApiException(
+        "Pas de connexion internet. Vérifiez votre réseau et réessayez.",
+        0,
+      );
     } on HttpException {
-      throw ApiException("Le serveur n'a pas répondu correctement. Réessayez.", 0);
+      throw ApiException(
+        "Le serveur n'a pas répondu correctement. Réessayez.",
+        0,
+      );
     } on http.ClientException {
-      throw ApiException("Impossible de contacter le serveur. Vérifiez votre connexion et réessayez.", 0);
+      throw ApiException(
+        "Impossible de contacter le serveur. Vérifiez votre connexion et réessayez.",
+        0,
+      );
     }
   }
 
@@ -64,14 +159,21 @@ class AdminApiClient {
 
     if (response.statusCode == 401) {
       clearToken();
-      throw ApiException('Session expirée, merci de vous reconnecter.', response.statusCode);
+      throw ApiException(
+        'Session expirée, merci de vous reconnecter.',
+        response.statusCode,
+      );
     }
 
     if (response.statusCode >= 400) {
       final message = body is Map && body['message'] != null
           ? body['message'] as String
           : 'Une erreur est survenue.';
-      throw ApiException(message, response.statusCode, errors: body is Map ? body['errors'] : null);
+      throw ApiException(
+        message,
+        response.statusCode,
+        errors: body is Map ? body['errors'] : null,
+      );
     }
 
     return body;
