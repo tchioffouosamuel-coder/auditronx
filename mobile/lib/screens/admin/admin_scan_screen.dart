@@ -44,21 +44,31 @@ class _AdminSelfScanTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final nom = context.watch<AdminSession>().nom;
+    final session = context.watch<AdminSession>();
+    final hasEnseignant = session.user?['enseignant_id'] != null;
 
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text('Bonjour, $nom', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 24),
-          FilledButton.icon(
-            onPressed: () => _openSelfScan(context),
-            icon: const Icon(Icons.qr_code_scanner),
-            label: const Text('Scanner ma présence'),
-            style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20)),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('Bonjour, ${session.nom}', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 24),
+            if (hasEnseignant)
+              FilledButton.icon(
+                onPressed: () => _openSelfScan(context),
+                icon: const Icon(Icons.qr_code_scanner),
+                label: const Text('Scanner ma présence'),
+                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20)),
+              )
+            else
+              const Text(
+                'Ce compte n\'est lié à aucune fiche enseignant : contactez l\'administration pour pouvoir scanner votre propre présence.',
+                textAlign: TextAlign.center,
+              ),
+          ],
+        ),
       ),
     );
   }

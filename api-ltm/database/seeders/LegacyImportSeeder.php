@@ -283,6 +283,12 @@ class LegacyImportSeeder extends Seeder
     {
         $n = 0;
         foreach (DB::table('legacy_users')->get() as $row) {
+            // Un admin qui a aussi une fiche enseignant (même email) doit
+            // pouvoir scanner sa propre présence (§admin-mobile) : sans ce
+            // lien, RelaySyncController rejette systématiquement ses scans
+            // personnels faute d'Enseignant associé au token User.
+            $enseignant = $row->email ? Enseignant::where('email', $row->email)->first() : null;
+
             User::updateOrCreate(
                 ['email' => $row->email],
                 [
@@ -291,6 +297,7 @@ class LegacyImportSeeder extends Seeder
                     // modèle ne le re-hash pas (Hash::isHashed() le détecte).
                     'password' => $row->password,
                     'accreditation_id' => $accreditationMap[$row->accreditation_id]->id ?? null,
+                    'enseignant_id' => $enseignant?->id,
                     'email_verified_at' => $row->email_verified_at,
                 ]
             );

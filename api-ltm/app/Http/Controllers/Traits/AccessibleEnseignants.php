@@ -44,6 +44,10 @@ trait AccessibleEnseignants
     /** L'utilisateur peut-il agir sur cet enseignant (consultation, procuration, correction) ? */
     protected function peutAccederA(User $user, Enseignant $enseignant): bool
     {
+        if ($user->enseignant_id === $enseignant->id) {
+            return true;
+        }
+
         $accreditation = $user->accreditation;
 
         if (! $accreditation || $accreditation->estAccesTotal()) {
