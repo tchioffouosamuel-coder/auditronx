@@ -131,6 +131,16 @@ class Session extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Modification du mot de passe (§mon-compte) — exige le mot de passe
+  /// actuel, contrairement à la gestion RH par un admin.
+  Future<void> updatePassword(String currentPassword, String newPassword) {
+    return ApiClient.instance.put('/me/password', {
+      'current_password': currentPassword,
+      'password': newPassword,
+      'password_confirmation': newPassword,
+    });
+  }
+
   Future<void> logout() async {
     await ApiClient.instance.clearSession();
     await _storage.delete(key: _meCacheKey);

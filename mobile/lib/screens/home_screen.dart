@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/session.dart';
 import '../widgets/sync_status_banner.dart';
+import 'change_password_screen.dart';
 import 'historique_screen.dart';
 import 'notifications_screen.dart';
 import 'procuration_screen.dart';
@@ -23,6 +24,15 @@ class _HomeScreenState extends State<HomeScreen> {
       MaterialPageRoute(
         builder: (_) =>
             const ScanScreen(title: 'Scanner ma présence', type: 'scan'),
+      ),
+    );
+  }
+
+  void _openChangePassword() {
+    final session = context.read<Session>();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChangePasswordScreen(onSubmit: session.updatePassword),
       ),
     );
   }
@@ -54,7 +64,16 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_tab >= pages.length) _tab = 0;
 
     return Scaffold(
-      appBar: AppBar(title: Text(titles[_tab])),
+      appBar: AppBar(
+        title: Text(titles[_tab]),
+        actions: [
+          IconButton(
+            onPressed: _openChangePassword,
+            icon: const Icon(Icons.lock_outline),
+            tooltip: 'Modifier le mot de passe',
+          ),
+        ],
+      ),
       body: Column(
         children: [
           const SyncStatusBanner(),

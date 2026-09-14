@@ -44,6 +44,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/me/fcm-token', [AuthController::class, 'updateFcmToken']);
+    Route::put('/me/password', [AuthController::class, 'updatePassword']);
 
     Route::post('/otp/generate', [OtpController::class, 'generate']);
     Route::post('/devices/{device}/revoke', [DeviceController::class, 'revoke']);

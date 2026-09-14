@@ -67,4 +67,30 @@ class AuthController extends Controller
 
         return response()->json(['updated' => true]);
     }
+
+    /**
+     * PUT /api/me/password — changement de mot de passe self-service, commun
+     * à l'app mobile (Enseignant) et au backoffice (User). Contrairement à
+     * EnseignantController::update (gestion RH par un tiers), exige le mot de
+     * passe actuel.
+     */
+    public function updatePassword(Request $request)
+    {
+        $data = $request->validate([
+            'current_password' => ['required', 'string'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $principal = $request->user();
+
+        if (! Hash::check($data['current_password'], $principal->password)) {
+            throw ValidationException::withMessages([
+                'current_password' => ['Mot de passe actuel incorrect.'],
+            ]);
+        }
+
+        $principal->update(['password' => $data['password']]);
+
+        return response()->json(['updated' => true]);
+    }
 }

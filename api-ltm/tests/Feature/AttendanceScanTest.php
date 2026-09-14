@@ -143,4 +143,40 @@ class AttendanceScanTest extends TestCase
             'reason' => 'Téléphone en panne',
         ]);
     }
+
+    public function test_un_second_scan_par_procuration_le_meme_jour_pour_le_meme_enseignant_est_refuse(): void
+    {
+        $acteur = Enseignant::factory()->create();
+        $device = Device::factory()->for($acteur, 'teacher')->create(['device_uuid' => 'device-uuid-5']);
+        $token = $acteur->createToken($device->device_uuid)->plainTextToken;
+
+        $cible = Enseignant::factory()->create();
+        $qrPoint = QrPoint::factory()->create();
+        $accessPoint = AccessPoint::factory()->create();
+
+        $payload = [
+            'enseignant_id' => $cible->id,
+            'qr_code' => $qrPoint->code,
+            'bssid' => $accessPoint->bssid,
+            'motif' => 'Téléphone en panne',
+        ];
+
+        $this->withToken($token)->postJson('/api/attendance/admin-proxy', $payload)->assertCreated();
+
+        // Même après le délai minimal entre arrivée/départ, la procuration ne
+        // doit pas pouvoir rejouer une seconde fois pour le même enseignant
+        // le même jour — le départ, s'il reste à faire, revient à l'enseignant.
+        try {
+            Carbon::setTestNow(now()->addMinutes(45));
+            $this->withToken($token)->postJson('/api/attendance/admin-proxy', $payload)->assertUnprocessable();
+        } finally {
+            Carbon::setTestNow();
+        }
+
+        $this->assertDatabaseCount('presences', 1);
+        $this->assertDatabaseHas('presences', [
+            'enseignant_id' => $cible->id,
+            'heure_depart' => null,
+        ]);
+    }
 }

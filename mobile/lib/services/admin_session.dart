@@ -44,6 +44,16 @@ class AdminSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Modification du mot de passe (§mon-compte) — exige le mot de passe
+  /// actuel, contrairement à la gestion RH d'un tiers via AdminPersonnelScreen.
+  Future<void> updatePassword(String currentPassword, String newPassword) {
+    return AdminApiClient.instance.put('/me/password', {
+      'current_password': currentPassword,
+      'password': newPassword,
+      'password_confirmation': newPassword,
+    });
+  }
+
   Future<void> logout() async {
     try {
       await AdminApiClient.instance.post('/logout', {});

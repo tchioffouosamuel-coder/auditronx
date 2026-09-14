@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/admin_session.dart';
 import '../../widgets/sync_status_banner.dart';
+import '../change_password_screen.dart';
 import 'admin_accreditations_screen.dart';
 import 'admin_activation_requests_screen.dart';
 import 'admin_alertes_screen.dart';
@@ -88,6 +89,15 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     await context.read<AdminSession>().logout();
   }
 
+  void _openChangePassword() {
+    final session = context.read<AdminSession>();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChangePasswordScreen(onSubmit: session.updatePassword),
+      ),
+    );
+  }
+
   void _select(int index) {
     Navigator.pop(context);
     setState(() => _index = index);
@@ -108,6 +118,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         appBar: AppBar(
           title: Text(_flatEntries[_index].title),
           actions: [
+            IconButton(onPressed: _openChangePassword, icon: const Icon(Icons.lock_outline), tooltip: 'Modifier le mot de passe'),
             IconButton(onPressed: _logout, icon: const Icon(Icons.logout), tooltip: 'Déconnexion'),
           ],
         ),
@@ -115,7 +126,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         body: Column(
           children: [
             const SyncStatusBanner(),
-            Expanded(child: IndexedStack(index: _index, children: [for (final e in _flatEntries) e.screen])),
+            Expanded(child: _flatEntries[_index].screen),
           ],
         ),
       ),

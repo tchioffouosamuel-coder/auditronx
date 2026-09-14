@@ -54,6 +54,14 @@ class ApiClient {
     return _decode(response);
   }
 
+  Future<dynamic> put(String path, Map<String, dynamic> body) async {
+    final uri = Uri.parse('$baseUrl$path');
+    final response = await _guarded(
+      () async => http.put(uri, headers: await _headers(), body: jsonEncode(body)),
+    );
+    return _decode(response);
+  }
+
   /// Convertit tout échec réseau bas niveau (pas de DNS/internet, timeout,
   /// TLS...) en [ApiException] — sans ça, ces erreurs remontent comme des
   /// exceptions non gérées (SocketException...) que les écrans n'attrapent
