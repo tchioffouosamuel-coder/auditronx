@@ -50,9 +50,15 @@ class DashboardController extends Controller
         ]);
     }
 
+    /**
+     * Regroupement par section normalisée (`LOWER`) : `enseignants.section`
+     * porte des variantes de casse pour une même section ("Industrielle" /
+     * "industrielle"...), un `groupBy('section')` strict les afficherait à
+     * tort comme deux sections distinctes (voir aussi AccessibleEnseignants).
+     */
     private function classementParSection($enseignants, $presencesDuJour, RetardCalculator $retards)
     {
-        return $enseignants->groupBy('section')
+        return $enseignants->groupBy(fn (Enseignant $e) => mb_strtolower((string) $e->section))
             ->map(function ($groupe) use ($presencesDuJour, $retards) {
                 $presents = $groupe->filter(fn (Enseignant $e) => $presencesDuJour->get($e->id)?->heure_arrivee);
                 $retardsCount = $presents->filter(fn (Enseignant $e) => $retards->estEnRetard($e, $presencesDuJour->get($e->id)));

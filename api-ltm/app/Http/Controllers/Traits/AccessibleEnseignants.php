@@ -18,6 +18,13 @@ trait AccessibleEnseignants
     /**
      * Applique le périmètre d'accès de $user à une requête Enseignant.
      *
+     * Comparaison insensible à la casse (`LOWER`) : `enseignants.section` et
+     * `accreditations.groupe` sont saisis à la main depuis des années et
+     * portent des variantes de casse pour une même section ("Industrielle"
+     * / "industrielle", "STT" / "stt"...) — une égalité stricte ne verrait
+     * qu'une partie des enseignants réellement de la section (ex. un censeur
+     * industriel ne voyait que la moitié de son effectif).
+     *
      * Même restreint à une section, $user voit toujours sa propre fiche
      * enseignant liée (`User::enseignant`, §admin-mobile) : sinon un admin à
      * accès restreint ne verrait jamais ses propres scans personnels (journal,
@@ -33,7 +40,7 @@ trait AccessibleEnseignants
         }
 
         return $query->where(function (Builder $q) use ($accreditation, $user) {
-            $q->where('section', $accreditation->groupe);
+            $q->whereRaw('LOWER(section) = LOWER(?)', [$accreditation->groupe]);
 
             if ($user->enseignant_id) {
                 $q->orWhere('id', $user->enseignant_id);
@@ -54,7 +61,7 @@ trait AccessibleEnseignants
             return true;
         }
 
-        return $enseignant->section === $accreditation->groupe;
+        return mb_strtolower((string) $enseignant->section) === mb_strtolower((string) $accreditation->groupe);
     }
 
     /** Query des enseignants accessibles par $user (base pour listes, exports, etc.). */

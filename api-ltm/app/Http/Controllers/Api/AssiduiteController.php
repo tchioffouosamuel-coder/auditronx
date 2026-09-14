@@ -22,7 +22,7 @@ class AssiduiteController extends Controller
         $joursOuvres = $debut->diffInWeekdays($fin) + 1;
 
         $enseignants = $this->enseignantsAccessibles($request->user())
-            ->when($request->query('section'), fn ($q, $v) => $q->where('section', $v))
+            ->when($request->query('section'), fn ($q, $v) => $q->whereRaw('LOWER(section) = LOWER(?)', [$v]))
             ->get();
 
         $presences = Presence::whereBetween('date', [$debut->toDateString(), $fin->toDateString()])
@@ -53,7 +53,7 @@ class AssiduiteController extends Controller
         $date = Carbon::parse($request->query('date', now()));
 
         $enseignants = $this->enseignantsAccessibles($request->user())
-            ->when($request->query('section'), fn ($q, $v) => $q->where('section', $v))
+            ->when($request->query('section'), fn ($q, $v) => $q->whereRaw('LOWER(section) = LOWER(?)', [$v]))
             ->pluck('id');
 
         $presences = Presence::with('enseignant')
