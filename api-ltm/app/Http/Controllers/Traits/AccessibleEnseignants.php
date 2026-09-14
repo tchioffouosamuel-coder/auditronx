@@ -15,7 +15,15 @@ use Illuminate\Database\Eloquent\Builder;
  */
 trait AccessibleEnseignants
 {
-    /** Applique le périmètre d'accès de $user à une requête Enseignant. */
+    /**
+     * Applique le périmètre d'accès de $user à une requête Enseignant.
+     *
+     * Même restreint à une section, $user voit toujours sa propre fiche
+     * enseignant liée (`User::enseignant`, §admin-mobile) : sinon un admin à
+     * accès restreint ne verrait jamais ses propres scans personnels (journal,
+     * stats, etc.) dès que sa fiche n'a pas la section de son accréditation
+     * (cas courant pour le personnel administratif, sans section).
+     */
     protected function scopeAccessiblePar(Builder $query, User $user): Builder
     {
         $accreditation = $user->accreditation;
@@ -24,7 +32,13 @@ trait AccessibleEnseignants
             return $query;
         }
 
-        return $query->where('section', $accreditation->groupe);
+        return $query->where(function (Builder $q) use ($accreditation, $user) {
+            $q->where('section', $accreditation->groupe);
+
+            if ($user->enseignant_id) {
+                $q->orWhere('id', $user->enseignant_id);
+            }
+        });
     }
 
     /** L'utilisateur peut-il agir sur cet enseignant (consultation, procuration, correction) ? */
