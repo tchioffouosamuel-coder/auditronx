@@ -71,7 +71,7 @@ inline constexpr char API_RELAY_SYNC_PATH[] = "/api/relay/sync";
 // POST /api/devices/provision-relay (voir hardware/README.md), puis codé en
 // dur ici (pas de flux d'activation OTP pour ce device : il n'a pas
 // d'écran ni d'utilisateur pour saisir un code).
-inline constexpr char RELAY_API_TOKEN[] = "24|Zf1BeuFmfx3HiFb6JUPmNk6tM8nyR9IFPj2q4CHr2f4570e5";
+inline constexpr char RELAY_API_TOKEN[] = "38|xM2O1uwx0luzCi2QnU8JxWupbxApdlw69iizsOKk9caa724b";
 
 // <= 100 (limite validée côté API) ; réduit à 5 : avec la photo, un lot de 50
 // paquets pèserait ~1 Mo de JSON et dépasserait le tas ArduinoJson disponible.

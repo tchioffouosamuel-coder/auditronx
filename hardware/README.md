@@ -158,12 +158,43 @@ Un serveur HTTP local (`POST /scan`, même contrat JSON) reste actif sur
 l'IP WiFi STA de la borne, uniquement pour du débogage via `curl` — l'app
 mobile n'utilise plus ce chemin.
 
+## Variante sans caméra (`esp32dev_borne/`)
+
+Même logique (BLE + WiFi STA + file persistante + moteur de sync
+`syncWithApi`, suppression uniquement sur confirmation `ok`/`rejected`), mais
+pour un module **ESP32 générique (DevKit)** sans caméra ni PSRAM :
+- Pas de preuve photo : `payload.photo_base64` n'est jamais rempli, et
+  `photo_captured` n'apparaît pas dans la réponse BLE.
+- File persistée sur **LittleFS** (flash interne) plutôt que carte micro-SD
+  (`SD_MMC`) : un ESP32 DevKit générique n'a pas de lecteur SD câblé. Même
+  format de fichier (`queue.jsonl`, une ligne JSON par paquet).
+- Les UUIDs BLE (`BLE_SERVICE_UUID`/`BLE_CHAR_SCAN_UUID`/`BLE_CHAR_RESULT_UUID`)
+  sont identiques à `esp32_borne/` — ne pas les modifier, l'app mobile s'y
+  connecte de la même façon.
+- Chaque module a son propre token `RELAY_API_TOKEN` (provisionné
+  séparément, voir « Mise en service » ci-dessus) : ce ne sont pas
+  interchangeables côté API.
+
+```bash
+cd hardware/esp32dev_borne && pio run -t upload
+```
+
 ## Fichiers
 
 ```
 hardware/
-  esp32_borne/   # firmware unique (BLE + WiFi STA + caméra + file persistante + sync API)
+  esp32_borne/      # firmware ESP32-S3 de référence (BLE + WiFi STA + caméra + file persistante + sync API)
+  esp32_borne_lcm/  # même firmware, pointé sur api-lcm — Lycée Classique de Meiganga
+  esp32_borne_lbm/  # même firmware, pointé sur api-lbm — Lycée Bilingue de Meiganga
+  esp32dev_borne/   # variante ESP32 générique sans caméra (BLE + WiFi STA + file persistante + sync API)
 ```
+
+Les dossiers `esp32_borne_lcm/` et `esp32_borne_lbm/` sont des copies de `esp32_borne/`
+pour chaque établissement, avec dans `include/config.h` : `API_BASE_URL` pointé sur
+l'instance API dédiée, `BLE_DEVICE_NAME` propre à l'établissement, et un
+`RELAY_API_TOKEN`/`STA_SSID`/`STA_PASSWORD` **encore à provisionner** (marqués `TODO`)
+— ces valeurs sont propres à chaque borne physique et ne peuvent pas être copiées
+depuis la référence.
 
 ## Ce qui a changé (WiFi local → BLE)
 
