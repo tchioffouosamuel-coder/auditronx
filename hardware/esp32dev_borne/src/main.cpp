@@ -463,8 +463,27 @@ static void setupBle()
 
     service->start();
 
+    // Un paquet d'advertising BLE "legacy" ne fait que 31 octets : le nom
+    // (BLE_DEVICE_NAME) + l'UUID de service 128-bit ne tiennent pas ensemble
+    // dans ce budget. Laissé au comportement par défaut de NimBLE, l'UUID de
+    // service se retrouve alors relégué dans le scan response — or certains
+    // téléphones bas de gamme (chipsets MediaTek/Unisoc, ex. Transsion
+    // Tecno/Infinix/Itel) appliquent leur filtre BLE natif par UUID
+    // uniquement sur le paquet d'advertising primaire et ignorent le scan
+    // response : la borne devient invisible pour ces téléphones (scan
+    // toujours vide, timeout côté app). On force donc explicitement l'UUID
+    // de service dans le paquet primaire (3 + 18 octets, largement sous 31)
+    // et on relègue le nom — cosmétique, voir config.h — au scan response.
+    NimBLEAdvertisementData advData;
+    advData.setFlags(BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP);
+    advData.setCompleteServices(NimBLEUUID(BLE_SERVICE_UUID));
+
+    NimBLEAdvertisementData scanResponseData;
+    scanResponseData.setName(BLE_DEVICE_NAME);
+
     NimBLEAdvertising *advertising = NimBLEDevice::getAdvertising();
-    advertising->addServiceUUID(BLE_SERVICE_UUID);
+    advertising->setAdvertisementData(advData);
+    advertising->setScanResponseData(scanResponseData);
     advertising->start();
 
     Serial.print("[ble] serveur démarré, adresse=");

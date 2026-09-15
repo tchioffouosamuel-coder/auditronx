@@ -179,15 +179,27 @@ class BleService {
     }
   }
 
+  // Scan sans filtre natif (`withServices`) : sur certains chipsets bas de
+  // gamme (MediaTek/Unisoc, ex. Transsion Tecno/Infinix/Itel — reproduit sur
+  // un Tecno KJ5), le `ScanFilter` natif Android par UUID de service 128-bit
+  // ne matche jamais, même quand la borne annonce bien cet UUID dans le
+  // paquet d'advertising primaire (confirmé via nRF Connect : la borne est
+  // visible en scan non filtré). On filtre donc manuellement les résultats
+  // côté Dart plutôt que de déléguer au filtre natif, qui est cassé sur ces
+  // téléphones.
   Future<BluetoothDevice?> _findBorne() async {
     final completer = Completer<BluetoothDevice?>();
     final sub = FlutterBluePlus.scanResults.listen((results) {
-      if (results.isNotEmpty && !completer.isCompleted) {
-        completer.complete(results.first.device);
+      if (completer.isCompleted) return;
+      for (final result in results) {
+        if (result.advertisementData.serviceUuids.contains(serviceUuid)) {
+          completer.complete(result.device);
+          break;
+        }
       }
     });
 
-    await FlutterBluePlus.startScan(withServices: [serviceUuid], timeout: const Duration(seconds: 8));
+    await FlutterBluePlus.startScan(timeout: const Duration(seconds: 8));
     final device = await completer.future.timeout(const Duration(seconds: 8), onTimeout: () => null);
     await FlutterBluePlus.stopScan();
     await sub.cancel();
