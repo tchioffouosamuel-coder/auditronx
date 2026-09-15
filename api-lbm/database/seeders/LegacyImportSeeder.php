@@ -6,7 +6,6 @@ use App\Models\Accreditation;
 use App\Models\Classe;
 use App\Models\Discipline;
 use App\Models\Enseignant;
-use App\Models\Ferie;
 use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Seeder;
@@ -16,21 +15,24 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
- * Import ponctuel de l'ancien système (RFID + fingerprint, base
- * "u332279927_auditron") vers le schéma QR actuel — à lancer une seule fois :
+ * Import ponctuel des données de référence de l'établissement (accréditations,
+ * classes, disciplines, enseignants, comptes backoffice) depuis l'export SQL
+ * de l'ancienne instance LBM (base "u332279927_auditronx_lbm") — à lancer une
+ * seule fois après la mise en service de cette instance dédiée :
  *
  *   php artisan db:seed --class=LegacyImportSeeder
  *
- * Le dump legacy (database/seeders/legacy/auditron_dump.sql, réencodé et
- * préfixé `legacy_*`) est d'abord chargé tel quel dans des tables de transit,
- * puis transformé ligne à ligne vers les modèles actuels (Accreditation,
- * Classe, Discipline, Enseignant, Ferie, User) — les tables de transit sont
- * supprimées à la fin, qu'il s'agisse d'un succès ou d'une erreur.
+ * Le dump (database/seeders/legacy/auditron_lbm_dump.sql) est d'abord chargé
+ * tel quel dans des tables de transit, puis transformé ligne à ligne vers les
+ * modèles actuels — les tables de transit sont supprimées à la fin, qu'il
+ * s'agisse d'un succès ou d'une erreur.
  *
- * Champs de l'ancien système sans équivalent dans le schéma QR (rfid_uid,
- * anciennete, prise_de_service, dob, pob, region_or, dept_or, arr_or,
- * sit_mat, `section` des classes, `description`/`isTP` des disciplines) sont
- * volontairement ignorés : ce système n'en a pas l'usage.
+ * Volontairement HORS scope (voir hardware/README.md et README.md racine
+ * pour le découpage multi-établissement) : l'historique opérationnel
+ * (emploi_du_temps, presences, signalements, cours_validation, devices,
+ * cache, sessions) de l'ancienne instance — propre à l'ancien hébergement et
+ * aux anciens appareils, sans valeur pour une instance neuve. Si un import
+ * complet de l'historique est souhaité, il faudra un seeder dédié.
  *
  * Idempotent : rejouable sans dupliquer (updateOrCreate partout, clé sur
  * l'identifiant "naturel" le plus fiable — matricule/tel/email selon le cas).
@@ -45,14 +47,12 @@ class LegacyImportSeeder extends Seeder
             $accreditationMap = $this->importAccreditations();
             $classesCount = $this->importClasses();
             $disciplinesCount = $this->importDisciplines();
-            $feriesCount = $this->importFeries();
             $enseignantsCount = $this->importEnseignants();
             $usersCount = $this->importUsers($accreditationMap);
 
-            $this->command?->info("Accréditations : ".count($accreditationMap));
+            $this->command?->info('Accréditations : '.count($accreditationMap));
             $this->command?->info("Classes : {$classesCount}");
             $this->command?->info("Disciplines : {$disciplinesCount}");
-            $this->command?->info("Fériés : {$feriesCount}");
             $this->command?->info("Enseignants : {$enseignantsCount} (mot de passe par défaut ChangeMe123! pour ceux sans compte préexistant)");
             $this->command?->info("Comptes backoffice (users) : {$usersCount} (mots de passe d'origine conservés)");
         } finally {
@@ -64,7 +64,7 @@ class LegacyImportSeeder extends Seeder
     {
         $this->createLegacyTables();
 
-        $path = __DIR__.'/legacy/auditron_dump.sql';
+        $path = __DIR__.'/legacy/auditron_lbm_dump.sql';
         $sql = file_get_contents($path);
 
         // Le fichier mysqldump ne contient que du DML standard pour les INSERT
@@ -143,15 +143,6 @@ class LegacyImportSeeder extends Seeder
             $table->integer('poste')->default(1);
         });
 
-        Schema::create('legacy_feries', function (Blueprint $table) {
-            $table->unsignedBigInteger('id')->primary();
-            $table->date('date');
-            $table->string('libelle');
-            $table->text('description')->nullable();
-            $table->timestamp('created_at')->nullable();
-            $table->timestamp('updated_at')->nullable();
-        });
-
         Schema::create('legacy_users', function (Blueprint $table) {
             $table->unsignedBigInteger('id')->primary();
             $table->string('name');
@@ -168,7 +159,7 @@ class LegacyImportSeeder extends Seeder
 
     private function dropLegacyTables(): void
     {
-        foreach (['accreditations', 'classes', 'disciplines', 'enseignants', 'feries', 'users'] as $table) {
+        foreach (['accreditations', 'classes', 'disciplines', 'enseignants', 'users'] as $table) {
             Schema::dropIfExists("legacy_{$table}");
         }
     }
@@ -230,20 +221,6 @@ class LegacyImportSeeder extends Seeder
         return $n;
     }
 
-    private function importFeries(): int
-    {
-        $n = 0;
-        foreach (DB::table('legacy_feries')->get() as $row) {
-            Ferie::updateOrCreate(
-                ['date' => $row->date, 'libelle' => $row->libelle],
-                ['description' => $row->description]
-            );
-            $n++;
-        }
-
-        return $n;
-    }
-
     private function importEnseignants(): int
     {
         $usedMatricules = Enseignant::pluck('matricule')->flip()->all();
@@ -265,10 +242,11 @@ class LegacyImportSeeder extends Seeder
                     'section' => $row->section,
                     'grade' => $row->grade,
                     'tel' => $tel,
-                    'poste' => (string) $row->poste,
-                    // Ancien système : authentification par carte RFID, pas de mot de
-                    // passe. Le mobile Auditron X exige tel+password : mot de passe
-                    // par défaut à faire changer par l'enseignant à sa première connexion.
+                    'poste' => (int) $row->poste,
+                    // Ancien système : authentification par carte RFID/mobile,
+                    // pas de mot de passe applicable au nouveau flux mobile
+                    // (tel+password). Mot de passe par défaut à faire changer
+                    // par l'enseignant à sa première connexion.
                     'password' => Hash::make('ChangeMe123!'),
                 ]
             );
