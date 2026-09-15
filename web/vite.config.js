@@ -8,7 +8,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://api-lbm.auditronx.com/public',
+        target: 'https://api-lcm.auditronx.com/public',
         changeOrigin: true,
       },
     },

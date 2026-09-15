@@ -35,7 +35,7 @@ CREATE TABLE `accreditations` (
   `updated_at` timestamp NULL DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `accreditations` (`id`, `nom`, `groupe`, `created_at`, `updated_at`) VALUES
+INSERT INTO `legacy_accreditations` (`id`, `nom`, `groupe`, `created_at`, `updated_at`) VALUES
 (1, 'Chef d établissement', 'Administration', NULL, NULL),
 (2, 'Censeur Francophone', 'francophone', NULL, NULL),
 (3, 'Censeur Anglophone', 'anglophone', NULL, NULL),
@@ -61,7 +61,7 @@ CREATE TABLE `classes` (
   `updated_at` timestamp NULL DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `classes` (`id`, `nom`, `code`, `niveau`, `specialite`, `effectif`, `section`, `created_at`, `updated_at`) VALUES
+INSERT INTO `legacy_classes` (`id`, `nom`, `code`, `niveau`, `specialite`, `effectif`, `section`, `created_at`, `updated_at`) VALUES
 (1, 'Form 1', NULL, '1', NULL, 0, 'Anglophone', NULL, NULL),
 (2, 'Form 1 Bil', NULL, '1', NULL, 0, 'Anglophone', NULL, NULL),
 (3, 'Form 2', NULL, '2', NULL, 0, 'Anglophone', NULL, NULL),
@@ -133,7 +133,7 @@ CREATE TABLE `disciplines` (
   `isTP` int(11) NOT NULL DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `disciplines` (`id`, `nom`, `code`, `coefficient`, `description`, `departement`, `created_at`, `updated_at`, `isTP`) VALUES
+INSERT INTO `legacy_disciplines` (`id`, `nom`, `code`, `coefficient`, `description`, `departement`, `created_at`, `updated_at`, `isTP`) VALUES
 (1, 'Biology', NULL, 1.00, NULL, 'anglophone', NULL, NULL, 0),
 (2, 'H. Biology', NULL, 1.00, NULL, 'anglophone', NULL, NULL, 0),
 (3, 'Chemistry', NULL, 1.00, NULL, 'anglophone', NULL, NULL, 1),
@@ -215,7 +215,7 @@ CREATE TABLE `enseignants` (
   `poste` int(11) NOT NULL DEFAULT 1
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `enseignants` (`id`, `nom`, `email`, `rfid_uid`, `created_at`, `updated_at`, `fonction`, `specialite`, `matricule`, `section`, `grade`, `anciennete`, `prise_de_service`, `dob`, `pob`, `region_or`, `dept_or`, `arr_or`, `prise_de_service2`, `tel`, `sit_mat`, `poste`) VALUES
+INSERT INTO `legacy_enseignants` (`id`, `nom`, `email`, `rfid_uid`, `created_at`, `updated_at`, `fonction`, `specialite`, `matricule`, `section`, `grade`, `anciennete`, `prise_de_service`, `dob`, `pob`, `region_or`, `dept_or`, `arr_or`, `prise_de_service2`, `tel`, `sit_mat`, `poste`) VALUES
 (416, 'KILOH MARCEL JAB', 'kiloh.marcel.jab@auditron.lbm', '2', '2025-11-07 15:17:17', '2025-11-07 15:28:42', 'CENSEUR', 'CHEMISTRY', '636270-S', 'administration', 'PLEG', NULL, '2015-02-08', '1982-02-09', 'NKAMBE', 'Nord-Ouest', 'Donga-Mantung', 'Nkambe', '2007-04-03', '675344726/698431462', 'Marié(e)', 1),
 (417, 'ABBA ETIENNE', 'abba.etienne@auditron.lbm', '3', '2025-11-07 15:17:17', '2025-11-07 15:28:42', 'Surveillant Général', 'GEOGRAPHIE', '782467-A', 'administration', 'PCEG', NULL, '2016-04-08', '1989-04-10', 'DARNA', 'Extreme-Nord', 'Mayo-Danay', 'Kaï-Kaï', '2013-04-02', '698038046', 'Marié(e)', 1),
 (418, 'ALANG UKAH JOSEPH', 'jukalang@yahoo.com', '4', '2025-11-07 15:17:17', '2025-11-07 15:28:42', 'CENCEUR', 'ECONOMICS', 'X-040152', 'administration', 'PLETP', NULL, '2025-04-12', '1979-11-03', 'ESU', 'Nord-Ouest', 'Menchum', 'Fungom', '2016-04-03', '677492487', 'Marié(e)', 1),
@@ -333,7 +333,7 @@ CREATE TABLE `users` (
   `tel` varchar(20) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `users` (`id`, `name`, `email`, `accreditation_id`, `email_verified_at`, `password`, `remember_token`, `created_at`, `updated_at`, `tel`) VALUES
+INSERT INTO `legacy_users` (`id`, `name`, `email`, `accreditation_id`, `email_verified_at`, `password`, `remember_token`, `created_at`, `updated_at`, `tel`) VALUES
 (1, 'Samuel TCHIOFFOUO TEDONGMEZA', 'artiscodec@gmail.com', 1, NULL, '$2y$12$N6u6Y7tBywSiMo6trLGSX.wFrj.scXZIZI4/P2oGcN2MUfXSLJOke', 'qiuOkR5FPQgSVLhoxgZFJZUESGrQoUzrQ4eOEx6JTRFhz3J90F8nzSiQ1Sn7', '2025-11-07 14:15:53', '2025-11-07 14:15:53', NULL),
 (2, 'TCHIOFFOUO JEAN', 'tchiofjean@yahoo.fr', 1, NULL, '$2y$12$GTpFIVgex5EphR3P7uwbHusFnHXPv6CVyfQFBClEe7qe0xXiKhHLK', 'vKvMdctBtcPZ6fhaNKNaAMvevbJ3EaXrbMW6fKQpiwY7laWYYddQrrInx5YW', '2025-11-07 14:49:12', '2025-11-07 14:49:12', NULL),
 (3, 'MOHAMADOU TOUKOUR', 'proviseur@lbm.aux', 1, NULL, '$2y$12$N7S225WbDPFNQereQdyY6u9VQKm0qYxA/OLbhKoG4nBPz9c2R78PW', 'SpTD8aw4BJ430wxljduP8VoHxac5yaO4sy6bNmGrkUHzhaBPAcIccjD3Rwj3', '2025-11-07 15:40:45', '2025-11-07 15:40:45', NULL),

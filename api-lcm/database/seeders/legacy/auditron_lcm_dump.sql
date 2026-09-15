@@ -35,7 +35,7 @@ CREATE TABLE `accreditations` (
   `updated_at` timestamp NULL DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `accreditations` (`id`, `nom`, `groupe`, `created_at`, `updated_at`) VALUES
+INSERT INTO `legacy_accreditations` (`id`, `nom`, `groupe`, `created_at`, `updated_at`) VALUES
 (1, 'Chef d établissement', 'Administration', NULL, NULL),
 (2, 'Censeur', 'générale', NULL, NULL),
 (3, 'Service des Sports', 'Service des sports', NULL, NULL),
@@ -59,7 +59,7 @@ CREATE TABLE `classes` (
   `updated_at` timestamp NULL DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `classes` (`id`, `nom`, `code`, `niveau`, `specialite`, `effectif`, `section`, `created_at`, `updated_at`) VALUES
+INSERT INTO `legacy_classes` (`id`, `nom`, `code`, `niveau`, `specialite`, `effectif`, `section`, `created_at`, `updated_at`) VALUES
 (62, '6e A', '6A', '6ème', 'Général', 0, NULL, '2025-10-18 01:07:48', '2025-10-18 01:07:48'),
 (63, '6e B', '6B', '6ème', 'Général', 0, NULL, '2025-10-18 01:07:48', '2025-10-18 01:07:48'),
 (64, '6e BIL', '6BIL', '6ème', 'Bilingue', 0, NULL, '2025-10-18 01:07:48', '2025-10-18 01:07:48'),
@@ -135,7 +135,7 @@ CREATE TABLE `disciplines` (
   `isTP` int(11) NOT NULL DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `disciplines` (`id`, `nom`, `code`, `coefficient`, `description`, `departement`, `created_at`, `updated_at`, `isTP`) VALUES
+INSERT INTO `legacy_disciplines` (`id`, `nom`, `code`, `coefficient`, `description`, `departement`, `created_at`, `updated_at`, `isTP`) VALUES
 (168, 'FRANÇAIS', 'FRA', 5.00, 'Langue et littérature française', 'Lettres', '2025-10-18 01:14:27', '2025-10-18 01:14:27', 0),
 (169, 'ANGLAIS', 'ANG', 3.00, 'Langue anglaise', 'Langues', '2025-10-18 01:14:27', '2025-10-18 01:14:27', 0),
 (170, 'MATHS', 'MAT', 5.00, 'Mathématiques', 'Sciences Exactes', '2025-10-18 01:14:27', '2025-10-18 01:14:27', 0),
@@ -194,7 +194,7 @@ CREATE TABLE `enseignants` (
   `poste` int(11) NOT NULL DEFAULT 1
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `enseignants` (`id`, `nom`, `email`, `rfid_uid`, `created_at`, `updated_at`, `fonction`, `specialite`, `matricule`, `section`, `grade`, `anciennete`, `prise_de_service`, `dob`, `pob`, `region_or`, `dept_or`, `arr_or`, `prise_de_service2`, `tel`, `sit_mat`, `poste`) VALUES
+INSERT INTO `legacy_enseignants` (`id`, `nom`, `email`, `rfid_uid`, `created_at`, `updated_at`, `fonction`, `specialite`, `matricule`, `section`, `grade`, `anciennete`, `prise_de_service`, `dob`, `pob`, `region_or`, `dept_or`, `arr_or`, `prise_de_service2`, `tel`, `sit_mat`, `poste`) VALUES
 (321, 'BOUBA BORIS', 'b.boris@lycee.cm', '3', '2025-10-18 01:07:48', '2025-10-18 01:07:48', 'Censeur', NULL, '0748431T', 'Administration', 'PLEG', NULL, '2011-01-03', NULL, NULL, NULL, NULL, NULL, '2017-09-10', NULL, NULL, 2),
 (322, 'MAIGARI MBARANDI', 'm.mbarandi@lycee.cm', '4', '2025-10-18 01:07:48', '2025-10-18 01:07:48', 'Censeur', NULL, '0727609A', 'Administration', 'PLEG', NULL, '2011-01-03', NULL, NULL, NULL, NULL, NULL, '2018-12-11', NULL, NULL, 2),
 (323, 'HOHI CLARISSE MIREILLE', 'h.clarisse@lycee.cm', '5', '2025-10-18 01:07:48', '2025-10-18 01:07:48', 'Censeur', NULL, '0653802H', 'Administration', 'PLEG', NULL, '2008-04-17', NULL, NULL, NULL, NULL, NULL, '2017-09-12', NULL, NULL, 2),
@@ -316,7 +316,7 @@ CREATE TABLE `users` (
   `tel` varchar(20) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `users` (`id`, `name`, `email`, `accreditation_id`, `email_verified_at`, `password`, `remember_token`, `created_at`, `updated_at`, `tel`) VALUES
+INSERT INTO `legacy_users` (`id`, `name`, `email`, `accreditation_id`, `email_verified_at`, `password`, `remember_token`, `created_at`, `updated_at`, `tel`) VALUES
 (1, 'SuperAdmin', 'artiscodec@gmail.com', 1, NULL, '$2y$12$xydyQBn7i17mVBOVCvFInOXciODghNHJO4s9HDiE/YhTvJVTpZypa', NULL, NULL, NULL, NULL),
 (2, 'Superman', 'tchiofjean1@yahoo.fr', 1, NULL, '$2y$12$xydyQBn7i17mVBOVCvFInOXciODghNHJO4s9HDiE/YhTvJVTpZypa', 'SgsM5RuWiXOTZzVhNETtwHpivZCzPurQVP46JBgXBqlgZvN4Xwh9fTbCDvI2', NULL, '2025-11-08 04:05:34', NULL),
 (3, 'BOUBA BORIS', 'b.boris@lycee.cm', 2, NULL, '$2y$12$X3e2DOCJIENnKr6REZynQ.Ik6lvid6letjLqlVSagBRoNwD6PclMa', NULL, '2025-11-05 05:10:47', '2025-11-05 05:10:47', NULL),
