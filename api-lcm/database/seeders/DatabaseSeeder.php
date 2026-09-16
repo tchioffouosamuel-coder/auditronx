@@ -48,22 +48,10 @@ class DatabaseSeeder extends Seeder
             ['label' => 'Point de test']
         );
 
-    
 
-        // Device relay_gateway (§hardware) : provisionne la borne ESP32 pour
-        // tester /api/relay/sync sans passer par l'endpoint HTTP d'admin.
-        $relayDevice = Device::updateOrCreate(
-            ['device_uuid' => 'esp32-borne-seed'],
-            ['device_type' => 'relay_gateway', 'activated_at' => now()]
-        );
-        $relayDevice->tokens()->delete();
-        $relayToken = $relayDevice->createToken('esp32-borne-seed')->plainTextToken;
 
         $this->command?->info('--- Comptes créés (mots de passe à changer) ---');
         $this->command?->info("Backoffice : {$admin->email} / ChangeMe123!");
-        $this->command?->info("Enseignant admin : {$enseignant->tel} / ChangeMe123!");
         $this->command?->info("QR point de test : {$qrPoint->code}");
-        $this->command?->info("Access point de test (bssid) : {$accessPoint->bssid}");
-        $this->command?->info("Token device relais (esp32_borne/config.h RELAY_API_TOKEN) : {$relayToken}");
     }
 }
