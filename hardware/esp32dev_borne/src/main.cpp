@@ -40,6 +40,11 @@ static WebServer server(80);
 static uint32_t g_local_id_counter = 0;
 static bool g_time_ready = false;
 
+static void beepBuzzer()
+{
+    tone(BUZZER_GPIO, 2400, 100);
+}
+
 static void makeLocalId(char *out, size_t outLen)
 {
     snprintf(out, outLen, "borne-%lu-%lu", (unsigned long)millis(), (unsigned long)(++g_local_id_counter));
@@ -602,6 +607,7 @@ static void processPendingBleScan()
         g_pendingScan = false;
     }
 
+    beepBuzzer();
     String photoBase64 = encodePhotoBase64(photoBytes);
     String response = processScan(rawJson, photoBase64);
     if (g_bleResultChar)
@@ -729,6 +735,9 @@ void setup()
     WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
 
     Serial.begin(115200);
+
+    pinMode(BUZZER_GPIO, OUTPUT);
+    digitalWrite(BUZZER_GPIO, LOW);
 
     setupStorage();
     Serial.printf("[queue] %u paquet(s) en attente au démarrage\n", (unsigned)queueLength());

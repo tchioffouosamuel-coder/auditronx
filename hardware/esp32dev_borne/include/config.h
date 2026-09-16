@@ -66,6 +66,9 @@ inline constexpr uint8_t SD_MISO_GPIO = 19;
 inline constexpr uint8_t SD_MOSI_GPIO = 23;
 inline constexpr uint8_t SD_CS_GPIO = 5;
 
+// Buzzer actif : bip court à la réception complète d'un scan BLE.
+inline constexpr uint8_t BUZZER_GPIO = 25;
+
 // ---- API distante ----
 inline constexpr char API_BASE_URL[] = "https://api-ltm.auditronx.com/public";
 inline constexpr char API_RELAY_SYNC_PATH[] = "/api/relay/sync";
