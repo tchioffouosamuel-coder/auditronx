@@ -19,13 +19,11 @@ inline constexpr char BLE_CHAR_RESULT_UUID[] = "b3a1a102-2c33-4e6f-9a1e-5f6a2e6c
 // inline constexpr char STA_PASSWORD[] = "19750000";
 inline constexpr char STA_SSID[] = "AC-inGit";
 inline constexpr char STA_PASSWORD[] = "12345678";
-// Taille de la file d'attente locale. Bornée : au-delà, on refuse les
-// nouveaux scans côté HTTP local plutôt que de saturer la flash. Avec le
-// selfie envoyé par le téléphone (§anti-procuration, voir BLE_TAG_* et
-// MAX_PHOTO_BYTES ci-dessous), chaque paquet pèse maintenant ~3-6 Ko au lieu
-// de quelques centaines d'octets — réduit en conséquence pour tenir dans la
-// partition LittleFS (~640 Ko, voir huge_app.csv/platformio.ini), avec marge.
-inline constexpr size_t MAX_QUEUE_SIZE = 70;
+// Limite de sécurité de la file. La carte SD permet de conserver beaucoup
+// plus de scans hors ligne ; LittleFS conserve une limite basse lorsqu'elle
+// sert de secours.
+inline constexpr size_t MAX_QUEUE_SIZE_SD = 2000;
+inline constexpr size_t MAX_QUEUE_SIZE_LITTLEFS = 70;
 
 // ---- Protocole photo BLE (§anti-procuration) ----
 // `scanChar` reçoit désormais plusieurs écritures GATT préfixées d'un octet
@@ -56,12 +54,17 @@ inline constexpr size_t MAX_JSON_CHUNK_BYTES = 4 * 1024;
 // incompatible de l'app, pas un objectif de taille normal.
 inline constexpr size_t MAX_PHOTO_BYTES = 24 * 1024;
 
-// Fichier (LittleFS) où la file est persistée (survit à une coupure secteur :
-// tant qu'un paquet n'a pas été confirmé par l'API, il reste sur la borne).
-// Pas de carte micro-SD sur un ESP32 DevKit générique — LittleFS (flash
-// interne) remplace SD_MMC ici, même logique d'écriture/relecture ligne par
-// ligne (voir esp32_borne/src/main.cpp).
+// Fichier où la file est persistée (survit à une coupure secteur : tant qu'un
+// paquet n'a pas été confirmé par l'API, il reste sur la borne). La carte
+// micro-SD est utilisée si elle est détectée ; LittleFS sert de secours.
 inline constexpr char QUEUE_FILE[] = "/queue.jsonl";
+
+// Lecteur micro-SD SPI pour ESP32 DevKit classique. Adapter ces broches au
+// module SD utilisé ; ce sont les broches VSPI usuelles (SCK/MISO/MOSI/CS).
+inline constexpr uint8_t SD_SCK_GPIO = 18;
+inline constexpr uint8_t SD_MISO_GPIO = 19;
+inline constexpr uint8_t SD_MOSI_GPIO = 23;
+inline constexpr uint8_t SD_CS_GPIO = 5;
 
 // ---- API distante ----
 inline constexpr char API_BASE_URL[] = "https://api-ltm.auditronx.com/public";

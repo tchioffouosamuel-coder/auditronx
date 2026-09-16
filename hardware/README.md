@@ -92,6 +92,27 @@ fonctionne.
 
 ## Mise en service
 
+### ESP32 DevKit avec lecteur micro-SD
+
+La cible `hardware/esp32dev_borne` utilise un lecteur micro-SD en SPI pour
+prolonger le fonctionnement hors ligne. Formater la carte en FAT32 et câbler
+le lecteur ainsi par défaut :
+
+| Lecteur SD | ESP32 DevKit |
+| --- | --- |
+| SCK | GPIO18 |
+| MISO | GPIO19 |
+| MOSI | GPIO23 |
+| CS | GPIO5 |
+| VCC | 3.3 V |
+| GND | GND |
+
+Les broches sont modifiables dans
+`hardware/esp32dev_borne/include/config.h`. Au démarrage, le firmware affiche
+`[sd] carte détectée, file SD active` si la carte est montée ; sinon il garde
+LittleFS comme stockage de secours. Une file LittleFS existante est transférée
+automatiquement vers une carte SD encore vide.
+
 1. **Provisionner la borne** (une fois, authentifié en tant qu'admin) :
    ```bash
    curl -X POST https://votre-domaine/api/devices/provision-relay \

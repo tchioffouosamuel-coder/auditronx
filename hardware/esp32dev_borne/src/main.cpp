@@ -6,7 +6,8 @@
  *
  * Le téléphone parle en BLE (pas WiFi local : négociation trop lente, voir
  * §hardware) — reçoit le pointage via une caractéristique BLE, l'écrit
- * immédiatement sur la flash (LittleFS) avant toute tentative réseau, puis un
+ * immédiatement sur la micro-SD si elle est disponible (LittleFS en secours)
+ * avant toute tentative réseau, puis un
  * moteur de pull périodique le pousse vers l'API dès qu'internet est
  * disponible. Un paquet n'est retiré de la file locale que sur confirmation
  * explicite de l'API (`ok` ou `rejected`) — jamais avant, pour ne rien perdre
@@ -19,6 +20,8 @@
 #include <WiFiClientSecure.h>
 #include <FS.h>
 #include <LittleFS.h>
+#include <SD.h>
+#include <SPI.h>
 #include <ArduinoJson.h>
 #include <time.h>
 #include <vector>
@@ -43,7 +46,8 @@ static void makeLocalId(char *out, size_t outLen)
 }
 
 // ---------------------------------------------------------------------------
-// Persistance de la file (LittleFS, une ligne JSON par paquet en attente)
+// Persistance de la file (micro-SD si disponible, LittleFS sinon ; une ligne
+// JSON par paquet en attente).
 // ---------------------------------------------------------------------------
 
 // La synchro tourne dans sa propre tâche FreeRTOS (voir setup()/syncTask) pour
@@ -51,6 +55,13 @@ static void makeLocalId(char *out, size_t outLen)
 // mbedTLS — elle peut donc s'exécuter en parallèle de handleScan() (tâche
 // loop()/webserver), qui touche le même fichier sur la flash.
 static SemaphoreHandle_t g_fsMutex = nullptr;
+static FS *g_queueFs = &LittleFS;
+static bool g_sd_ready = false;
+
+static size_t queueCapacity()
+{
+    return g_sd_ready ? MAX_QUEUE_SIZE_SD : MAX_QUEUE_SIZE_LITTLEFS;
+}
 
 struct MutexGuard
 {
@@ -70,9 +81,9 @@ struct MutexGuard
 static size_t queueLength()
 {
     MutexGuard guard(g_fsMutex);
-    if (!LittleFS.exists(QUEUE_FILE))
+    if (!g_queueFs->exists(QUEUE_FILE))
         return 0;
-    File f = LittleFS.open(QUEUE_FILE, "r");
+    File f = g_queueFs->open(QUEUE_FILE, "r");
     if (!f)
         return 0;
     size_t n = 0;
@@ -90,12 +101,7 @@ static size_t queueLength()
 static void appendToQueue(const String &json)
 {
     MutexGuard guard(g_fsMutex);
-    // create=true : contrairement à SD_MMC.open(), LittleFS.open() ne crée
-    // PAS le fichier par défaut en mode "a"/"w" (3ᵉ paramètre `create` par
-    // défaut à false côté Arduino-ESP32) — sans lui, le premier appel (fichier
-    // encore inexistant) échoue avec "does not exist, no permits for
-    // creation".
-    File f = LittleFS.open(QUEUE_FILE, "a", true);
+    File f = g_queueFs->open(QUEUE_FILE, "a", true);
     if (!f)
     {
         Serial.println("[queue] échec ouverture flash en écriture");
@@ -114,10 +120,10 @@ struct QueuedPacket
 static bool readQueueBatch(std::vector<QueuedPacket> &out)
 {
     MutexGuard guard(g_fsMutex);
-    if (!LittleFS.exists(QUEUE_FILE))
+    if (!g_queueFs->exists(QUEUE_FILE))
         return true;
 
-    File f = LittleFS.open(QUEUE_FILE, "r");
+    File f = g_queueFs->open(QUEUE_FILE, "r");
     if (!f)
         return false;
 
@@ -147,10 +153,10 @@ static void removeFromQueue(const std::vector<String> &idsToRemove)
     if (idsToRemove.empty())
         return;
     MutexGuard guard(g_fsMutex);
-    if (!LittleFS.exists(QUEUE_FILE))
+    if (!g_queueFs->exists(QUEUE_FILE))
         return;
 
-    File in = LittleFS.open(QUEUE_FILE, "r");
+    File in = g_queueFs->open(QUEUE_FILE, "r");
     if (!in)
         return;
 
@@ -189,11 +195,55 @@ static void removeFromQueue(const std::vector<String> &idsToRemove)
     }
     in.close();
 
-    File out = LittleFS.open(QUEUE_FILE, "w");
+    File out = g_queueFs->open(QUEUE_FILE, "w");
     if (!out)
         return;
     out.print(kept);
     out.close();
+}
+
+static void setupStorage()
+{
+    if (!LittleFS.begin(true))
+        Serial.println("[fs] échec montage LittleFS");
+
+    g_queueFs = &LittleFS;
+    SPI.begin(SD_SCK_GPIO, SD_MISO_GPIO, SD_MOSI_GPIO, SD_CS_GPIO);
+    if (!SD.begin(SD_CS_GPIO, SPI, 20000000, "/sdcard", 5, false))
+    {
+        Serial.println("[sd] carte absente, file LittleFS active");
+        return;
+    }
+
+    // Une ancienne file LittleFS peut contenir des scans créés avant l'ajout
+    // du lecteur. On la transfère seulement si la carte est encore vierge.
+    if (!SD.exists(QUEUE_FILE) && LittleFS.exists(QUEUE_FILE))
+    {
+        File source = LittleFS.open(QUEUE_FILE, "r");
+        File destination = SD.open(QUEUE_FILE, "w");
+        if (source && destination)
+        {
+            while (source.available())
+                destination.write(source.read());
+            destination.close();
+            source.close();
+            LittleFS.remove(QUEUE_FILE);
+            Serial.println("[sd] ancienne file LittleFS transférée");
+        }
+        else
+        {
+            if (source)
+                source.close();
+            if (destination)
+                destination.close();
+            Serial.println("[sd] échec transfert de la file LittleFS");
+        }
+    }
+
+    g_queueFs = &SD;
+    g_sd_ready = true;
+    Serial.printf("[sd] carte détectée, file SD active (%llu Mo libres)\n",
+                  (unsigned long long)((SD.totalBytes() - SD.usedBytes()) / (1024 * 1024)));
 }
 
 // ---------------------------------------------------------------------------
@@ -340,7 +390,7 @@ static String encodePhotoBase64(const std::vector<uint8_t> &raw)
  */
 static String processScan(const String &rawJson, const String &photoBase64)
 {
-    if (queueLength() >= MAX_QUEUE_SIZE)
+    if (queueLength() >= queueCapacity())
     {
         return "{\"error\":\"file locale saturée, réessayez plus tard\"}";
     }
@@ -680,10 +730,7 @@ void setup()
 
     Serial.begin(115200);
 
-    if (!LittleFS.begin(true))
-    { // true = formate automatiquement si le système de fichiers est absent/corrompu
-        Serial.println("[fs] échec montage LittleFS");
-    }
+    setupStorage();
     Serial.printf("[queue] %u paquet(s) en attente au démarrage\n", (unsigned)queueLength());
 
     // Laisse le régulateur 3.3V se stabiliser après la séquence de boot
