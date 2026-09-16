@@ -399,10 +399,16 @@ class _PersonnelInactifTabState extends State<_PersonnelInactifTab> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: Row(
+          // Wrap plutôt que Row+Spacer : sur un écran étroit, le texte + champ
+          // + bouton "Appliquer" dépassent la largeur disponible — un Spacer
+          // ne compresse pas les enfants non-flex qui l'entourent, il ne fait
+          // que répartir l'espace restant (potentiellement négatif ici).
+          child: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
             children: [
               const Text('Inactifs depuis plus de', style: TextStyle(color: AuditronColors.ink700)),
-              const SizedBox(width: 8),
               SizedBox(
                 width: 64,
                 child: TextField(
@@ -411,9 +417,7 @@ class _PersonnelInactifTabState extends State<_PersonnelInactifTab> {
                   decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
                 ),
               ),
-              const SizedBox(width: 8),
               const Text('jours', style: TextStyle(color: AuditronColors.ink700)),
-              const Spacer(),
               FilledButton(onPressed: _refresh, child: const Text('Appliquer')),
             ],
           ),

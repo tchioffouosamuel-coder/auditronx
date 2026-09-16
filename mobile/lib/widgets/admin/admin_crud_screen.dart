@@ -40,6 +40,13 @@ class AdminCrudScreen extends StatefulWidget {
   /// lecture seule qui n'ont pas besoin d'un écran dédié).
   final bool readOnly;
 
+  /// Champs de l'élément (clés de la Map JSON) où chercher le texte tapé
+  /// dans la barre de recherche, en plus de [itemTitle]/[itemSubtitle] —
+  /// filtrage client, sur les éléments déjà chargés. `null` (défaut) :
+  /// pas de barre de recherche affichée.
+  final List<String>? searchFields;
+  final String searchHint;
+
   const AdminCrudScreen({
     super.key,
     required this.title,
@@ -54,6 +61,8 @@ class AdminCrudScreen extends StatefulWidget {
     this.extraRowActions,
     this.leadingBuilder,
     this.readOnly = false,
+    this.searchFields,
+    this.searchHint = 'Rechercher…',
   });
 
   @override
@@ -62,11 +71,34 @@ class AdminCrudScreen extends StatefulWidget {
 
 class AdminCrudScreenState extends State<AdminCrudScreen> {
   late Future<List<dynamic>> _future;
+  final _searchController = TextEditingController();
+  String _query = '';
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  /// Filtrage client sur les éléments déjà chargés (§widget.searchFields) :
+  /// pas d'appel réseau à chaque frappe, la liste est déjà en mémoire (et en
+  /// cache offline) comme le reste de cet écran.
+  List<dynamic> _filtered(List<dynamic> items) {
+    final query = _query.trim().toLowerCase();
+    if (widget.searchFields == null || query.isEmpty) return items;
+    return items.where((raw) {
+      final item = raw as Map<String, dynamic>;
+      if (widget.itemTitle(item).toLowerCase().contains(query)) return true;
+      final subtitle = widget.itemSubtitle?.call(item);
+      if (subtitle != null && subtitle.toLowerCase().contains(query)) return true;
+      return widget.searchFields!.any((f) => (item[f]?.toString() ?? '').toLowerCase().contains(query));
+    }).toList();
   }
 
   Future<List<dynamic>> _load() async {
@@ -185,16 +217,60 @@ class AdminCrudScreenState extends State<AdminCrudScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: Text(widget.title, style: Theme.of(context).textTheme.titleLarge)),
-              if (widget.headerActions != null) ...widget.headerActions!(context, () => refresh()),
-              if (!widget.readOnly) ...[
-                const SizedBox(width: 8),
-                FilledButton.icon(
-                  onPressed: () => _openForm(),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Nouveau'),
+              // Titre sur sa propre ligne (jamais partagé avec les boutons) :
+              // un Row Expanded+boutons fixes déborde dès que le titre est
+              // long (ex. "Fiche de progression") cumulé aux boutons Modèle/
+              // Exporter/Importer + Nouveau sur un écran étroit. Un Wrap ne
+              // peut pas se substituer ici : placé comme enfant non-flex d'un
+              // Row, il reçoit une largeur non bornée et ne retourne jamais à
+              // la ligne — il lui faut la largeur bornée de ce Column.
+              Text(
+                widget.title,
+                style: Theme.of(context).textTheme.titleLarge,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (widget.headerActions != null || !widget.readOnly) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (widget.headerActions != null) ...widget.headerActions!(context, () => refresh()),
+                    if (!widget.readOnly)
+                      FilledButton.icon(
+                        onPressed: () => _openForm(),
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('Nouveau'),
+                      ),
+                  ],
+                ),
+              ],
+              if (widget.searchFields != null) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _searchController,
+                  onChanged: (v) => setState(() => _query = v),
+                  decoration: InputDecoration(
+                    hintText: widget.searchHint,
+                    isDense: true,
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    suffixIcon: _query.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _query = '');
+                            },
+                          ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
                 ),
               ],
             ],
@@ -213,9 +289,10 @@ class AdminCrudScreenState extends State<AdminCrudScreen> {
                   return ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Text('Erreur : ${snapshot.error}'))]);
                 }
 
-                final items = snapshot.data ?? [];
+                final items = _filtered(snapshot.data ?? []);
                 if (items.isEmpty) {
-                  return ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Text('Aucun élément.'))]);
+                  final message = _query.trim().isEmpty ? 'Aucun élément.' : 'Aucun résultat pour « ${_query.trim()} ».';
+                  return ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Text(message))]);
                 }
 
                 return ListView.separated(
@@ -227,8 +304,10 @@ class AdminCrudScreenState extends State<AdminCrudScreen> {
                     return Card(
                       child: ListTile(
                         leading: widget.leadingBuilder?.call(context, item) ?? Icon(widget.icon, color: AuditronColors.brand700),
-                        title: Text(widget.itemTitle(item)),
-                        subtitle: widget.itemSubtitle != null ? Text(widget.itemSubtitle!(item) ?? '') : null,
+                        title: Text(widget.itemTitle(item), overflow: TextOverflow.ellipsis),
+                        subtitle: widget.itemSubtitle != null
+                            ? Text(widget.itemSubtitle!(item) ?? '', overflow: TextOverflow.ellipsis)
+                            : null,
                         trailing: widget.readOnly
                             ? null
                             : Row(

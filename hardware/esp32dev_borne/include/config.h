@@ -20,10 +20,41 @@ inline constexpr char BLE_CHAR_RESULT_UUID[] = "b3a1a102-2c33-4e6f-9a1e-5f6a2e6c
 inline constexpr char STA_SSID[] = "AC-inGit";
 inline constexpr char STA_PASSWORD[] = "12345678";
 // Taille de la file d'attente locale. Bornée : au-delà, on refuse les
-// nouveaux scans côté HTTP local plutôt que de saturer la flash. Peut être
-// bien plus grande que sur esp32_borne/ : sans photo, chaque paquet pèse
-// quelques centaines d'octets contre ~15-25 Ko avec la photo.
-inline constexpr size_t MAX_QUEUE_SIZE = 200;
+// nouveaux scans côté HTTP local plutôt que de saturer la flash. Avec le
+// selfie envoyé par le téléphone (§anti-procuration, voir BLE_TAG_* et
+// MAX_PHOTO_BYTES ci-dessous), chaque paquet pèse maintenant ~3-6 Ko au lieu
+// de quelques centaines d'octets — réduit en conséquence pour tenir dans la
+// partition LittleFS (~640 Ko, voir huge_app.csv/platformio.ini), avec marge.
+inline constexpr size_t MAX_QUEUE_SIZE = 70;
+
+// ---- Protocole photo BLE (§anti-procuration) ----
+// `scanChar` reçoit désormais plusieurs écritures GATT préfixées d'un octet
+// de tag — DOIT correspondre exactement à mobile/lib/services/ble_service.dart.
+// 0x01 = chunk photo (JPEG brut, pas de base64 : encoder avant l'envoi
+// gonflerait le volume transmis sur l'air d'environ 33% pour rien — la borne
+// encode elle-même juste avant l'injection dans le paquet JSON, comme
+// esp32_borne/ le fait déjà pour sa propre caméra). 0x03 = chunk JSON
+// intermédiaire (le JSON final peut lui aussi dépasser un seul chunk : un MTU
+// négocié bas — 255o constaté sur un Itel bas de gamme, chipset MediaTek/
+// Unisoc — peut être trop court pour un JSON avec un long token/qr_code).
+// 0x02 = dernier morceau du JSON (chunk final, éventuellement vide si le JSON
+// tenait dans une seule écriture — comportement historique) : à sa réception,
+// la borne assemble le JSON complet et associe les chunks photo déjà reçus à
+// ce scan avant de répondre.
+inline constexpr uint8_t BLE_TAG_PHOTO_CHUNK = 0x01;
+inline constexpr uint8_t BLE_TAG_SCAN_FINAL = 0x02;
+inline constexpr uint8_t BLE_TAG_JSON_CHUNK = 0x03;
+
+// Plafond du JSON brut accumulé par chunks avant le tag final : bien au-delà
+// d'un scan normal (qr_code/token/motif tiennent large sous 1 Ko), protection
+// contre un buffer non borné en cas de bug/version incompatible de l'app.
+inline constexpr size_t MAX_JSON_CHUNK_BYTES = 4 * 1024;
+
+// Plafond du selfie brut (avant base64) accepté par scan. Le téléphone vise
+// ~160x120 JPEG qualité ~20 (quelques Ko) — ce plafond n'est qu'une
+// protection contre un buffer non borné côté borne en cas de bug/version
+// incompatible de l'app, pas un objectif de taille normal.
+inline constexpr size_t MAX_PHOTO_BYTES = 24 * 1024;
 
 // Fichier (LittleFS) où la file est persistée (survit à une coupure secteur :
 // tant qu'un paquet n'a pas été confirmé par l'API, il reste sur la borne).
@@ -42,14 +73,17 @@ inline constexpr char API_RELAY_SYNC_PATH[] = "/api/relay/sync";
 // device relais est identifié individuellement côté API).
 inline constexpr char RELAY_API_TOKEN[] = "48|5ECwvUBQDs2MQWRw0xDq9KcemNdRLXEN23PqbD9E81d85a35";
 
-// <= 100 (limite validée côté API). Sans photo, un lot plus généreux reste
-// largement sous le tas ArduinoJson disponible (contrairement à esp32_borne/).
-inline constexpr size_t SYNC_BATCH_SIZE = 20;
+// <= 100 (limite validée côté API). Réduit depuis l'ajout du selfie (chaque
+// paquet est maintenant nettement plus lourd, voir PACKET_JSON_CAPACITY) —
+// reste néanmoins plus généreux que sur esp32_borne/ (5) : cet ESP32 n'a pas
+// de PSRAM, mais la photo du téléphone (~3-6 Ko) est bien plus légère que
+// celle de la caméra OV5640 QVGA (~8-15 Ko) qu'esp32_borne/ doit encaisser.
+inline constexpr size_t SYNC_BATCH_SIZE = 8;
 
-// Capacité des documents ArduinoJson dynamiques (RAM) pour un paquet sans
-// photo : payload qr_code/enseignant_id/motif + token + entêtes JSON tient
-// très large sous 4 Ko.
-inline constexpr size_t PACKET_JSON_CAPACITY = 4 * 1024;
+// Capacité des documents ArduinoJson dynamiques (RAM) par paquet : JPEG
+// ~160x120 qualité ~20 (quelques Ko) encodé en base64 (x1.37) + payload
+// qr_code/enseignant_id/motif + token + entêtes JSON, avec marge.
+inline constexpr size_t PACKET_JSON_CAPACITY = 10 * 1024;
 inline constexpr size_t SYNC_BODY_JSON_CAPACITY = SYNC_BATCH_SIZE * PACKET_JSON_CAPACITY;
 
 // Cadence de vérification de la connectivité / tentative de synchro.

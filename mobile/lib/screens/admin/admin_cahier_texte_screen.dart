@@ -120,15 +120,22 @@ class _AdminCahierTexteScreenState extends State<AdminCahierTexteScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
                           entree['date']?.toString() ?? '—',
                           style: TextStyle(fontSize: 12, color: AuditronColors.ink500),
                         ),
-                        Text(
-                          '${classe?['nom'] ?? '—'} — ${discipline?['nom'] ?? '—'}',
-                          style: TextStyle(fontSize: 12, color: AuditronColors.ink500),
+                        const SizedBox(width: 8),
+                        // Expanded + ellipsis (remplace spaceBetween) : un nom
+                        // de classe/discipline long ferait déborder ce Row sur
+                        // un écran étroit sans widget flexible pour tronquer.
+                        Expanded(
+                          child: Text(
+                            '${classe?['nom'] ?? '—'} — ${discipline?['nom'] ?? '—'}',
+                            textAlign: TextAlign.right,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 12, color: AuditronColors.ink500),
+                          ),
                         ),
                       ],
                     ),

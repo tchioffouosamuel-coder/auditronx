@@ -303,10 +303,15 @@ class _FilterBar extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Row(
+          // Wrap plutôt que Row : sur un écran étroit (ex. iPhone SE, ~320px),
+          // libellé + champ + bouton dépassent la largeur disponible — Wrap
+          // renvoie l'excédent à la ligne suivante au lieu de déborder.
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
             children: [
               const Text('Tolérance (min)', style: TextStyle(color: AuditronColors.ink700, fontSize: 13)),
-              const SizedBox(width: 8),
               SizedBox(
                 width: 64,
                 child: TextField(
@@ -315,7 +320,6 @@ class _FilterBar extends StatelessWidget {
                   decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
                 ),
               ),
-              const SizedBox(width: 8),
               OutlinedButton(
                 onPressed: savingTolerance ? null : onSaveTolerance,
                 child: savingTolerance

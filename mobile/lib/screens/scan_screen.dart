@@ -3,6 +3,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../services/api_client.dart';
 import '../services/ble_service.dart';
 import '../services/presence_repository.dart';
+import '../services/selfie_capture_service.dart';
 import '../theme.dart';
 
 /// Écran de scan générique (§4.1, §4.3, §hardware) : lecture du QR papier fixe
@@ -38,6 +39,7 @@ class _ScanScreenState extends State<ScanScreen> {
   final _controller = MobileScannerController();
   final _ble = BleService();
   final _presenceRepository = PresenceRepository();
+  final _selfieCapture = SelfieCaptureService();
   bool _processing = false;
 
   Future<void> _handleCode(String code) async {
@@ -51,6 +53,11 @@ class _ScanScreenState extends State<ScanScreen> {
 
     bool success = false;
     try {
+      // Caméra arrière (scanner) déjà arrêtée ci-dessus : la caméra avant
+      // peut maintenant s'ouvrir sans conflit (une seule caméra active à la
+      // fois sur la quasi-totalité des téléphones). Best-effort — un échec ne
+      // doit jamais bloquer le pointage, voir SelfieCaptureService.
+      final selfieJpeg = await _selfieCapture.captureLowResSelfie();
       final teacherToken =
           await (widget.tokenProvider ?? () => ApiClient.instance.token)();
       if (teacherToken == null) {
@@ -83,6 +90,7 @@ class _ScanScreenState extends State<ScanScreen> {
         qrCode: code,
         enseignantId: widget.enseignantId,
         motif: widget.motif,
+        selfieJpeg: selfieJpeg,
       );
 
       if (isPersonalScan) {

@@ -127,6 +127,8 @@ class AdminPersonnelScreen extends StatelessWidget {
       itemSubtitle: (item) => [item['matricule'], item['fonction'], item['section']]
           .where((v) => v != null && v.toString().isNotEmpty)
           .join(' · '),
+      searchFields: const ['nom', 'matricule', 'email', 'fonction', 'section', 'grade', 'tel', 'poste'],
+      searchHint: 'Rechercher un nom, matricule, email…',
       headerActions: (context, refresh) => [
         SpreadsheetActionsBar(entity: 'personnel', onImported: refresh),
       ],

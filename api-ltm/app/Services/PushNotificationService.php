@@ -60,7 +60,7 @@ class PushNotificationService
     private function send(string $fcmToken, string $title, string $body, array $data): void
     {
         try {
-            $message = CloudMessage::withTarget('token', $fcmToken)
+            $message = CloudMessage::new()->withToken($fcmToken)
                 ->withNotification(FcmNotification::create($title, $body))
                 ->withData(array_map(strval(...), $data));
 
@@ -73,7 +73,7 @@ class PushNotificationService
     private function sendDataOnly(string $fcmToken, string $title, string $body, array $data): void
     {
         try {
-            $message = CloudMessage::withTarget('token', $fcmToken)
+            $message = CloudMessage::new()->withToken($fcmToken)
                 ->withData(array_map(strval(...), [...$data, 'title' => $title, 'body' => $body]));
 
             Firebase::messaging()->send($message);
