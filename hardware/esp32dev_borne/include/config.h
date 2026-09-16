@@ -17,8 +17,8 @@ inline constexpr char BLE_CHAR_RESULT_UUID[] = "b3a1a102-2c33-4e6f-9a1e-5f6a2e6c
 // Uniquement en client (WIFI_STA) : le téléphone parle en BLE, pas en WiFi local.
 // inline constexpr char STA_SSID[] = "Galaxy S22 4D30";
 // inline constexpr char STA_PASSWORD[] = "19750000";
-inline constexpr char STA_SSID[] = "AC-inGit";
-inline constexpr char STA_PASSWORD[] = "12345678";
+inline constexpr char STA_SSID[] = "Auditron";
+inline constexpr char STA_PASSWORD[] = "1234567890";
 // Limite de sécurité de la file. La carte SD permet de conserver beaucoup
 // plus de scans hors ligne ; LittleFS conserve une limite basse lorsqu'elle
 // sert de secours.
@@ -65,12 +65,13 @@ inline constexpr uint8_t SD_SCK_GPIO = 18;
 inline constexpr uint8_t SD_MISO_GPIO = 19;
 inline constexpr uint8_t SD_MOSI_GPIO = 23;
 inline constexpr uint8_t SD_CS_GPIO = 5;
+inline constexpr uint32_t SD_SPI_FREQUENCY_HZ = 10000000;
 
 // Buzzer actif : bip court à la réception complète d'un scan BLE.
 inline constexpr uint8_t BUZZER_GPIO = 25;
 
 // ---- API distante ----
-inline constexpr char API_BASE_URL[] = "https://api-ltm.auditronx.com/public";
+inline constexpr char API_BASE_URL[] = "https://api-lbm.auditronx.com/public";
 inline constexpr char API_RELAY_SYNC_PATH[] = "/api/relay/sync";
 
 // Token Sanctum du device relay_gateway, obtenu une fois via
@@ -79,12 +80,9 @@ inline constexpr char API_RELAY_SYNC_PATH[] = "/api/relay/sync";
 // device relais est identifié individuellement côté API).
 inline constexpr char RELAY_API_TOKEN[] = "48|5ECwvUBQDs2MQWRw0xDq9KcemNdRLXEN23PqbD9E81d85a35";
 
-// <= 100 (limite validée côté API). Réduit depuis l'ajout du selfie (chaque
-// paquet est maintenant nettement plus lourd, voir PACKET_JSON_CAPACITY) —
-// reste néanmoins plus généreux que sur esp32_borne/ (5) : cet ESP32 n'a pas
-// de PSRAM, mais la photo du téléphone (~3-6 Ko) est bien plus légère que
-// celle de la caméra OV5640 QVGA (~8-15 Ko) qu'esp32_borne/ doit encaisser.
-inline constexpr size_t SYNC_BATCH_SIZE = 8;
+// Un seul paquet par requête : la négociation TLS consomme déjà beaucoup de
+// RAM sur cet ESP32 sans PSRAM, et chaque paquet peut contenir un selfie.
+inline constexpr size_t SYNC_BATCH_SIZE = 1;
 
 // Capacité des documents ArduinoJson dynamiques (RAM) par paquet : JPEG
 // ~160x120 qualité ~20 (quelques Ko) encodé en base64 (x1.37) + payload

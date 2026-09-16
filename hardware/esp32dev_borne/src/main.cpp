@@ -39,6 +39,7 @@
 static WebServer server(80);
 static uint32_t g_local_id_counter = 0;
 static bool g_time_ready = false;
+static String g_ble_address;
 
 static void beepBuzzer()
 {
@@ -213,10 +214,14 @@ static void setupStorage()
         Serial.println("[fs] échec montage LittleFS");
 
     g_queueFs = &LittleFS;
+    pinMode(SD_CS_GPIO, OUTPUT);
+    digitalWrite(SD_CS_GPIO, HIGH);
     SPI.begin(SD_SCK_GPIO, SD_MISO_GPIO, SD_MOSI_GPIO, SD_CS_GPIO);
-    if (!SD.begin(SD_CS_GPIO, SPI, 20000000, "/sdcard", 5, false))
+    if (!SD.begin(SD_CS_GPIO, SPI, SD_SPI_FREQUENCY_HZ, "/sdcard", 5, false))
     {
-        Serial.println("[sd] carte absente, file LittleFS active");
+        Serial.printf("[sd] échec initialisation SPI (CS=%u, SCK=%u, MISO=%u, MOSI=%u) ; vérifiez câblage, 3.3 V et FAT32\n",
+                      SD_CS_GPIO, SD_SCK_GPIO, SD_MISO_GPIO, SD_MOSI_GPIO);
+        Serial.println("[sd] file LittleFS active");
         return;
     }
 
@@ -274,6 +279,9 @@ static void syncWithApi()
         payload += batch[i].raw_json;
     }
     payload += "]}";
+    const size_t batchCount = batch.size();
+    batch.clear();
+    batch.shrink_to_fit();
     if (payload.length() <= 12)
     {
         Serial.println("[sync] corps JSON vide, on retentera au prochain cycle");
@@ -333,7 +341,7 @@ static void syncWithApi()
     }
 
     removeFromQueue(toRemove);
-    Serial.printf("[sync] %u paquet(s) envoyés, %u confirmé(s)/rejeté(s)\n", (unsigned)batch.size(), (unsigned)toRemove.size());
+    Serial.printf("[sync] %u paquet(s) envoyés, %u confirmé(s)/rejeté(s)\n", (unsigned)batchCount, (unsigned)toRemove.size());
 }
 
 /**
@@ -641,6 +649,7 @@ static void setupBle()
         BLE_CHAR_RESULT_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
 
     service->start();
+    g_ble_address = NimBLEDevice::getAddress().toString().c_str();
 
     // Un paquet d'advertising BLE "legacy" ne fait que 31 octets : le nom
     // (BLE_DEVICE_NAME) + l'UUID de service 128-bit ne tiennent pas ensemble
@@ -739,6 +748,9 @@ void setup()
     pinMode(BUZZER_GPIO, OUTPUT);
     digitalWrite(BUZZER_GPIO, LOW);
 
+    g_fsMutex = xSemaphoreCreateMutex();
+    g_pendingScanMutex = xSemaphoreCreateMutex();
+
     setupStorage();
     Serial.printf("[queue] %u paquet(s) en attente au démarrage\n", (unsigned)queueLength());
 
@@ -766,15 +778,6 @@ void setup()
     Serial.println("[wifi] tentative de connexion au modem...");
     WiFi.begin(STA_SSID, STA_PASSWORD);
 
-    // Conservé pour du débogage (curl direct sur l'IP STA) — le téléphone
-    // n'utilise plus ce chemin, voir processScan()/setupBle().
-    server.on("/scan", HTTP_POST, handleScan);
-    server.onNotFound(handleNotFound);
-    server.begin();
-    Serial.println("[http] serveur local démarré sur le port 80 (débogage)");
-
-    g_fsMutex = xSemaphoreCreateMutex();
-    g_pendingScanMutex = xSemaphoreCreateMutex();
     // Cœur 1 (APP_CPU), comme loopTask par défaut sur Arduino-ESP32 — la pile
     // dédiée de 16 Ko est la partie qui compte ici, pas l'affinité de cœur.
     xTaskCreatePinnedToCore(syncTask, "sync_task", 16384, nullptr, 1, nullptr, 1);
@@ -782,7 +785,6 @@ void setup()
 
 void loop()
 {
-    server.handleClient();
     processPendingBleScan();
 
     static bool wasConnected = false;
@@ -797,6 +799,8 @@ void loop()
     // La synchro périodique tourne dans sa propre tâche (syncTask, voir
     // setup()) — pile dédiée assez grande pour la poignée de main TLS.
 
+    delay(10);
+
     // Réaffiche l'adresse BLE dès le premier tour de loop() puis toutes les 3s
     // (à saisir dans le backoffice, Appareils & points d'accès > Bornes WiFi,
     // champ BSSID) : le port série "hoquette" parfois juste après le boot et
@@ -808,7 +812,6 @@ void loop()
         bleAddrPrintedOnce = true;
         lastBleAddrPrint = millis();
         Serial.print("[ble] adresse=");
-        Serial.println(NimBLEDevice::getAddress().toString().c_str());
-        Serial.flush();
+        Serial.println(g_ble_address);
     }
 }

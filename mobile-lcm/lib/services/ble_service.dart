@@ -25,8 +25,12 @@ class BorneScanResult {
 /// - "result" (lecture/notification) : la borne y publie sa réponse JSON.
 class BleService {
   static final Guid serviceUuid = Guid('b3a1a100-2c33-4e6f-9a1e-5f6a2e6c2b01');
-  static final Guid _scanCharUuid = Guid('b3a1a101-2c33-4e6f-9a1e-5f6a2e6c2b01');
-  static final Guid _resultCharUuid = Guid('b3a1a102-2c33-4e6f-9a1e-5f6a2e6c2b01');
+  static final Guid _scanCharUuid = Guid(
+    'b3a1a101-2c33-4e6f-9a1e-5f6a2e6c2b01',
+  );
+  static final Guid _resultCharUuid = Guid(
+    'b3a1a102-2c33-4e6f-9a1e-5f6a2e6c2b01',
+  );
 
   Future<bool> isBluetoothEnabled() async {
     if (!await FlutterBluePlus.isSupported) return false;
@@ -98,7 +102,9 @@ class BleService {
             0,
           );
         }
-        debugPrint('[ble] tentative $attempt échouée (${e.description}), nouvel essai...');
+        debugPrint(
+          '[ble] tentative $attempt échouée (${e.description}), nouvel essai...',
+        );
         await device.disconnect();
         await Future.delayed(const Duration(milliseconds: 400));
       }
@@ -121,10 +127,17 @@ class BleService {
       final services = await device.discoverServices();
       final service = services.firstWhere(
         (s) => s.uuid == serviceUuid,
-        orElse: () => throw ApiException("Borne incompatible (service BLE introuvable).", 0),
+        orElse: () => throw ApiException(
+          "Borne incompatible (service BLE introuvable).",
+          0,
+        ),
       );
-      final scanChar = service.characteristics.firstWhere((c) => c.uuid == _scanCharUuid);
-      final resultChar = service.characteristics.firstWhere((c) => c.uuid == _resultCharUuid);
+      final scanChar = service.characteristics.firstWhere(
+        (c) => c.uuid == _scanCharUuid,
+      );
+      final resultChar = service.characteristics.firstWhere(
+        (c) => c.uuid == _resultCharUuid,
+      );
 
       // `connect()` négocie déjà un MTU de 512 par défaut — pas besoin d'un
       // requestMtu() séparé, le payload JSON (quelques centaines d'octets) y tient.
@@ -136,7 +149,9 @@ class BleService {
       await Future.delayed(const Duration(milliseconds: 300));
 
       await resultChar.setNotifyValue(true);
-      final responseFuture = resultChar.onValueReceived.first.timeout(const Duration(seconds: 10));
+      final responseFuture = resultChar.onValueReceived.first.timeout(
+        const Duration(seconds: 10),
+      );
 
       final payload = {
         'qr_code': qrCode,
@@ -157,7 +172,9 @@ class BleService {
       await scanChar.write(utf8.encode(body), withoutResponse: false);
 
       final responseBytes = await responseFuture;
-      debugPrint('[timing] scanViaBorne BLE total=${total.elapsedMilliseconds}ms');
+      debugPrint(
+        '[timing] scanViaBorne BLE total=${total.elapsedMilliseconds}ms',
+      );
       return _parseBorneResponse(utf8.decode(responseBytes));
     } finally {
       unawaited(device.disconnect());
@@ -200,14 +217,19 @@ class BleService {
     });
 
     await FlutterBluePlus.startScan(timeout: const Duration(seconds: 8));
-    final device = await completer.future.timeout(const Duration(seconds: 8), onTimeout: () => null);
+    final device = await completer.future.timeout(
+      const Duration(seconds: 8),
+      onTimeout: () => null,
+    );
     await FlutterBluePlus.stopScan();
     await sub.cancel();
     return device;
   }
 
   BorneScanResult _parseBorneResponse(String body) {
-    final decoded = body.isNotEmpty ? jsonDecode(body) as Map<String, dynamic> : <String, dynamic>{};
+    final decoded = body.isNotEmpty
+        ? jsonDecode(body) as Map<String, dynamic>
+        : <String, dynamic>{};
 
     if (decoded['queued'] == true) {
       return BorneScanResult(
@@ -216,6 +238,9 @@ class BleService {
       );
     }
 
-    throw ApiException((decoded['error'] as String?) ?? 'La borne a refusé le scan.', 0);
+    throw ApiException(
+      (decoded['error'] as String?) ?? 'La borne a refusé le scan.',
+      0,
+    );
   }
 }

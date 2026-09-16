@@ -33,7 +33,7 @@ class DatabaseSeeder extends Seeder
         );
 
         $admin = User::updateOrCreate(
-            ['email' => 'superadmin@auditron.ltm'],
+            ['email' => 'superadmin@auditron.lbm'],
             [
                 'name' => 'Super Admin',
                 'password' => Hash::make('ChangeMe123!'),
@@ -42,30 +42,14 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        // Enseignant admin (`est_admin`) : active immédiatement son device sans
-        // passer par le flux OTP (voir DeviceController::requestActivation) —
-        // utile pour tester l'app mobile sans manipulation d'administration.
-        $enseignant = Enseignant::updateOrCreate(
-            ['tel' => '+237600000000'],
-            [
-                'nom' => 'Admin Test',
-                'matricule' => 'ADM-0001',
-                'email' => 'enseignant.admin@auditron.ltm',
-                'password' => Hash::make('ChangeMe123!'),
-                'est_admin' => true,
-            ]
-        );
+       
 
         $qrPoint = QrPoint::updateOrCreate(
-            ['code' => 'QR-TEST-01'],
+            ['code' => 'QR-TEST-01-LBM'],
             ['label' => 'Point de test']
         );
 
-        $accessPoint = AccessPoint::updateOrCreate(
-            ['bssid' => 'AA:BB:CC:DD:EE:01'],
-            ['ssid' => 'AUDITRON-BORNE-01', 'label' => 'Point de test']
-        );
-
+        
         // Device relay_gateway (§hardware) : provisionne la borne ESP32 pour
         // tester /api/relay/sync sans passer par l'endpoint HTTP d'admin.
         $relayDevice = Device::updateOrCreate(
