@@ -22,6 +22,8 @@
 #include <ArduinoJson.h>
 #include <time.h>
 #include <vector>
+#include <algorithm>
+#include <mbedtls/base64.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
@@ -207,27 +209,20 @@ static void syncWithApi()
     if (!readQueueBatch(batch) || batch.empty())
         return;
 
-    // `body` (jusqu'à SYNC_BODY_JSON_CAPACITY = 80 Ko) est construit puis
-    // sérialisé dans ce bloc, qui se referme AVANT d'ouvrir la connexion
-    // TLS : sur un ESP32 sans PSRAM, garder ce document vivant pendant la
-    // poignée de main mbedTLS (elle-même gourmande, buffers RX/TX internes)
-    // faisait cumuler les deux plus gros consommateurs de tas au même
-    // instant, sur un tas déjà entamé par NimBLE — d'où "SSL - Memory
-    // allocation failed" côté start_ssl_client() après quelques cycles
-    // (fragmentation, pas de fuite : la RAM totale suffirait sans ce
-    // chevauchement).
     String payload;
+    payload.reserve(12 + batch.size() * 256);
+    payload = "{\"packets\":[";
+    for (size_t i = 0; i < batch.size(); i++)
     {
-        DynamicJsonDocument body(SYNC_BODY_JSON_CAPACITY);
-        JsonArray packets = body.createNestedArray("packets");
-        for (const auto &p : batch)
-        {
-            DynamicJsonDocument item(PACKET_JSON_CAPACITY);
-            if (deserializeJson(item, p.raw_json) != DeserializationError::Ok)
-                continue;
-            packets.add(item.as<JsonObject>());
-        }
-        serializeJson(body, payload);
+        if (i > 0)
+            payload += ',';
+        payload += batch[i].raw_json;
+    }
+    payload += "]}";
+    if (payload.length() <= 12)
+    {
+        Serial.println("[sync] corps JSON vide, on retentera au prochain cycle");
+        return;
     }
 
     // Client TLS statique et réutilisé d'un cycle à l'autre (évite l'overhead
@@ -253,7 +248,8 @@ static void syncWithApi()
     int status = http.POST(payload);
     if (status != 200)
     {
-        Serial.printf("[sync] échec HTTP %d, on retentera au prochain cycle\n", status);
+        String errorBody = http.getString();
+        Serial.printf("[sync] échec HTTP %d: %s, on retentera au prochain cycle\n", status, errorBody.c_str());
         http.end();
         return; // rien n'est retiré de la file : nouvelle tentative plus tard
     }
@@ -307,6 +303,30 @@ static void syncTask(void *)
 // synchro, ex. `curl http://<ip-sta>/scan`).
 // ---------------------------------------------------------------------------
 
+/** Encode en base64 le selfie reçu par chunks BLE (voir ScanCharCallbacks) ;
+ * chaîne vide si aucune photo n'a été transmise pour ce scan. Même motif que
+ * capturePhotoBase64() sur esp32_borne/, mais à partir d'un buffer déjà en
+ * mémoire (le téléphone capture et compresse la photo, pas la borne). */
+static String encodePhotoBase64(const std::vector<uint8_t> &raw)
+{
+    if (raw.empty())
+        return "";
+
+    size_t encodedLen = 0;
+    mbedtls_base64_encode(nullptr, 0, &encodedLen, raw.data(), raw.size());
+
+    std::vector<unsigned char> buf(encodedLen);
+    size_t written = 0;
+    int rc = mbedtls_base64_encode(buf.data(), buf.size(), &written, raw.data(), raw.size());
+    if (rc != 0)
+    {
+        Serial.println("[ble] échec encodage base64 du selfie");
+        return "";
+    }
+
+    return String(reinterpret_cast<char *>(buf.data()), written);
+}
+
 /**
  * { "type": "scan"|"admin_proxy", "teacher_token": "...", "payload": {...}, "captured_at"?: "ISO8601" }
  *
@@ -314,10 +334,11 @@ static void syncTask(void *)
  * (mêmes champs `payload` : qr_code[/enseignant_id/motif]). La borne ajoute
  * local_id + captured_at + un `payload.bssid` (BSSID WiFi si fourni par
  * l'appelant HTTP legacy, sinon l'adresse BLE de la borne — preuve de
- * proximité), écrit sur flash, puis répond — l'envoi vers l'API est différé
- * au prochain cycle de `syncWithApi()`.
+ * proximité) + `payload.photo_base64` si un selfie a été transmis (voir
+ * ScanCharCallbacks/BLE_TAG_*), écrit sur flash, puis répond — l'envoi vers
+ * l'API est différé au prochain cycle de `syncWithApi()`.
  */
-static String processScan(const String &rawJson)
+static String processScan(const String &rawJson, const String &photoBase64)
 {
     if (queueLength() >= MAX_QUEUE_SIZE)
     {
@@ -335,9 +356,13 @@ static String processScan(const String &rawJson)
     {
         return "{\"error\":\"type invalide\"}";
     }
-    if (!in.containsKey("teacher_token") || !in.containsKey("payload"))
+    if (!in.containsKey("teacher_token") || in["teacher_token"].as<String>().length() == 0 || !in.containsKey("payload") || !in["payload"].is<JsonObject>())
     {
         return "{\"error\":\"teacher_token et payload requis\"}";
+    }
+    if (!in["payload"].containsKey("qr_code") || in["payload"]["qr_code"].as<String>().length() == 0)
+    {
+        return "{\"error\":\"payload.qr_code requis\"}";
     }
 
     String capturedAt;
@@ -345,21 +370,24 @@ static String processScan(const String &rawJson)
     {
         capturedAt = in["captured_at"].as<String>();
     }
-    else if (g_time_ready)
+    if (capturedAt.length() == 0)
     {
-        // Cet ESP32 a son propre accès au modem : il fait son propre NTP, pas
-        // besoin de synchro horaire par un second module.
-        time_t now;
-        time(&now);
-        struct tm tmVal;
-        gmtime_r(&now, &tmVal);
-        char buf[25];
-        strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &tmVal);
-        capturedAt = String(buf);
-    }
-    else
-    {
-        return "{\"error\":\"borne non synchronisée en heure, réessayez dans un instant\"}";
+        if (g_time_ready)
+        {
+            // Cet ESP32 a son propre accès au modem : il fait son propre NTP, pas
+            // besoin de synchro horaire par un second module.
+            time_t now;
+            time(&now);
+            struct tm tmVal;
+            gmtime_r(&now, &tmVal);
+            char buf[25];
+            strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &tmVal);
+            capturedAt = String(buf);
+        }
+        else
+        {
+            return "{\"error\":\"borne non synchronisée en heure, réessayez dans un instant\"}";
+        }
     }
 
     char localId[40];
@@ -375,6 +403,10 @@ static String processScan(const String &rawJson)
         out["payload"]["bssid"] = NimBLEDevice::getAddress().toString();
     }
     out["captured_at"] = capturedAt;
+    if (photoBase64.length() > 0)
+    {
+        out["payload"]["photo_base64"] = photoBase64;
+    }
 
     String serialized;
     serializeJson(out, serialized);
@@ -384,9 +416,10 @@ static String processScan(const String &rawJson)
     // même si l'ESP32 redémarre dans la seconde qui suit.
     appendToQueue(serialized);
 
-    StaticJsonDocument<128> resp;
+    StaticJsonDocument<160> resp;
     resp["queued"] = true;
     resp["local_id"] = localId;
+    resp["photo_captured"] = photoBase64.length() > 0;
     String respStr;
     serializeJson(resp, respStr);
     return respStr;
@@ -408,13 +441,98 @@ static SemaphoreHandle_t g_pendingScanMutex = nullptr;
 static String g_pendingScanJson;
 static volatile bool g_pendingScan = false;
 
+// Buffer d'accumulation des chunks photo (BLE_TAG_PHOTO_CHUNK) reçus AVANT le
+// tag final (BLE_TAG_SCAN_FINAL) — voir ScanCharCallbacks. Transféré vers
+// g_pendingScanPhoto à la réception du tag final, pour que loop() dispose
+// d'un instantané figé pendant que le téléphone pourrait déjà commencer à
+// envoyer les chunks du scan suivant.
+static std::vector<uint8_t> g_pendingPhotoBuffer;
+static std::vector<uint8_t> g_pendingScanPhoto;
+
+// Buffer d'accumulation des chunks JSON (BLE_TAG_JSON_CHUNK) — même principe
+// que g_pendingPhotoBuffer, pour le cas où le JSON final ne tient pas dans un
+// seul chunk (MTU bas, voir BLE_TAG_JSON_CHUNK dans config.h).
+static std::string g_pendingJsonBuffer;
+
+/** Réinitialise l'état d'assemblage BLE (photo + JSON en cours). À appeler à
+ * chaque nouvelle connexion : sans ça, une tentative avortée en plein milieu
+ * d'un transfert (déconnexion, retry du téléphone après une erreur GATT)
+ * laisserait des chunks orphelins auxquels la tentative suivante viendrait
+ * s'ajouter, assemblant une photo/un JSON corrompus sans qu'aucune erreur ne
+ * le signale. */
+static void resetPendingBleScan()
+{
+    MutexGuard guard(g_pendingScanMutex);
+    g_pendingPhotoBuffer.clear();
+    g_pendingJsonBuffer.clear();
+    g_pendingScanJson = "";
+    g_pendingScan = false;
+}
+
 class ScanCharCallbacks : public NimBLECharacteristicCallbacks
 {
     void onWrite(NimBLECharacteristic *characteristic) override
     {
+        const std::string &value = characteristic->getValue();
+        if (value.empty())
+            return;
+
         MutexGuard guard(g_pendingScanMutex);
-        g_pendingScanJson = String(characteristic->getValue().c_str());
-        g_pendingScan = true;
+        const uint8_t tag = static_cast<uint8_t>(value[0]);
+        if (tag == BLE_TAG_PHOTO_CHUNK)
+        {
+            // Au-delà de MAX_PHOTO_BYTES, on tronque silencieusement plutôt que
+            // de laisser grossir le buffer sans limite (bug/version app
+            // incompatible) : le scan finira par partir avec une photo
+            // partielle inutilisable, jamais en bloquant le pointage.
+            if (g_pendingPhotoBuffer.size() < MAX_PHOTO_BYTES)
+            {
+                const size_t room = MAX_PHOTO_BYTES - g_pendingPhotoBuffer.size();
+                const size_t toCopy = std::min(value.size() - 1, room);
+                g_pendingPhotoBuffer.insert(
+                    g_pendingPhotoBuffer.end(),
+                    value.begin() + 1,
+                    value.begin() + 1 + toCopy);
+            }
+        }
+        else if (tag == BLE_TAG_JSON_CHUNK)
+        {
+            if (g_pendingJsonBuffer.size() < MAX_JSON_CHUNK_BYTES)
+            {
+                const size_t room = MAX_JSON_CHUNK_BYTES - g_pendingJsonBuffer.size();
+                const size_t toCopy = std::min(value.size() - 1, room);
+                g_pendingJsonBuffer.append(value, 1, toCopy);
+            }
+        }
+        else if (tag == BLE_TAG_SCAN_FINAL)
+        {
+            // Dernier morceau du JSON, éventuellement vide (cas historique :
+            // le JSON entier tenait dans cette seule écriture, sans chunk
+            // BLE_TAG_JSON_CHUNK préalable).
+            if (value.size() > 1 && g_pendingJsonBuffer.size() < MAX_JSON_CHUNK_BYTES)
+            {
+                const size_t room = MAX_JSON_CHUNK_BYTES - g_pendingJsonBuffer.size();
+                const size_t toCopy = std::min(value.size() - 1, room);
+                g_pendingJsonBuffer.append(value, 1, toCopy);
+            }
+            g_pendingScanJson = String(g_pendingJsonBuffer.c_str());
+            g_pendingJsonBuffer.clear();
+            g_pendingScanPhoto = std::move(g_pendingPhotoBuffer);
+            g_pendingPhotoBuffer.clear();
+            g_pendingScan = true;
+        }
+        // Tag inconnu (protocole désynchronisé) : ignoré, le téléphone
+        // relancera un scan complet via sa boucle de retry BLE.
+    }
+};
+
+class BorneServerCallbacks : public NimBLEServerCallbacks
+{
+    void onConnect(NimBLEServer *pServer) override
+    {
+        // Voir resetPendingBleScan() : une nouvelle connexion démarre toujours
+        // un scan propre, jamais la suite d'une tentative précédente avortée.
+        resetPendingBleScan();
     }
 };
 
@@ -425,13 +543,17 @@ static void processPendingBleScan()
         return;
 
     String rawJson;
+    std::vector<uint8_t> photoBytes;
     {
         MutexGuard guard(g_pendingScanMutex);
         rawJson = g_pendingScanJson;
+        photoBytes = std::move(g_pendingScanPhoto);
+        g_pendingScanPhoto.clear();
         g_pendingScan = false;
     }
 
-    String response = processScan(rawJson);
+    String photoBase64 = encodePhotoBase64(photoBytes);
+    String response = processScan(rawJson, photoBase64);
     if (g_bleResultChar)
     {
         g_bleResultChar->setValue(response);
@@ -452,6 +574,7 @@ static void setupBle()
     NimBLEDevice::setPower(ESP_PWR_LVL_N6);
 
     NimBLEServer *bleServer = NimBLEDevice::createServer();
+    bleServer->setCallbacks(new BorneServerCallbacks());
     NimBLEService *service = bleServer->createService(BLE_SERVICE_UUID);
 
     NimBLECharacteristic *scanChar = service->createCharacteristic(
@@ -501,7 +624,9 @@ static void handleScan()
         server.send(400, "application/json", "{\"error\":\"corps JSON manquant\"}");
         return;
     }
-    String resp = processScan(server.arg("plain"));
+    // Chemin de débogage uniquement (curl) : pas de selfie possible ici, voir
+    // le commentaire au-dessus de handleScan().
+    String resp = processScan(server.arg("plain"), "");
     bool queued = resp.indexOf("\"queued\"") >= 0;
     server.send(queued ? 202 : 400, "application/json", resp);
 }
