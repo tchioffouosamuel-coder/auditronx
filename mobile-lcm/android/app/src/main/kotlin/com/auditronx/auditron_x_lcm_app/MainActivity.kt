@@ -1,4 +1,4 @@
-package com.auditronx.auditron_x_app
+package com.auditronx.auditron_x_lcm_app
 
 import io.flutter.embedding.android.FlutterActivity
 
