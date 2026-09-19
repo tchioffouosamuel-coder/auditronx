@@ -232,7 +232,7 @@ class _JournalTabState extends State<_JournalTab> {
     if (iso == null) return null;
     final dt = DateTime.tryParse('$iso');
     if (dt == null) return null;
-    return DateFormat('HH:mm').format(dt);
+    return DateFormat('HH:mm').format(dt.toLocal());
   }
 
   void _openPhoto(String url, String title) {
