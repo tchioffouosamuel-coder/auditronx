@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// Identité visuelle Auditron X — palette extraite du logo (vert circuit + or),
-/// partagée avec le backoffice React. Police Roboto utilisée par Material.
+/// partagée avec le backoffice React. Montserrat donne à l'app une présence
+/// plus nette sur les écrans d'administration et les données denses.
 class AuditronColors {
   static const brand900 = Color(0xFF00281A);
   static const brand800 = Color(0xFF003B27);
@@ -33,11 +35,11 @@ ThemeData buildAuditronTheme() {
 
   return ThemeData(
     useMaterial3: true,
-    fontFamily: 'Roboto',
+    fontFamily: GoogleFonts.montserrat().fontFamily,
     colorScheme: colorScheme,
     scaffoldBackgroundColor: AuditronColors.ink50,
     appBarTheme: const AppBarTheme(
-      backgroundColor: AuditronColors.brand800,
+      backgroundColor: AuditronColors.brand900,
       foregroundColor: Colors.white,
       elevation: 0,
       centerTitle: false,
@@ -77,8 +79,12 @@ ThemeData buildAuditronTheme() {
       ),
     ),
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: Colors.white,
-      indicatorColor: AuditronColors.brand100,
+      backgroundColor: AuditronColors.brand900,
+      indicatorColor: AuditronColors.gold500,
+      indicatorShape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+      ),
+      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
       labelTextStyle: WidgetStateProperty.resolveWith(
         (states) => TextStyle(
           fontSize: 12,
@@ -86,15 +92,15 @@ ThemeData buildAuditronTheme() {
               ? FontWeight.w700
               : FontWeight.w500,
           color: states.contains(WidgetState.selected)
-              ? AuditronColors.brand800
-              : AuditronColors.ink500,
+              ? AuditronColors.brand900
+              : Colors.white70,
         ),
       ),
       iconTheme: WidgetStateProperty.resolveWith(
         (states) => IconThemeData(
           color: states.contains(WidgetState.selected)
-              ? AuditronColors.brand800
-              : AuditronColors.ink500,
+              ? AuditronColors.brand900
+              : Colors.white70,
         ),
       ),
     ),
@@ -106,20 +112,20 @@ ThemeData buildAuditronTheme() {
       ),
       side: BorderSide.none,
     ),
-    textTheme: const TextTheme(
-      headlineSmall: TextStyle(
+    textTheme: GoogleFonts.montserratTextTheme().copyWith(
+      headlineSmall: const TextStyle(
         fontWeight: FontWeight.w900,
         color: AuditronColors.ink900,
       ),
-      titleLarge: TextStyle(
+      titleLarge: const TextStyle(
         fontWeight: FontWeight.w700,
         color: AuditronColors.ink900,
       ),
-      titleMedium: TextStyle(
+      titleMedium: const TextStyle(
         fontWeight: FontWeight.w700,
         color: AuditronColors.ink900,
       ),
-      bodyMedium: TextStyle(color: AuditronColors.ink700),
+      bodyMedium: const TextStyle(color: AuditronColors.ink700),
     ),
   );
 }

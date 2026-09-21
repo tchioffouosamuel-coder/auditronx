@@ -1,5 +1,8 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../services/api_client.dart';
 import '../services/ble_service.dart';
 import '../services/presence_repository.dart';
@@ -36,11 +39,12 @@ class ScanScreen extends StatefulWidget {
 }
 
 class _ScanScreenState extends State<ScanScreen> {
-  final _controller = MobileScannerController();
+  MobileScannerController _controller = MobileScannerController();
   final _ble = BleService();
   final _presenceRepository = PresenceRepository();
   final _selfieCapture = SelfieCaptureService();
   bool _processing = false;
+  bool _controllerDisposed = false;
 
   Future<void> _handleCode(String code) async {
     if (_processing) return;
@@ -50,6 +54,8 @@ class _ScanScreenState extends State<ScanScreen> {
     // chaque tentative échouée et relancerait la connexion BLE en boucle très
     // rapide (symptôme observé avec le WiFi : caméra qui clignote, rien ne se passe).
     await _controller.stop();
+    await _controller.dispose();
+    _controllerDisposed = true;
 
     bool success = false;
     try {
@@ -79,6 +85,10 @@ class _ScanScreenState extends State<ScanScreen> {
         return;
       }
 
+      if (!await _ensureLocationPermission()) {
+        return;
+      }
+
       if (!await _ble.isBluetoothEnabled()) {
         _showBluetoothDisabledMessage();
         return;
@@ -99,22 +109,28 @@ class _ScanScreenState extends State<ScanScreen> {
         );
       }
 
-      _showMessage(
-        result.photoCaptured
-            ? 'Pointage transmis à la borne avec photo — synchronisation en cours.'
-            : 'Pointage transmis à la borne — synchronisation en cours.',
-      );
+      await _showScanSuccessSheet(result.photoCaptured);
       success = true;
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
-      _showMessage(e.message, error: true);
+      if (_isBorneError(e.message)) {
+        await _showBorneUnavailableSheet(e.message);
+      } else {
+        _showMessage(e.message, error: true);
+      }
     } finally {
       if (!success) {
         // Laisse le temps à l'utilisateur d'écarter le QR du champ de la
         // caméra avant de rouvrir la détection, sinon la même tentative
         // échouée repartirait aussitôt en boucle.
         await Future.delayed(const Duration(seconds: 2));
-        if (mounted) await _controller.start();
+        if (mounted) {
+          setState(() {
+            _controller = MobileScannerController();
+            _controllerDisposed = false;
+          });
+          await _controller.start();
+        }
       }
       if (mounted) setState(() => _processing = false);
     }
@@ -126,6 +142,218 @@ class _ScanScreenState extends State<ScanScreen> {
       SnackBar(
         content: Text(message),
         backgroundColor: error ? Colors.red : Colors.green,
+      ),
+    );
+  }
+
+  Future<bool> _ensureLocationPermission() async {
+    if (!Platform.isAndroid) return true;
+
+    final serviceStatus = await Permission.locationWhenInUse.serviceStatus;
+    if (serviceStatus == ServiceStatus.enabled) return true;
+
+    final status = await Permission.locationWhenInUse.request();
+    if (status.isGranted || status.isLimited) return true;
+
+    final updatedServiceStatus =
+        await Permission.locationWhenInUse.serviceStatus;
+    if (updatedServiceStatus == ServiceStatus.enabled) return true;
+
+    if (mounted) {
+      await _showLocationRequiredSheet();
+    }
+    return false;
+  }
+
+  Future<void> _showLocationRequiredSheet() {
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: AuditronColors.ink50,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Icon(Icons.location_on, color: AuditronColors.brand700, size: 48),
+              const SizedBox(height: 14),
+              const Text(
+                'Localisation nécessaire',
+                style: TextStyle(
+                  color: AuditronColors.ink900,
+                  fontSize: 23,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Activez l’autorisation de localisation pour permettre la recherche de la borne à proximité.',
+                style: TextStyle(
+                  color: AuditronColors.ink700,
+                  fontSize: 15,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 22),
+              FilledButton.icon(
+                onPressed: () async {
+                  await openAppSettings();
+                  if (context.mounted) Navigator.pop(context);
+                },
+                icon: const Icon(Icons.settings_outlined),
+                label: const Text('Activer la localisation'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showScanSuccessSheet(bool photoCaptured) {
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: AuditronColors.ink50,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: 68,
+                height: 68,
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                  color: AuditronColors.brand100,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check_rounded,
+                  color: AuditronColors.brand700,
+                  size: 42,
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'Scan réussi',
+                style: TextStyle(
+                  color: AuditronColors.ink900,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                photoCaptured
+                    ? 'Votre pointage a été transmis avec la photo.'
+                    : 'Votre pointage a été transmis à la borne.',
+                style: const TextStyle(
+                  color: AuditronColors.ink700,
+                  fontSize: 15,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 22),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.done),
+                label: const Text('Terminer'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  bool _isBorneError(String message) {
+    final normalized = message.toLowerCase();
+    return normalized.contains('borne') ||
+        normalized.contains('bluetooth') ||
+        normalized.contains('communication');
+  }
+
+  Future<void> _showBorneUnavailableSheet(String message) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: AuditronColors.ink50,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.wifi_tethering_error_rounded,
+                  color: Colors.red.shade700,
+                  size: 34,
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'Borne injoignable',
+                style: TextStyle(
+                  color: AuditronColors.ink900,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                style: const TextStyle(
+                  color: AuditronColors.ink700,
+                  fontSize: 15,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 18),
+              const _BorneCheckRow(
+                icon: Icons.bluetooth,
+                text: 'Vérifiez que le Bluetooth est activé.',
+              ),
+              const _BorneCheckRow(
+                icon: Icons.near_me_outlined,
+                text: 'Rapprochez-vous de la borne.',
+              ),
+              const _BorneCheckRow(
+                icon: Icons.power_settings_new,
+                text: 'Vérifiez que la borne est allumée.',
+              ),
+              const SizedBox(height: 22),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.refresh),
+                label: const Text('Réessayer'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -166,7 +394,7 @@ class _ScanScreenState extends State<ScanScreen> {
 
   @override
   void dispose() {
-    _controller.dispose();
+    if (!_controllerDisposed) _controller.dispose();
     super.dispose();
   }
 
@@ -253,4 +481,30 @@ class _QrProcessingOverlay extends StatelessWidget {
 
 extension on List<Barcode> {
   Barcode? get firstOrNull => isEmpty ? null : first;
+}
+
+class _BorneCheckRow extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _BorneCheckRow({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Icon(icon, color: AuditronColors.brand700, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(color: AuditronColors.ink700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

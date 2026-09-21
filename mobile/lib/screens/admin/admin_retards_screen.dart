@@ -58,6 +58,7 @@ class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
     1,
   );
   final _toleranceController = TextEditingController(text: '10');
+  final _searchController = TextEditingController();
 
   late Future<List<dynamic>> _future;
   bool _savingTolerance = false;
@@ -73,6 +74,7 @@ class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
   @override
   void dispose() {
     _toleranceController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -187,9 +189,11 @@ class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
         _FilterBar(
           selectedMonth: _selectedMonth,
           toleranceController: _toleranceController,
+          searchController: _searchController,
           savingTolerance: _savingTolerance,
           downloadingCumule: _downloadingCumule,
           onSelectMonth: _selectMonth,
+          onSearchChanged: (_) => setState(() {}),
           onSaveTolerance: _saveTolerance,
           onDownloadCumule: _downloadBilanCumule,
         ),
@@ -212,13 +216,28 @@ class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
                     ],
                   );
                 }
-                final lignes = snapshot.data ?? [];
+                final allLignes = snapshot.data ?? [];
+                final query = _searchController.text.trim().toLowerCase();
+                final lignes = query.isEmpty
+                    ? allLignes
+                    : allLignes.where((item) {
+                        if (item is! Map) return false;
+                        return ['nom', 'matricule', 'section'].any(
+                          (key) => '${item[key] ?? ''}'.toLowerCase().contains(
+                            query,
+                          ),
+                        );
+                      }).toList();
                 if (lignes.isEmpty) {
                   return ListView(
-                    children: const [
+                    children: [
                       Padding(
-                        padding: EdgeInsets.all(24),
-                        child: Text('Aucun retard sur cette période.'),
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          query.isEmpty
+                              ? 'Aucun retard sur cette période.'
+                              : 'Aucun enseignant trouvé pour « ${_searchController.text.trim()} ».',
+                        ),
                       ),
                     ],
                   );
@@ -246,6 +265,8 @@ class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
                           children: [
                             Text(
                               '${l['jours_retard'] ?? 0}j · ${l['minutes_retard_total'] ?? 0}min',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: AuditronColors.ink500,
@@ -290,18 +311,22 @@ class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
 class _FilterBar extends StatelessWidget {
   final DateTime selectedMonth;
   final TextEditingController toleranceController;
+  final TextEditingController searchController;
   final bool savingTolerance;
   final bool downloadingCumule;
   final ValueChanged<DateTime> onSelectMonth;
+  final ValueChanged<String> onSearchChanged;
   final VoidCallback onSaveTolerance;
   final VoidCallback onDownloadCumule;
 
   const _FilterBar({
     required this.selectedMonth,
     required this.toleranceController,
+    required this.searchController,
     required this.savingTolerance,
     required this.downloadingCumule,
     required this.onSelectMonth,
+    required this.onSearchChanged,
     required this.onSaveTolerance,
     required this.onDownloadCumule,
   });
@@ -333,6 +358,26 @@ class _FilterBar extends StatelessWidget {
             onChanged: (month) {
               if (month != null) onSelectMonth(month);
             },
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: searchController,
+            onChanged: onSearchChanged,
+            decoration: InputDecoration(
+              labelText: 'Rechercher un enseignant',
+              hintText: 'Nom, matricule ou section',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: searchController.text.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.clear),
+                      tooltip: 'Effacer la recherche',
+                      onPressed: () {
+                        searchController.clear();
+                        onSearchChanged('');
+                      },
+                    ),
+            ),
           ),
           const SizedBox(height: 8),
           // Wrap plutôt que Row : sur un écran étroit (ex. iPhone SE, ~320px),

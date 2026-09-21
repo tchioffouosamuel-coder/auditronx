@@ -24,10 +24,11 @@ class SelfieCaptureService {
     try {
       final cameras = await availableCameras();
       if (cameras.isEmpty) return null;
-      final frontCamera = cameras.firstWhere(
+      final frontCameras = cameras.where(
         (c) => c.lensDirection == CameraLensDirection.front,
-        orElse: () => cameras.first,
       );
+      if (frontCameras.isEmpty) return null;
+      final frontCamera = frontCameras.first;
 
       controller = CameraController(
         frontCamera,
@@ -39,7 +40,9 @@ class SelfieCaptureService {
       final original = await file.readAsBytes();
       return _compress(original);
     } catch (e) {
-      debugPrint('[selfie] capture indisponible, scan envoyé sans preuve visuelle: $e');
+      debugPrint(
+        '[selfie] capture indisponible, scan envoyé sans preuve visuelle: $e',
+      );
       return null;
     } finally {
       await controller?.dispose();
