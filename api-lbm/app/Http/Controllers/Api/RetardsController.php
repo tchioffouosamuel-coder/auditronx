@@ -44,11 +44,13 @@ class RetardsController extends Controller
     {
         [$debut, $fin, $enseignants] = $this->periodeEtEnseignants($request);
 
-        $data = $enseignants->map(fn (Enseignant $enseignant) => $this->ligneBilanCumule($enseignant, $debut, $fin, $retards))
+        $data = $enseignants->map(fn(Enseignant $enseignant) => $this->ligneBilanCumule($enseignant, $debut, $fin, $retards))
             ->sortByDesc('periodes_totales')->values()->all();
 
         $pdf = Pdf::loadView('pdf.retards-cumule', [
-            'data' => $data, 'mois' => $debut->format('m'), 'annee' => $debut->year,
+            'data' => $data,
+            'mois' => $debut->format('m'),
+            'annee' => $debut->year,
         ]);
 
         return $pdf->download("bilan-retards-{$debut->toDateString()}-{$fin->toDateString()}.pdf");
@@ -100,13 +102,13 @@ class RetardsController extends Controller
             ->whereBetween('date', [$debut->toDateString(), $fin->toDateString()])
             ->whereNotNull('heure_arrivee')
             ->pluck('date')
-            ->map(fn ($date) => Carbon::parse($date)->toDateString())
+            ->map(fn($date) => Carbon::parse($date)->toDateString())
             ->unique();
 
         $signalements = $enseignant->signalements()
             ->whereBetween('date', [$debut->toDateString(), $fin->toDateString()])
             ->pluck('date')
-            ->map(fn ($date) => Carbon::parse($date)->toDateString())
+            ->map(fn($date) => Carbon::parse($date)->toDateString())
             ->all();
 
         $attendues = $datesAttendues->unique()->count();
@@ -132,25 +134,35 @@ class RetardsController extends Controller
     private function ligneBilanCumule(Enseignant $enseignant, Carbon $debut, Carbon $fin, RetardCalculator $retards): array
     {
         $emplois = $enseignant->emploiDuTemps()->get();
-        $presences = $enseignant->presences()->whereBetween('date', [$debut->toDateString(), $fin->toDateString()])->get()->keyBy(fn ($presence) => $presence->date->toDateString());
+        $presences = $enseignant->presences()->whereBetween('date', [$debut->toDateString(), $fin->toDateString()])->get()->keyBy(fn($presence) => $presence->date->toDateString());
         $signalements = $enseignant->signalements()->whereDate('date', '<=', $fin->toDateString())->get();
         $result = ['nom' => $enseignant->nom, 'tel' => $enseignant->tel, 'matricule' => $enseignant->matricule, 'specialite' => $enseignant->section, 'nb_jours_retard' => 0, 'total_retard_minutes' => 0, 'nb_jours_anticipation' => 0, 'total_anticipation_minutes' => 0, 'nb_jours_absence' => 0, 'periodes_absence' => 0, 'periodes_presence' => 0, 'periodes_totales' => 0];
         for ($date = $debut->copy(); $date->lte($fin) && !$date->isFuture(); $date->addDay()) {
             $cours = $emplois->where('jour', $date->isoWeekday())->values();
             if ($cours->isEmpty()) continue;
             $presence = $presences->get($date->toDateString());
-            $signale = $signalements->first(fn ($item) => $date->between($item->date, $item->date->copy()->addDays(max(0, $item->duree_jours - 1)))) !== null;
-            $minutesPrevues = $cours->sum(fn ($item) => Carbon::parse($item->heure_debut)->diffInMinutes(Carbon::parse($item->heure_fin)));
+            $signale = $signalements->first(fn($item) => $date->between($item->date, $item->date->copy()->addDays(max(0, $item->duree_jours - 1)))) !== null;
+            $minutesPrevues = $cours->sum(fn($item) => Carbon::parse($item->heure_debut)->diffInMinutes(Carbon::parse($item->heure_fin)));
             $periodes = max(1, (int) ceil($minutesPrevues / 40));
             $dernierCours = $cours->sortBy('heure_fin')->last();
-            $finPrevue = Carbon::parse($date->toDateString().' '.$dernierCours->heure_fin);
+            $finPrevue = Carbon::parse($date->toDateString() . ' ' . $dernierCours->heure_fin);
             $retard = $presence?->heure_arrivee ? ($retards->minutesDeRetard($enseignant, $presence) ?? 0) : 0;
             $anticipation = $presence?->heure_depart ? max(0, (int) floor(($finPrevue->timestamp - $presence->heure_depart->timestamp) / 60)) : 0;
             $absent = !$signale && (!$presence || (!$presence->heure_arrivee && !$presence->heure_depart));
-            if ($retard > 0) { $result['nb_jours_retard']++; $result['total_retard_minutes'] += $retard; }
-            if ($anticipation > 0) { $result['nb_jours_anticipation']++; $result['total_anticipation_minutes'] += $anticipation; }
-            if ($absent) { $result['nb_jours_absence']++; $result['periodes_absence'] += $periodes; }
-            else { $result['periodes_presence'] += (int) ceil($anticipation / 40); }
+            if ($retard > 0) {
+                $result['nb_jours_retard']++;
+                $result['total_retard_minutes'] += $retard;
+            }
+            if ($anticipation > 0) {
+                $result['nb_jours_anticipation']++;
+                $result['total_anticipation_minutes'] += $anticipation;
+            }
+            if ($absent) {
+                $result['nb_jours_absence']++;
+                $result['periodes_absence'] += $periodes;
+            } else {
+                $result['periodes_presence'] += (int) ceil($anticipation / 40);
+            }
         }
         $result['periodes_totales'] = $result['periodes_presence'] + $result['periodes_absence'];
         return $result;
@@ -162,7 +174,7 @@ class RetardsController extends Controller
         $fin = Carbon::parse($request->query('fin', now()->endOfMonth()));
 
         $enseignants = $this->enseignantsAccessibles($request->user())
-            ->when($request->query('section'), fn ($q, $v) => $q->where('section', $v))
+            ->when($request->query('section'), fn($q, $v) => $q->where('section', $v))
             ->get();
 
         return [$debut, $fin, $enseignants];

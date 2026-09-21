@@ -24,10 +24,10 @@ class StatistiquesController extends Controller
         $fin = Carbon::parse($request->query('fin', now()->endOfMonth()));
 
         $enseignants = $this->enseignantsAccessibles($request->user())
-            ->when($request->query('section'), fn ($q, $v) => $q->where('section', $v))
+            ->when($request->query('section'), fn($q, $v) => $q->where('section', $v))
             ->get();
 
-        $zipRelativePath = 'exports/bilans-'.now()->timestamp.'.zip';
+        $zipRelativePath = 'exports/bilans-' . now()->timestamp . '.zip';
         $zipPath = Storage::path($zipRelativePath);
         Storage::makeDirectory('exports');
 
@@ -98,7 +98,7 @@ class StatistiquesController extends Controller
             ->whereBetween('date', [$debut->toDateString(), $fin->toDateString()])
             ->whereNotNull('heure_arrivee')
             ->pluck('date')
-            ->map(fn ($date) => Carbon::parse($date)->toDateString())
+            ->map(fn($date) => Carbon::parse($date)->toDateString())
             ->unique();
         $attendues = $datesAttendues->unique()->count();
         $enregistrees = $presences->intersect($datesAttendues->unique())->count();
