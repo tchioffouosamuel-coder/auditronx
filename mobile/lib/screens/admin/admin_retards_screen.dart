@@ -22,6 +22,16 @@ DateTime _endOfMonth() {
 
 String _isoDate(DateTime d) => DateFormat('yyyy-MM-dd').format(d);
 
+String _monthLabel(DateTime month) {
+  final label = DateFormat('MMMM yyyy', 'fr').format(month);
+  return label[0].toUpperCase() + label.substring(1);
+}
+
+List<DateTime> _lastTwelveMonths() {
+  final now = DateTime.now();
+  return List.generate(12, (index) => DateTime(now.year, now.month - index, 1));
+}
+
 List<dynamic> _asList(dynamic data) {
   if (data is List) return data;
   if (data is Map && data['data'] is List) return data['data'] as List<dynamic>;
@@ -42,6 +52,11 @@ class AdminRetardsScreen extends StatefulWidget {
 class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
   DateTime _debut = _startOfMonth();
   DateTime _fin = _endOfMonth();
+  DateTime _selectedMonth = DateTime(
+    DateTime.now().year,
+    DateTime.now().month,
+    1,
+  );
   final _toleranceController = TextEditingController(text: '10');
 
   late Future<List<dynamic>> _future;
@@ -65,7 +80,10 @@ class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
     final results = await Future.wait([
       OfflineCache.instance.readThrough(
         'admin_retards_${_isoDate(_debut)}_${_isoDate(_fin)}',
-        () => AdminApiClient.instance.get('/retards', query: {'debut': _isoDate(_debut), 'fin': _isoDate(_fin)}),
+        () => AdminApiClient.instance.get(
+          '/retards',
+          query: {'debut': _isoDate(_debut), 'fin': _isoDate(_fin)},
+        ),
       ),
       OfflineCache.instance.readThrough(
         'admin_retards_parametres',
@@ -85,20 +103,11 @@ class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
     await _future;
   }
 
-  Future<void> _pickDate({required bool isDebut}) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: isDebut ? _debut : _fin,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(DateTime.now().year + 1),
-    );
-    if (picked == null) return;
+  void _selectMonth(DateTime month) {
     setState(() {
-      if (isDebut) {
-        _debut = picked;
-      } else {
-        _fin = picked;
-      }
+      _selectedMonth = month;
+      _debut = month;
+      _fin = DateTime(month.year, month.month + 1, 0);
       _future = _load();
     });
   }
@@ -111,7 +120,9 @@ class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
     }
     setState(() => _savingTolerance = true);
     try {
-      await AdminApiClient.instance.put('/retards/parametres', {'tolerance_minutes': minutes});
+      await AdminApiClient.instance.put('/retards/parametres', {
+        'tolerance_minutes': minutes,
+      });
       if (mounted) _showMessage('Tolérance enregistrée.');
       await _refresh();
     } on ApiException catch (e) {
@@ -135,7 +146,10 @@ class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
         '/retards/bilan-cumule',
         query: {'debut': _isoDate(_debut), 'fin': _isoDate(_fin)},
       );
-      await _sharePdf(bytes, 'bilan-retards-${_isoDate(_debut)}-${_isoDate(_fin)}.pdf');
+      await _sharePdf(
+        bytes,
+        'bilan-retards-${_isoDate(_debut)}-${_isoDate(_fin)}.pdf',
+      );
     } on ApiException catch (e) {
       if (mounted) _showMessage(e.message);
     } finally {
@@ -161,7 +175,9 @@ class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -169,13 +185,11 @@ class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
     return Column(
       children: [
         _FilterBar(
-          debut: _debut,
-          fin: _fin,
+          selectedMonth: _selectedMonth,
           toleranceController: _toleranceController,
           savingTolerance: _savingTolerance,
           downloadingCumule: _downloadingCumule,
-          onPickDebut: () => _pickDate(isDebut: true),
-          onPickFin: () => _pickDate(isDebut: false),
+          onSelectMonth: _selectMonth,
           onSaveTolerance: _saveTolerance,
           onDownloadCumule: _downloadBilanCumule,
         ),
@@ -189,11 +203,25 @@ class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (snapshot.hasError) {
-                  return ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Text('Erreur : ${snapshot.error}'))]);
+                  return ListView(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text('Erreur : ${snapshot.error}'),
+                      ),
+                    ],
+                  );
                 }
                 final lignes = snapshot.data ?? [];
                 if (lignes.isEmpty) {
-                  return ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Text('Aucun retard sur cette période.'))]);
+                  return ListView(
+                    children: const [
+                      Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Text('Aucun retard sur cette période.'),
+                      ),
+                    ],
+                  );
                 }
                 return ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -205,15 +233,23 @@ class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
                     final isDownloading = _downloadingRowId == id;
                     return Card(
                       child: ListTile(
-                        leading: const Icon(Icons.schedule_outlined, color: AuditronColors.gold600),
+                        leading: const Icon(
+                          Icons.schedule_outlined,
+                          color: AuditronColors.gold600,
+                        ),
                         title: Text('${l['nom'] ?? '—'}'),
-                        subtitle: Text('${l['matricule'] ?? '—'} · ${l['section'] ?? '—'}'),
+                        subtitle: Text(
+                          '${l['matricule'] ?? '—'} · ${l['section'] ?? '—'}',
+                        ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
                               '${l['jours_retard'] ?? 0}j · ${l['minutes_retard_total'] ?? 0}min',
-                              style: const TextStyle(fontSize: 12, color: AuditronColors.ink500),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AuditronColors.ink500,
+                              ),
                             ),
                             const SizedBox(width: 4),
                             isDownloading
@@ -222,13 +258,19 @@ class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
                                     height: 36,
                                     child: Padding(
                                       padding: EdgeInsets.all(8),
-                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
                                     ),
                                   )
                                 : IconButton(
-                                    icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
+                                    icon: const Icon(
+                                      Icons.picture_as_pdf_outlined,
+                                      size: 20,
+                                    ),
                                     tooltip: 'Fiche PDF',
-                                    onPressed: () => _downloadBilanEnseignant(l),
+                                    onPressed: () =>
+                                        _downloadBilanEnseignant(l),
                                   ),
                           ],
                         ),
@@ -246,24 +288,20 @@ class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
 }
 
 class _FilterBar extends StatelessWidget {
-  final DateTime debut;
-  final DateTime fin;
+  final DateTime selectedMonth;
   final TextEditingController toleranceController;
   final bool savingTolerance;
   final bool downloadingCumule;
-  final VoidCallback onPickDebut;
-  final VoidCallback onPickFin;
+  final ValueChanged<DateTime> onSelectMonth;
   final VoidCallback onSaveTolerance;
   final VoidCallback onDownloadCumule;
 
   const _FilterBar({
-    required this.debut,
-    required this.fin,
+    required this.selectedMonth,
     required this.toleranceController,
     required this.savingTolerance,
     required this.downloadingCumule,
-    required this.onPickDebut,
-    required this.onPickFin,
+    required this.onSelectMonth,
     required this.onSaveTolerance,
     required this.onDownloadCumule,
   });
@@ -281,26 +319,20 @@ class _FilterBar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onPickDebut,
-                  icon: const Icon(Icons.calendar_today, size: 16),
-                  label: Text('Début : ${_isoDate(debut)}'),
-                  style: OutlinedButton.styleFrom(foregroundColor: AuditronColors.ink700, side: const BorderSide(color: AuditronColors.ink100)),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onPickFin,
-                  icon: const Icon(Icons.calendar_today, size: 16),
-                  label: Text('Fin : ${_isoDate(fin)}'),
-                  style: OutlinedButton.styleFrom(foregroundColor: AuditronColors.ink700, side: const BorderSide(color: AuditronColors.ink100)),
-                ),
-              ),
+          DropdownButtonFormField<DateTime>(
+            initialValue: selectedMonth,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Période du bilan',
+              prefixIcon: Icon(Icons.calendar_month_outlined),
+            ),
+            items: [
+              for (final month in _lastTwelveMonths())
+                DropdownMenuItem(value: month, child: Text(_monthLabel(month))),
             ],
+            onChanged: (month) {
+              if (month != null) onSelectMonth(month);
+            },
           ),
           const SizedBox(height: 8),
           // Wrap plutôt que Row : sur un écran étroit (ex. iPhone SE, ~320px),
@@ -311,19 +343,32 @@ class _FilterBar extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              const Text('Tolérance (min)', style: TextStyle(color: AuditronColors.ink700, fontSize: 13)),
+              const Text(
+                'Tolérance (min)',
+                style: TextStyle(color: AuditronColors.ink700, fontSize: 13),
+              ),
               SizedBox(
                 width: 64,
                 child: TextField(
                   controller: toleranceController,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                  ),
                 ),
               ),
               OutlinedButton(
                 onPressed: savingTolerance ? null : onSaveTolerance,
                 child: savingTolerance
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : const Text('Enregistrer'),
               ),
             ],
@@ -337,7 +382,10 @@ class _FilterBar extends StatelessWidget {
                   ? const SizedBox(
                       width: 16,
                       height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     )
                   : const Icon(Icons.picture_as_pdf_outlined, size: 18),
               label: const Text('Bilan PDF cumulé'),
