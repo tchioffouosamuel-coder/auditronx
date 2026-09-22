@@ -33,7 +33,9 @@ class _AdminDevicesScreenState extends State<AdminDevicesScreen> {
       _cacheKey,
       () => AdminApiClient.instance.get('/devices', query: {'revoked': 'false'}),
     );
-    return (data as Map<String, dynamic>)['data'] as List<dynamic>;
+    return ((data as Map<String, dynamic>)['data'] as List<dynamic>)
+      .where((device) => device['device_type'] == 'relay_gateway')
+      .toList();
   }
 
   Future<void> _refresh() async {

@@ -466,9 +466,20 @@ static String processScan(const String &rawJson, const String &photoBase64)
         out["payload"]["bssid"] = NimBLEDevice::getAddress().toString();
     }
     out["captured_at"] = capturedAt;
+
+    bool photoCaptured = false;
     if (photoBase64.length() > 0)
     {
         out["payload"]["photo_base64"] = photoBase64;
+        if (out.overflowed())
+        {
+            out["payload"].remove("photo_base64");
+            Serial.println("[ble] paquet JSON saturé, photo_base64 non enregistrée");
+        }
+        else
+        {
+            photoCaptured = true;
+        }
     }
 
     String serialized;
@@ -482,7 +493,7 @@ static String processScan(const String &rawJson, const String &photoBase64)
     StaticJsonDocument<160> resp;
     resp["queued"] = true;
     resp["local_id"] = localId;
-    resp["photo_captured"] = photoBase64.length() > 0;
+    resp["photo_captured"] = photoCaptured;
     String respStr;
     serializeJson(resp, respStr);
     return respStr;
@@ -617,6 +628,8 @@ static void processPendingBleScan()
 
     beepBuzzer();
     String photoBase64 = encodePhotoBase64(photoBytes);
+    Serial.printf("[ble] scan reçu: json=%uo photo=%uo (base64=%uo)\n",
+                  (unsigned)rawJson.length(), (unsigned)photoBytes.size(), (unsigned)photoBase64.length());
     String response = processScan(rawJson, photoBase64);
     if (g_bleResultChar)
     {

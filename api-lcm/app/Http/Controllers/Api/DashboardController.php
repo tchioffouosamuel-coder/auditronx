@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Traits\AccessibleEnseignants;
+use App\Models\EmploiDuTemps;
 use App\Models\Enseignant;
 use App\Models\Presence;
 use App\Services\RetardCalculator;
@@ -20,33 +21,42 @@ class DashboardController extends Controller
         $date = $request->query('date') ? Carbon::parse($request->query('date')) : now();
 
         $enseignants = $this->enseignantsAccessibles($request->user())->get();
-        $presencesDuJour = Presence::whereDate('date', $date->toDateString())
+        $emploisDuJour = EmploiDuTemps::with(['classe', 'discipline'])
+            ->where('jour', $date->isoWeekday())
             ->whereIn('enseignant_id', $enseignants->pluck('id'))
-            ->get()
-            ->keyBy('enseignant_id');
+            ->orderBy('heure_debut')->get()->groupBy('enseignant_id');
+        $planifies = $enseignants->filter(fn (Enseignant $e) => $emploisDuJour->has($e->id))->values();
+        $presencesDuJour = Presence::where('date', $date->toDateString())
+            ->whereIn('enseignant_id', $planifies->pluck('id'))->get()->keyBy('enseignant_id');
 
-        $presents = 0;
-        $retardataires = 0;
+        $scannes = [];
+        $absents = [];
+        $retardataires = [];
 
-        foreach ($enseignants as $enseignant) {
+        foreach ($planifies as $enseignant) {
             $presence = $presencesDuJour->get($enseignant->id);
+            $cours = $emploisDuJour->get($enseignant->id, collect());
+            $detail = ['enseignant_id' => $enseignant->id, 'nom' => $enseignant->nom, 'matricule' => $enseignant->matricule, 'section' => $enseignant->section, 'fonction' => $enseignant->fonction,
+                'cours' => $cours->map(fn (EmploiDuTemps $emploi) => ['classe' => $emploi->classe?->nom, 'discipline' => $emploi->discipline?->nom, 'heure_debut' => substr((string) $emploi->heure_debut, 0, 5), 'heure_fin' => substr((string) $emploi->heure_fin, 0, 5)])->values()->all()];
 
             if ($presence?->heure_arrivee) {
-                $presents++;
+                $minutesRetard = $retards->minutesDeRetard($enseignant, $presence) ?? 0;
+                $detail['heure_arrivee'] = $presence->heure_arrivee->format('H:i');
+                $detail['heure_depart'] = $presence->heure_depart?->format('H:i');
+                $detail['minutes_retard'] = $minutesRetard;
+                $scannes[] = $detail;
 
-                if ($retards->estEnRetard($enseignant, $presence)) {
-                    $retardataires++;
-                }
+                if ($minutesRetard > 0) $retardataires[] = $detail;
+            } else {
+                $absents[] = $detail;
             }
         }
 
         return response()->json([
             'date' => $date->toDateString(),
-            'effectif' => $enseignants->count(),
-            'presents' => $presents,
-            'absents' => $enseignants->count() - $presents,
-            'retardataires' => $retardataires,
-            'classement_par_section' => $this->classementParSection($enseignants, $presencesDuJour, $retards),
+            'effectif' => $planifies->count(), 'presents' => count($scannes), 'absents' => count($absents), 'retardataires' => count($retardataires),
+            'scannes' => $scannes, 'absents_liste' => $absents, 'retardataires_liste' => $retardataires,
+            'classement_par_section' => $this->classementParSection($planifies, $presencesDuJour, $retards),
         ]);
     }
 

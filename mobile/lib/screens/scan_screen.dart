@@ -6,7 +6,6 @@ import 'package:permission_handler/permission_handler.dart';
 import '../services/api_client.dart';
 import '../services/ble_service.dart';
 import '../services/presence_repository.dart';
-import '../services/selfie_capture_service.dart';
 import '../theme.dart';
 
 /// Écran de scan générique (§4.1, §4.3, §hardware) : lecture du QR papier fixe
@@ -42,7 +41,6 @@ class _ScanScreenState extends State<ScanScreen> {
   MobileScannerController _controller = MobileScannerController();
   final _ble = BleService();
   final _presenceRepository = PresenceRepository();
-  final _selfieCapture = SelfieCaptureService();
   bool _processing = false;
   bool _controllerDisposed = false;
 
@@ -59,11 +57,6 @@ class _ScanScreenState extends State<ScanScreen> {
 
     bool success = false;
     try {
-      // Caméra arrière (scanner) déjà arrêtée ci-dessus : la caméra avant
-      // peut maintenant s'ouvrir sans conflit (une seule caméra active à la
-      // fois sur la quasi-totalité des téléphones). Best-effort — un échec ne
-      // doit jamais bloquer le pointage, voir SelfieCaptureService.
-      final selfieJpeg = await _selfieCapture.captureLowResSelfie();
       final teacherToken =
           await (widget.tokenProvider ?? () => ApiClient.instance.token)();
       if (teacherToken == null) {
@@ -100,7 +93,6 @@ class _ScanScreenState extends State<ScanScreen> {
         qrCode: code,
         enseignantId: widget.enseignantId,
         motif: widget.motif,
-        selfieJpeg: selfieJpeg,
       );
 
       if (isPersonalScan) {
@@ -109,7 +101,7 @@ class _ScanScreenState extends State<ScanScreen> {
         );
       }
 
-      await _showScanSuccessSheet(result.photoCaptured);
+      await _showScanSuccessSheet();
       success = true;
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
@@ -215,7 +207,7 @@ class _ScanScreenState extends State<ScanScreen> {
     );
   }
 
-  Future<void> _showScanSuccessSheet(bool photoCaptured) {
+  Future<void> _showScanSuccessSheet() {
     return showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -254,11 +246,9 @@ class _ScanScreenState extends State<ScanScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              Text(
-                photoCaptured
-                    ? 'Votre pointage a été transmis avec la photo.'
-                    : 'Votre pointage a été transmis à la borne.',
-                style: const TextStyle(
+              const Text(
+                'Votre pointage a été transmis à la borne.',
+                style: TextStyle(
                   color: AuditronColors.ink700,
                   fontSize: 15,
                   height: 1.4,

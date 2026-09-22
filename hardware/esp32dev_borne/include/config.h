@@ -17,8 +17,8 @@ inline constexpr char BLE_CHAR_RESULT_UUID[] = "b3a1a102-2c33-4e6f-9a1e-5f6a2e6c
 // Uniquement en client (WIFI_STA) : le téléphone parle en BLE, pas en WiFi local.
 // inline constexpr char STA_SSID[] = "Galaxy S22 4D30";
 // inline constexpr char STA_PASSWORD[] = "19750000";
-inline constexpr char STA_SSID[] = "Auditron";
-inline constexpr char STA_PASSWORD[] = "1234567890";
+inline constexpr char STA_SSID[] = "Redmi";
+inline constexpr char STA_PASSWORD[] = "00000000";
 // Limite de sécurité de la file. La carte SD permet de conserver beaucoup
 // plus de scans hors ligne ; LittleFS conserve une limite basse lorsqu'elle
 // sert de secours.
@@ -71,14 +71,14 @@ inline constexpr uint32_t SD_SPI_FREQUENCY_HZ = 10000000;
 inline constexpr uint8_t BUZZER_GPIO = 25;
 
 // ---- API distante ----
-inline constexpr char API_BASE_URL[] = "https://api-lcm.auditronx.com/public";
+inline constexpr char API_BASE_URL[] = "https://api-ltm.auditronx.com/public";
 inline constexpr char API_RELAY_SYNC_PATH[] = "/api/relay/sync";
 
 // Token Sanctum du device relay_gateway, obtenu une fois via
 // POST /api/devices/provision-relay (voir hardware/README.md) — CE module
 // doit avoir son propre token, distinct de celui d'esp32_borne/ (chaque
 // device relais est identifié individuellement côté API).
-inline constexpr char RELAY_API_TOKEN[] = "2|1CWuS75HaxjpEm3PCNxathliGa96l33w9lErNZ14671ee47b";
+inline constexpr char RELAY_API_TOKEN[] = "76|nJRGTR5elU6Cg6kqXpYexMnZMKlVMTNrOLJAY8wfc653073d";
 
 // Un seul paquet par requête : la négociation TLS consomme déjà beaucoup de
 // RAM sur cet ESP32 sans PSRAM, et chaque paquet peut contenir un selfie.
@@ -87,7 +87,11 @@ inline constexpr size_t SYNC_BATCH_SIZE = 1;
 // Capacité des documents ArduinoJson dynamiques (RAM) par paquet : JPEG
 // ~160x120 qualité ~20 (quelques Ko) encodé en base64 (x1.37) + payload
 // qr_code/enseignant_id/motif + token + entêtes JSON, avec marge.
-inline constexpr size_t PACKET_JSON_CAPACITY = 10 * 1024;
+// Capacité suffisante pour un selfie JPEG basse résolution (~160x120, qualité ~20)
+// encodé en base64 + le JSON du scan et ses métadonnées. Le seuil historique de
+// 10 Ko était trop juste et faisait tomber silencieusement photo_base64 quand le
+// paquet dépassait cette capacité, sans que le téléphone le remarque.
+inline constexpr size_t PACKET_JSON_CAPACITY = 20 * 1024;
 inline constexpr size_t SYNC_BODY_JSON_CAPACITY = SYNC_BATCH_SIZE * PACKET_JSON_CAPACITY;
 
 // Cadence de vérification de la connectivité / tentative de synchro.

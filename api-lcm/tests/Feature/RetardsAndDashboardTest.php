@@ -97,6 +97,7 @@ class RetardsAndDashboardTest extends TestCase
         ]);
 
         $absent = Enseignant::factory()->create(['section' => 'Sciences']);
+        $this->creerCoursAujourdhui($absent);
 
         $response = $this->getJson('/api/dashboard')->assertOk();
 

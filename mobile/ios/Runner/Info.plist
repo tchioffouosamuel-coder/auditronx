@@ -27,7 +27,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Nécessaire pour scanner le QR code de pointage et prendre un selfie anti-procuration au moment du scan.</string>
+	<string>Nécessaire pour scanner le QR code de pointage.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -75,6 +75,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             (_) => _KpiCard(label: 'En retard', value: '${d['retardataires']}', icon: Icons.schedule, color: AuditronColors.gold600),
           ];
           final sections = (d['classement_par_section'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+          final scannes = _dashboardPeople(d['scannes']);
+          final absents = _dashboardPeople(d['absents_liste']);
+          final retardataires = _dashboardPeople(d['retardataires_liste']);
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -110,9 +113,58 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 )
               else
                 SizedBox(height: 220, child: _SectionBarChart(sections: sections)),
+              const SizedBox(height: 20),
+              _DashboardPeopleSection(title: 'Déjà scannés', people: scannes, icon: Icons.check_circle, color: AuditronColors.brand600),
+              _DashboardPeopleSection(title: 'Absents selon l\'emploi du temps', people: absents, icon: Icons.cancel, color: Colors.red),
+              _DashboardPeopleSection(title: 'Retardataires', people: retardataires, icon: Icons.schedule, color: AuditronColors.gold600),
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+List<Map<String, dynamic>> _dashboardPeople(dynamic value) =>
+    (value as List?)?.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList() ?? const [];
+
+class _DashboardPeopleSection extends StatelessWidget {
+  final String title;
+  final List<Map<String, dynamic>> people;
+  final IconData icon;
+  final Color color;
+
+  const _DashboardPeopleSection({required this.title, required this.people, required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [Icon(icon, color: color, size: 20), const SizedBox(width: 8), Text('$title (${people.length})', style: Theme.of(context).textTheme.titleMedium)]),
+            if (people.isEmpty)
+              const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Text('Aucune personne.', style: TextStyle(color: AuditronColors.ink500)))
+            else
+              ...people.map((person) {
+                final cours = (person['cours'] as List?)?.whereType<Map>().map((c) => '${c['classe'] ?? '—'} ${c['heure_debut'] ?? ''}-${c['heure_fin'] ?? ''}').join(' · ') ?? '';
+                final horaires = [
+                  if (person['heure_arrivee'] != null) 'Arrivée ${person['heure_arrivee']}',
+                  if (person['heure_depart'] != null) 'Départ ${person['heure_depart']}',
+                  if (person['minutes_retard'] != null && person['minutes_retard'] != 0) '${person['minutes_retard']} min de retard',
+                ].join(' · ');
+                return ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(icon, color: color, size: 18),
+                  title: Text(person['nom']?.toString() ?? '—'),
+                  subtitle: Text([person['matricule'], horaires, cours].where((v) => v != null && v.toString().isNotEmpty).join(' · '), overflow: TextOverflow.ellipsis, maxLines: 2),
+                );
+              }),
+          ],
+        ),
       ),
     );
   }

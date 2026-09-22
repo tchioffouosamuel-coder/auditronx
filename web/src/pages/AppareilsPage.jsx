@@ -13,7 +13,11 @@ function DevicesTable() {
     setLoading(true);
     api
       .get("/devices")
-      .then(({ data }) => setDevices(data.data ?? []))
+      .then(({ data }) =>
+        setDevices(
+          (data.data ?? []).filter((device) => device.device_type === "relay_gateway"),
+        ),
+      )
       .finally(() => setLoading(false));
   }
 

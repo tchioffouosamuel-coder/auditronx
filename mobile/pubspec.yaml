@@ -53,13 +53,6 @@ dependencies:
   # empêche une montée de version majeure accidentelle vers cette licence.
   flutter_blue_plus: ^1.35.3
 
-  # Selfie anti-procuration (§4.1) : capture caméra avant au moment du scan +
-  # redimensionnement/recompression basse résolution avant envoi BLE (le
-  # cliché natif de `camera` est bien plus lourd que ce qu'on veut transmettre
-  # sur un lien BLE ~512o/écriture).
-  camera: ^0.11.0+2
-  image: ^4.2.0
-
   # Parité admin mobile (§admin-mobile) : import/export XLSX, partage de
   # fichiers (export, bilans PDF, QR généré), graphique du dashboard.
   file_picker: ^8.1.6

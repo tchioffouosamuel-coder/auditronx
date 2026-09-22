@@ -17,6 +17,53 @@ function KpiCard({ label, value, tone = 'neutral' }) {
   )
 }
 
+function PeopleList({ title, people = [], tone = 'neutral' }) {
+  const colors = {
+    neutral: 'text-ink-700',
+    green: 'text-green-600',
+    red: 'text-red-600',
+    amber: 'text-amber-600',
+  }
+
+  return (
+    <section className="rounded-xl border border-ink-100 bg-white p-4 shadow-sm sm:p-6">
+      <h2 className={`mb-4 text-sm font-medium ${colors[tone]}`}>{title} ({people.length})</h2>
+      {people.length === 0 ? (
+        <p className="text-sm text-ink-300">Aucune personne.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="border-b border-ink-100 text-xs uppercase tracking-wide text-ink-300">
+              <tr>
+                <th className="px-2 py-2 font-medium">Nom</th>
+                <th className="px-2 py-2 font-medium">Matricule</th>
+                <th className="px-2 py-2 font-medium">Cours prévu</th>
+                <th className="px-2 py-2 font-medium">Arrivée</th>
+                <th className="px-2 py-2 font-medium">Départ</th>
+                <th className="px-2 py-2 font-medium">Retard</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-ink-100">
+              {people.map((person) => (
+                <tr key={person.enseignant_id}>
+                  <td className="whitespace-nowrap px-2 py-3 font-medium text-ink-800">{person.nom || '—'}</td>
+                  <td className="whitespace-nowrap px-2 py-3 text-ink-500">{person.matricule || '—'}</td>
+                  <td className="px-2 py-3 text-ink-500">
+                    {(person.cours || []).map((course) => `${course.classe || '—'} ${course.heure_debut || ''}-${course.heure_fin || ''}`).join(' · ') || '—'}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-3 text-ink-500">{person.heure_arrivee || '—'}</td>
+                  <td className="whitespace-nowrap px-2 py-3 text-ink-500">{person.heure_depart || '—'}</td>
+                  <td className="whitespace-nowrap px-2 py-3 text-ink-500">{person.minutes_retard ? `${person.minutes_retard} min` : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  )
+}
+
 export default function DashboardPage() {
   const [data, setData] = useState(null)
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
@@ -26,6 +73,9 @@ export default function DashboardPage() {
   }, [date])
 
   const classement = data && Array.isArray(data.classement_par_section) ? data.classement_par_section : []
+  const scannes = data && Array.isArray(data.scannes) ? data.scannes : []
+  const absents = data && Array.isArray(data.absents_liste) ? data.absents_liste : []
+  const retardataires = data && Array.isArray(data.retardataires_liste) ? data.retardataires_liste : []
 
   return (
     <div>
@@ -73,6 +123,12 @@ export default function DashboardPage() {
                 </BarChart>
               </ResponsiveContainer>
             )}
+          </div>
+
+          <div className="mt-6 space-y-6">
+            <PeopleList title="Déjà scannés" people={scannes} tone="green" />
+            <PeopleList title="Absents selon l’emploi du temps" people={absents} tone="red" />
+            <PeopleList title="Retardataires" people={retardataires} tone="amber" />
           </div>
         </>
       )}

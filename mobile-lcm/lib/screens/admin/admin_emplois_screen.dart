@@ -21,6 +21,42 @@ class AdminEmploisScreen extends StatelessWidget {
     AdminFieldOption(7, 'Dimanche'),
   ];
 
+  static const List<AdminFieldOption> _heuresDebut = [
+    AdminFieldOption('07:30', '07h30'),
+    AdminFieldOption('08:10', '08h10'),
+    AdminFieldOption('08:50', '08h50'),
+    AdminFieldOption('09:30', '09h30'),
+    AdminFieldOption('10:10', '10h10'),
+    AdminFieldOption('10:20', '10h20'),
+    AdminFieldOption('11:00', '11h00'),
+    AdminFieldOption('11:40', '11h40'),
+    AdminFieldOption('12:00', '12h00'),
+    AdminFieldOption('12:40', '12h40'),
+    AdminFieldOption('13:20', '13h20'),
+    AdminFieldOption('13:30', '13h30'),
+    AdminFieldOption('14:10', '14h10'),
+    AdminFieldOption('14:50', '14h50'),
+    AdminFieldOption('15:30', '15h30'),
+  ];
+
+  static const List<AdminFieldOption> _heuresFin = [
+    AdminFieldOption('08:10', '08h10'),
+    AdminFieldOption('08:50', '08h50'),
+    AdminFieldOption('09:30', '09h30'),
+    AdminFieldOption('10:10', '10h10'),
+    AdminFieldOption('10:20', '10h20'),
+    AdminFieldOption('11:00', '11h00'),
+    AdminFieldOption('11:40', '11h40'),
+    AdminFieldOption('12:00', '12h00'),
+    AdminFieldOption('12:40', '12h40'),
+    AdminFieldOption('13:20', '13h20'),
+    AdminFieldOption('13:30', '13h30'),
+    AdminFieldOption('14:10', '14h10'),
+    AdminFieldOption('14:50', '14h50'),
+    AdminFieldOption('15:30', '15h30'),
+    AdminFieldOption('16:10', '16h10'),
+  ];
+
   static final List<AdminFieldSpec> _fields = [
     const AdminFieldSpec(
       key: 'enseignant_id',
@@ -53,14 +89,16 @@ class AdminEmploisScreen extends StatelessWidget {
     const AdminFieldSpec(
       key: 'heure_debut',
       label: 'Heure de début',
+      type: AdminFieldType.select,
       required: true,
-      helperText: 'Format HH:MM',
+      options: _heuresDebut,
     ),
     const AdminFieldSpec(
       key: 'heure_fin',
       label: 'Heure de fin',
+      type: AdminFieldType.select,
       required: true,
-      helperText: 'Format HH:MM',
+      options: _heuresFin,
     ),
     const AdminFieldSpec(key: 'salle', label: 'Salle'),
     const AdminFieldSpec(key: 'type_cours', label: 'Type de cours'),

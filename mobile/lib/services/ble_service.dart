@@ -9,9 +9,8 @@ import 'api_client.dart';
 
 class BorneScanResult {
   final String? localId;
-  final bool photoCaptured;
 
-  BorneScanResult({this.localId, required this.photoCaptured});
+  BorneScanResult({this.localId});
 }
 
 /// Pointage via la borne ESP32 en BLE (§4.1, §hardware) : remplace la
@@ -78,10 +77,6 @@ class BleService {
     required String qrCode,
     int? enseignantId,
     String? motif,
-    // Selfie déjà compressé (voir SelfieCaptureService) — `null` si la
-    // capture a échoué ou n'a pas été tentée : le scan est alors transmis
-    // sans preuve visuelle plutôt que bloqué (best-effort).
-    Uint8List? selfieJpeg,
   }) async {
     final total = Stopwatch()..start();
     final device = await _findBorne();
@@ -109,7 +104,6 @@ class BleService {
           qrCode: qrCode,
           enseignantId: enseignantId,
           motif: motif,
-          selfieJpeg: selfieJpeg,
         );
         // Fire-and-forget : ne doit pas retarder le retour du résultat à
         // l'écran (turnOff() peut mettre plusieurs secondes à répondre).
@@ -139,7 +133,6 @@ class BleService {
     required String qrCode,
     int? enseignantId,
     String? motif,
-    Uint8List? selfieJpeg,
   }) async {
     try {
       await device.connect(timeout: const Duration(seconds: 8));
@@ -167,14 +160,10 @@ class BleService {
       await Future.delayed(const Duration(milliseconds: 300));
 
       await resultChar.setNotifyValue(true);
-      // Timeout généreux : avec le selfie, la borne attend la dernière écriture
-      // (tag final) avant de répondre, et l'envoi des chunks photo (ci-dessous)
-      // peut à lui seul prendre 1-2s sur un lien BLE lent.
+      // Timeout généreux : la borne attend la dernière écriture (tag final)
+      // avant de répondre, et les chunks JSON peuvent prendre du temps sur un
+      // lien BLE lent.
       final responseFuture = resultChar.onValueReceived.first.timeout(const Duration(seconds: 15));
-
-      if (selfieJpeg != null && selfieJpeg.isNotEmpty) {
-        await _sendFramedBytes(scanChar, selfieJpeg, _tagPhotoChunk, _tagPhotoChunk, chunkPayloadSize);
-      }
 
       final payload = {
         'qr_code': qrCode,
@@ -193,9 +182,8 @@ class BleService {
         'captured_at': DateTime.now().toUtc().toIso8601String(),
       }));
       // Tag 0x02 sur le dernier morceau : signale à la borne que c'est la fin
-      // de la requête — elle associe alors les chunks photo déjà reçus (s'il y
-      // en a) à CE scan avant de répondre. Le JSON lui-même peut désormais
-      // dépasser un seul chunk (tag 0x03 pour les morceaux intermédiaires) :
+      // de la requête. Le JSON peut désormais dépasser un seul chunk (tag 0x03
+      // pour les morceaux intermédiaires) :
       // constaté nécessaire sur le même téléphone bas de gamme que ci-dessus,
       // dont le MTU négocié (255o) est parfois trop court pour un JSON avec un
       // long token/qr_code. Voir esp32dev_borne/src/main.cpp (BLE_TAG_*).
@@ -231,13 +219,7 @@ class BleService {
 
   /// Découpe [bytes] en écritures GATT successives d'au plus [chunkPayloadSize]
   /// octets de données chacune, préfixées d'un octet de tag — [continuationTag]
-  /// pour tous les morceaux sauf le dernier, [finalTag] pour le dernier (qui
-  /// peut être identique : c'est le cas pour la photo, toujours suivie de la
-  /// requête JSON qui déclenche elle-même le traitement côté borne). Envoyé
-  /// brut (JPEG, pas de base64) : encoder ici gonflerait le volume transmis
-  /// sur l'air d'environ 33% pour rien — la borne encode elle-même juste avant
-  /// d'injecter la photo dans le paquet JSON (voir esp32dev_borne/src/main.cpp,
-  /// encodePhotoBase64()).
+  /// pour tous les morceaux sauf le dernier, [finalTag] pour le dernier.
   Future<void> _sendFramedBytes(
     BluetoothCharacteristic scanChar,
     List<int> bytes,
@@ -307,7 +289,6 @@ class BleService {
     if (decoded['queued'] == true) {
       return BorneScanResult(
         localId: decoded['local_id'] as String?,
-        photoCaptured: decoded['photo_captured'] == true,
       );
     }
 

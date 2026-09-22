@@ -50,6 +50,27 @@ class AdminApiClient {
     return _decode(response);
   }
 
+  /// Récupère toutes les pages Laravel d'une ressource paginée.
+  Future<dynamic> getAllPages(String path) async {
+    final first = await get(path);
+    if (first is! Map || first['data'] is! List) return first;
+
+    final items = List<dynamic>.from(first['data'] as List);
+    var page = first['current_page'] as int? ?? 1;
+    final lastPage = first['last_page'] as int? ?? page;
+    while (page < lastPage) {
+      page++;
+      final uri = Uri.parse(path);
+      final query = Map<String, String>.from(uri.queryParameters)
+        ..['page'] = page.toString();
+      final next = await get(uri.path, query: query);
+      if (next is! Map || next['data'] is! List) break;
+      items.addAll(next['data'] as List);
+    }
+
+    return items;
+  }
+
   Future<dynamic> post(String path, Map<String, dynamic> body) async {
     final uri = Uri.parse('${ApiClient.baseUrl}$path');
     final response = await _guarded(

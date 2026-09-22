@@ -31,19 +31,34 @@ class AdminSelectField extends StatelessWidget {
   final dynamic value;
   final ValueChanged<dynamic> onChanged;
 
-  const AdminSelectField({super.key, required this.field, required this.value, required this.onChanged});
+  const AdminSelectField({
+    super.key,
+    required this.field,
+    required this.value,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
     if (field.options != null) {
       return DropdownButtonFormField<dynamic>(
         initialValue: value,
-        decoration: InputDecoration(labelText: field.label + (field.required ? ' *' : '')),
+        isExpanded: true,
+        decoration: InputDecoration(
+          labelText: field.label + (field.required ? ' *' : ''),
+        ),
         items: field.options!
-            .map((o) => DropdownMenuItem(value: o.value, child: Text(o.label)))
+            .map(
+              (o) => DropdownMenuItem(
+                value: o.value,
+                child: Text(o.label, overflow: TextOverflow.ellipsis),
+              ),
+            )
             .toList(),
         onChanged: onChanged,
-        validator: field.required ? (v) => v == null ? 'Champ requis' : null : null,
+        validator: field.required
+            ? (v) => v == null ? 'Champ requis' : null
+            : null,
       );
     }
 
@@ -53,27 +68,46 @@ class AdminSelectField extends StatelessWidget {
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return InputDecorator(
-            decoration: InputDecoration(labelText: field.label + (field.required ? ' *' : '')),
-            child: const SizedBox(height: 20, child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+            decoration: InputDecoration(
+              labelText: field.label + (field.required ? ' *' : ''),
+            ),
+            child: const SizedBox(
+              height: 20,
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            ),
           );
         }
         final items = snapshot.data!;
-        final currentValid = items.any((i) => (field.optionValue?.call(i) ?? i['id']) == value);
+        final currentValid = items.any(
+          (i) => (field.optionValue?.call(i) ?? i['id']) == value,
+        );
         return DropdownButtonFormField<dynamic>(
           initialValue: currentValid ? value : null,
-          decoration: InputDecoration(labelText: field.label + (field.required ? ' *' : '')),
+          isExpanded: true,
+          decoration: InputDecoration(
+            labelText: field.label + (field.required ? ' *' : ''),
+          ),
           items: items
-              .map((i) => DropdownMenuItem(
-                    value: field.optionValue?.call(i) ?? i['id'],
-                    child: Text(field.optionLabel?.call(i) ?? (i['nom']?.toString() ?? i['label']?.toString() ?? '—')),
-                  ))
+              .map(
+                (i) => DropdownMenuItem(
+                  value: field.optionValue?.call(i) ?? i['id'],
+                  child: Text(
+                    field.optionLabel?.call(i) ??
+                        (i['nom']?.toString() ?? i['label']?.toString() ?? '—'),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              )
               .toList(),
           onChanged: onChanged,
-          validator: field.required ? (v) => v == null ? 'Champ requis' : null : null,
+          validator: field.required
+              ? (v) => v == null ? 'Champ requis' : null
+              : null,
         );
       },
     );
   }
 
-  static void invalidateCache(String endpoint) => _OptionsCache.invalidate(endpoint);
+  static void invalidateCache(String endpoint) =>
+      _OptionsCache.invalidate(endpoint);
 }
