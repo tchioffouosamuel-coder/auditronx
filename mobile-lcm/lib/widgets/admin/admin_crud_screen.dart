@@ -124,7 +124,8 @@ class AdminCrudScreenState extends State<AdminCrudScreen> {
       }
       await OfflineCache.instance.overwrite(widget.cacheKey, {'data': items});
       if (mounted) setState(() => _future = Future.value(items));
-      if (mounted) _showSuccess(isEdit ? 'Modification réussie.' : 'Création réussie.');
+      if (mounted)
+        _showSuccess(isEdit ? 'Modification réussie.' : 'Création réussie.');
     } on ApiException catch (e) {
       if (e.statusCode == 0) {
         // Hors-ligne (§offline-sync) : mise à jour optimiste + rejeu différé.
@@ -141,7 +142,10 @@ class AdminCrudScreenState extends State<AdminCrudScreen> {
         }
         await OfflineCache.instance.overwrite(widget.cacheKey, {'data': items});
         if (mounted) setState(() => _future = Future.value(items));
-        if (mounted) _showSuccess('${isEdit ? 'Modification' : 'Création'} enregistrée hors ligne.');
+        if (mounted)
+          _showSuccess(
+            '${isEdit ? 'Modification' : 'Création'} enregistrée hors ligne.',
+          );
         await PendingActionsQueue.instance.enqueue(
           authMode: AuthMode.admin,
           method: isEdit ? 'PUT' : 'POST',
@@ -222,7 +226,12 @@ class AdminCrudScreenState extends State<AdminCrudScreen> {
   void _showSuccess(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message), backgroundColor: AuditronColors.brand700));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: AuditronColors.brand700,
+        ),
+      );
   }
 
   @override

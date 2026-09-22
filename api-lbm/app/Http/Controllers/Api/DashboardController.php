@@ -44,6 +44,9 @@ class DashboardController extends Controller
                 'fonction' => $enseignant->fonction,
                 'cours' => $cours->map(fn(EmploiDuTemps $emploi) => ['classe' => $emploi->classe?->nom, 'discipline' => $emploi->discipline?->nom, 'heure_debut' => substr((string) $emploi->heure_debut, 0, 5), 'heure_fin' => substr((string) $emploi->heure_fin, 0, 5)])->values()->all()
             ];
+            $premierCours = $cours->sortBy('heure_debut')->first();
+            $heureLimiteAbsence = Carbon::parse($date->toDateString() . ' ' . $premierCours->heure_debut)->addMinutes(5);
+            $absenceEligible = $date->isBefore(Carbon::today()) || ($date->isSameDay(Carbon::today()) && now()->greaterThanOrEqualTo($heureLimiteAbsence));
 
             if ($presence?->heure_arrivee) {
                 $minutesRetard = $retards->minutesDeRetard($enseignant, $presence) ?? 0;
@@ -53,7 +56,7 @@ class DashboardController extends Controller
                 $scannes[] = $detail;
 
                 if ($minutesRetard > 0) $retardataires[] = $detail;
-            } else {
+            } elseif ($absenceEligible) {
                 $absents[] = $detail;
             }
         }

@@ -53,6 +53,10 @@ class DashboardController extends Controller
                     'heure_fin' => substr((string) $emploi->heure_fin, 0, 5),
                 ])->values()->all(),
             ];
+            $premierCours = $cours->sortBy('heure_debut')->first();
+            $heureLimiteAbsence = Carbon::parse($date->toDateString() . ' ' . $premierCours->heure_debut)->addMinutes(5);
+            $absenceEligible = $date->isBefore(Carbon::today())
+                || ($date->isSameDay(Carbon::today()) && now()->greaterThanOrEqualTo($heureLimiteAbsence));
 
             if ($presence?->heure_arrivee) {
                 $minutesRetard = $retards->minutesDeRetard($enseignant, $presence) ?? 0;
@@ -64,7 +68,7 @@ class DashboardController extends Controller
                 if ($minutesRetard > 0) {
                     $retardataires[] = $detail;
                 }
-            } else {
+            } elseif ($absenceEligible) {
                 $absents[] = $detail;
             }
         }
