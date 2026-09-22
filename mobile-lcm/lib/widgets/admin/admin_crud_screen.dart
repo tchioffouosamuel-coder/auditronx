@@ -38,6 +38,8 @@ class AdminCrudScreen extends StatefulWidget {
   /// Remplace l'icône fixe par un widget par élément (ex : miniature photo).
   final Widget Function(BuildContext context, Map<String, dynamic> item)?
   leadingBuilder;
+  final Future<void> Function(BuildContext context, Map<String, dynamic> item)?
+  onItemTap;
 
   /// Désactive la création/édition/suppression (utilisé pour des vues
   /// lecture seule qui n'ont pas besoin d'un écran dédié).
@@ -56,6 +58,7 @@ class AdminCrudScreen extends StatefulWidget {
     this.headerActions,
     this.extraRowActions,
     this.leadingBuilder,
+    this.onItemTap,
     this.readOnly = false,
   });
 
@@ -121,6 +124,7 @@ class AdminCrudScreenState extends State<AdminCrudScreen> {
       }
       await OfflineCache.instance.overwrite(widget.cacheKey, {'data': items});
       if (mounted) setState(() => _future = Future.value(items));
+      if (mounted) _showSuccess(isEdit ? 'Modification réussie.' : 'Création réussie.');
     } on ApiException catch (e) {
       if (e.statusCode == 0) {
         // Hors-ligne (§offline-sync) : mise à jour optimiste + rejeu différé.
@@ -137,6 +141,7 @@ class AdminCrudScreenState extends State<AdminCrudScreen> {
         }
         await OfflineCache.instance.overwrite(widget.cacheKey, {'data': items});
         if (mounted) setState(() => _future = Future.value(items));
+        if (mounted) _showSuccess('${isEdit ? 'Modification' : 'Création'} enregistrée hors ligne.');
         await PendingActionsQueue.instance.enqueue(
           authMode: AuthMode.admin,
           method: isEdit ? 'PUT' : 'POST',
@@ -183,6 +188,7 @@ class AdminCrudScreenState extends State<AdminCrudScreen> {
       await AdminApiClient.instance.delete(
         '${widget.resourcePath}/${item[widget.idKey]}',
       );
+      if (mounted) _showSuccess('Suppression réussie.');
     } on ApiException catch (e) {
       if (e.statusCode != 0) {
         if (mounted) _showError(e);
@@ -196,6 +202,7 @@ class AdminCrudScreenState extends State<AdminCrudScreen> {
         label: 'Supprimer ${widget.itemTitle(item)}',
       );
       await SyncEngine.instance.notifyEnqueued();
+      if (mounted) _showSuccess('Suppression enregistrée hors ligne.');
     }
   }
 
@@ -210,6 +217,12 @@ class AdminCrudScreenState extends State<AdminCrudScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _showSuccess(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message), backgroundColor: AuditronColors.brand700));
   }
 
   @override
@@ -279,6 +292,9 @@ class AdminCrudScreenState extends State<AdminCrudScreen> {
                     final item = items[i] as Map<String, dynamic>;
                     return Card(
                       child: ListTile(
+                        onTap: widget.onItemTap == null
+                            ? null
+                            : () => widget.onItemTap!(context, item),
                         leading:
                             widget.leadingBuilder?.call(context, item) ??
                             Icon(widget.icon, color: AuditronColors.brand700),

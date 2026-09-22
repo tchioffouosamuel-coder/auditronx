@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Traits\AccessibleEnseignants;
 use App\Models\Enseignant;
+use App\Models\Presence;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 /** Gestion du personnel (§4.2 — équivalent JSON de PersonnelController). */
@@ -51,6 +53,23 @@ class EnseignantController extends Controller
         abort_unless($this->peutAccederA($request->user(), $enseignant), 403);
 
         return response()->json($enseignant->load('emploiDuTemps.classe', 'emploiDuTemps.discipline'));
+    }
+
+    public function assiduite(Request $request, Enseignant $enseignant)
+    {
+        abort_unless($this->peutAccederA($request->user(), $enseignant), 403);
+        $debut = Carbon::now()->startOfMonth();
+        $fin = Carbon::now()->endOfMonth();
+        $emplois = $enseignant->emploiDuTemps()->get();
+        $datesAttendues = collect();
+        for ($date = $debut->copy(); $date->lte($fin); $date->addDay()) {
+            if ($emplois->contains('jour', $date->isoWeekday())) $datesAttendues->push($date->toDateString());
+        }
+        $datesPresents = $enseignant->presences()->whereBetween('date', [$debut->toDateString(), $fin->toDateString()])->whereNotNull('heure_arrivee')->pluck('date')->map(fn($date) => Carbon::parse($date)->toDateString());
+        $joursAttendus = $datesAttendues->unique()->count();
+        $joursPresents = $datesPresents->intersect($datesAttendues)->unique()->count();
+
+        return response()->json(['jours_presents' => $joursPresents, 'jours_attendus' => $joursAttendus, 'taux_assiduite' => $joursAttendus > 0 ? round($joursPresents / $joursAttendus * 100, 1) : 0.0]);
     }
 
     public function update(Request $request, Enseignant $enseignant)

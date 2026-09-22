@@ -73,6 +73,7 @@ Route::middleware('auth:sanctum')->group(function () {
         ->except(['show']);
 
     // Gestion (§4.2 / §4.3) — équivalent JSON des routes web de gestion existantes
+    Route::get('/personnel/{enseignant}/assiduite', [EnseignantController::class, 'assiduite']);
     Route::apiResource('personnel', EnseignantController::class)
         ->parameters(['personnel' => 'enseignant']);
     Route::apiResource('classes', ClasseController::class)

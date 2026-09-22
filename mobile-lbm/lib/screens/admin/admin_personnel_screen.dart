@@ -31,7 +31,8 @@ class AdminPersonnelScreen extends StatelessWidget {
       key: 'password',
       label: 'Mot de passe',
       type: AdminFieldType.password,
-      helperText: 'Mot de passe de connexion mobile — laisser vide pour ne pas changer',
+      helperText:
+          'Mot de passe de connexion mobile — laisser vide pour ne pas changer',
     ),
     const AdminFieldSpec(
       key: 'est_admin',
@@ -40,8 +41,25 @@ class AdminPersonnelScreen extends StatelessWidget {
     ),
   ];
 
-  Future<void> _changePhoto(BuildContext context, Map<String, dynamic> item) async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.image, withData: true);
+  Future<void> _openDetails(
+    BuildContext context,
+    Map<String, dynamic> item,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _PersonnelDetailsSheet(item: item),
+    );
+  }
+
+  Future<void> _changePhoto(
+    BuildContext context,
+    Map<String, dynamic> item,
+  ) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      withData: true,
+    );
     final picked = result?.files.single;
     if (picked?.bytes == null) return;
 
@@ -55,20 +73,31 @@ class AdminPersonnelScreen extends StatelessWidget {
       await _key.currentState?.refresh();
     } on ApiException catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     }
   }
 
-  Future<void> _deletePhoto(BuildContext context, Map<String, dynamic> item) async {
+  Future<void> _deletePhoto(
+    BuildContext context,
+    Map<String, dynamic> item,
+  ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Supprimer cette photo ?'),
         content: Text(item['nom']?.toString() ?? ''),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Supprimer')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Supprimer'),
+          ),
         ],
       ),
     );
@@ -79,12 +108,17 @@ class AdminPersonnelScreen extends StatelessWidget {
       await _key.currentState?.refresh();
     } on ApiException catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     }
   }
 
-  Future<void> _openPhotoMenu(BuildContext context, Map<String, dynamic> item) async {
+  Future<void> _openPhotoMenu(
+    BuildContext context,
+    Map<String, dynamic> item,
+  ) async {
     final hasPhoto = item['photo_url'] != null;
     final choice = await showModalBottomSheet<String>(
       context: context,
@@ -123,10 +157,13 @@ class AdminPersonnelScreen extends StatelessWidget {
       cacheKey: 'admin_personnel',
       icon: Icons.badge,
       fields: _fields,
+      onItemTap: _openDetails,
       itemTitle: (item) => item['nom']?.toString() ?? '—',
-      itemSubtitle: (item) => [item['matricule'], item['fonction'], item['section']]
-          .where((v) => v != null && v.toString().isNotEmpty)
-          .join(' · '),
+      itemSubtitle: (item) => [
+        item['matricule'],
+        item['fonction'],
+        item['section'],
+      ].where((v) => v != null && v.toString().isNotEmpty).join(' · '),
       headerActions: (context, refresh) => [
         SpreadsheetActionsBar(entity: 'personnel', onImported: refresh),
       ],
@@ -150,6 +187,116 @@ class AdminPersonnelScreen extends StatelessWidget {
           onPressed: () => _openPhotoMenu(context, item),
         ),
       ],
+    );
+  }
+}
+
+class _PersonnelDetailsSheet extends StatelessWidget {
+  final Map<String, dynamic> item;
+  const _PersonnelDetailsSheet({required this.item});
+
+  Future<Map<String, dynamic>> _loadAttendance() async {
+    final data = await AdminApiClient.instance.get(
+      '/personnel/${item['id']}/assiduite',
+    );
+    return data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final details =
+        [
+              ('Matricule', item['matricule']),
+              ('Email', item['email']),
+              ('Fonction', item['fonction']),
+              ('Section', item['section']),
+              ('Grade', item['grade']),
+              ('Téléphone', item['tel']),
+              ('Poste', item['poste']),
+            ]
+            .where(
+              (entry) => entry.$2 != null && entry.$2.toString().isNotEmpty,
+            )
+            .toList();
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.black26,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                item['nom']?.toString() ?? 'Personnel',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 16),
+              ...details.map(
+                (entry) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: Text(
+                    entry.$1,
+                    style: const TextStyle(color: AuditronColors.ink500),
+                  ),
+                  subtitle: Text(entry.$2.toString()),
+                ),
+              ),
+              const Divider(height: 24),
+              Text(
+                'Assiduité du mois',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              FutureBuilder<Map<String, dynamic>>(
+                future: _loadAttendance(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done)
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  if (snapshot.hasError)
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Text(
+                        'Taux indisponible : ${snapshot.error}',
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    );
+                  final data = snapshot.data ?? const <String, dynamic>{};
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(
+                      Icons.insights,
+                      color: AuditronColors.brand700,
+                    ),
+                    title: Text(
+                      '${data['taux_assiduite'] ?? 0}%',
+                      style: const TextStyle(
+                        fontSize: 30,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    subtitle: Text(
+                      '${data['jours_presents'] ?? 0} / ${data['jours_attendus'] ?? 0} jours attendus selon l’emploi du temps',
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

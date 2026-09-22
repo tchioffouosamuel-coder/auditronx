@@ -60,7 +60,7 @@ class DashboardController extends Controller
 
         return response()->json([
             'date' => $date->toDateString(),
-            'effectif' => $planifies->count(),
+            'effectif' => $enseignants->count(),
             'presents' => count($scannes),
             'absents' => count($absents),
             'retardataires' => count($retardataires),
