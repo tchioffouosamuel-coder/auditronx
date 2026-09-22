@@ -31,11 +31,14 @@ class _AdminDevicesScreenState extends State<AdminDevicesScreen> {
   Future<List<dynamic>> _load() async {
     final data = await OfflineCache.instance.readThrough(
       _cacheKey,
-      () => AdminApiClient.instance.get('/devices', query: {'revoked': 'false'}),
+      () => AdminApiClient.instance.get(
+        '/devices',
+        query: {'revoked': 'false', 'device_type': 'mobile'},
+      ),
     );
     return ((data as Map<String, dynamic>)['data'] as List<dynamic>)
-      .where((device) => device['device_type'] == 'relay_gateway')
-      .toList();
+        .where((device) => device['device_type'] == 'mobile')
+        .toList();
   }
 
   Future<void> _refresh() async {
@@ -48,10 +51,18 @@ class _AdminDevicesScreenState extends State<AdminDevicesScreen> {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Révoquer ce device ?'),
-        content: Text("${device['teacher']?['nom'] ?? device['device_uuid']} devra se réactiver."),
+        content: Text(
+          "${device['teacher']?['nom'] ?? device['device_uuid']} devra se réactiver.",
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Révoquer')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Révoquer'),
+          ),
         ],
       ),
     );
@@ -59,7 +70,8 @@ class _AdminDevicesScreenState extends State<AdminDevicesScreen> {
 
     // Optimiste (§offline-sync) : un device révoqué ne doit plus apparaître
     // comme actif à l'écran, même si l'appel réseau part en file d'attente.
-    final devices = List<dynamic>.from(await _future)..removeWhere((d) => d['id'] == device['id']);
+    final devices = List<dynamic>.from(await _future)
+      ..removeWhere((d) => d['id'] == device['id']);
     await OfflineCache.instance.overwrite(_cacheKey, {'data': devices});
     setState(() => _future = Future.value(devices));
 
@@ -71,7 +83,8 @@ class _AdminDevicesScreenState extends State<AdminDevicesScreen> {
         authMode: AuthMode.admin,
         path: '/devices/${device['id']}/revoke',
         body: const {},
-        label: "Révoquer le device de ${device['teacher']?['nom'] ?? device['device_uuid']}",
+        label:
+            "Révoquer le device de ${device['teacher']?['nom'] ?? device['device_uuid']}",
       );
       await SyncEngine.instance.notifyEnqueued();
     }
@@ -79,7 +92,10 @@ class _AdminDevicesScreenState extends State<AdminDevicesScreen> {
 
   Future<void> _rotateToken(Map<String, dynamic> device) async {
     try {
-      final response = await AdminApiClient.instance.post('/devices/${device['id']}/rotate-token', {});
+      final response = await AdminApiClient.instance.post(
+        '/devices/${device['id']}/rotate-token',
+        {},
+      );
       final token = (response as Map<String, dynamic>)['token'] as String;
       if (!mounted) return;
       await showDialog<void>(
@@ -90,9 +106,17 @@ class _AdminDevicesScreenState extends State<AdminDevicesScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text("Ce token ne sera plus jamais affiché. Copiez-le maintenant et transmettez-le à la borne relais."),
+              const Text(
+                "Ce token ne sera plus jamais affiché. Copiez-le maintenant et transmettez-le à la borne relais.",
+              ),
               const SizedBox(height: 12),
-              SelectableText(token, style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold)),
+              SelectableText(
+                token,
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ],
           ),
           actions: [
@@ -101,18 +125,26 @@ class _AdminDevicesScreenState extends State<AdminDevicesScreen> {
                 onPressed: () async {
                   await Clipboard.setData(ClipboardData(text: token));
                   if (!dialogContext.mounted) return;
-                  ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(content: Text('Token copié.')));
+                  ScaffoldMessenger.of(
+                    dialogContext,
+                  ).showSnackBar(const SnackBar(content: Text('Token copié.')));
                 },
                 child: const Text('Copier'),
               ),
             ),
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fermer')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Fermer'),
+            ),
           ],
         ),
       );
       await _refresh();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -129,7 +161,14 @@ class _AdminDevicesScreenState extends State<AdminDevicesScreen> {
 
           final devices = snapshot.data ?? [];
           if (devices.isEmpty) {
-            return ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Text('Aucun device actif.'))]);
+            return ListView(
+              children: const [
+                Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text('Aucun device actif.'),
+                ),
+              ],
+            );
           }
 
           return ListView.separated(
@@ -141,7 +180,9 @@ class _AdminDevicesScreenState extends State<AdminDevicesScreen> {
               return Card(
                 child: ListTile(
                   leading: Icon(
-                    d['device_type'] == 'relay_gateway' ? Icons.router : Icons.phone_android,
+                    d['device_type'] == 'relay_gateway'
+                        ? Icons.router
+                        : Icons.phone_android,
                     color: AuditronColors.brand700,
                   ),
                   title: Text(d['teacher']?['nom'] ?? d['device_type'] ?? '—'),
@@ -155,7 +196,10 @@ class _AdminDevicesScreenState extends State<AdminDevicesScreen> {
                           icon: const Icon(Icons.vpn_key_outlined, size: 20),
                           onPressed: () => _rotateToken(d),
                         ),
-                      TextButton(onPressed: () => _revoke(d), child: const Text('Révoquer')),
+                      TextButton(
+                        onPressed: () => _revoke(d),
+                        child: const Text('Révoquer'),
+                      ),
                     ],
                   ),
                 ),

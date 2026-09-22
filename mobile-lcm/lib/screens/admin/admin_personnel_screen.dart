@@ -18,12 +18,26 @@ class AdminPersonnelScreen extends StatelessWidget {
 
   final _key = GlobalKey<AdminCrudScreenState>();
 
+  static const List<AdminFieldOption> _sections = [
+    AdminFieldOption('Industrielle', 'Industrielle'),
+    AdminFieldOption('STT', 'STT'),
+    AdminFieldOption('Générale', 'Générale'),
+    AdminFieldOption('Administration', 'Administration'),
+    AdminFieldOption('Anglophone', 'Anglophone'),
+    AdminFieldOption('Francophone', 'Francophone'),
+  ];
+
   static final List<AdminFieldSpec> _fields = [
     const AdminFieldSpec(key: 'nom', label: 'Nom', required: true),
     const AdminFieldSpec(key: 'matricule', label: 'Matricule', required: true),
     const AdminFieldSpec(key: 'email', label: 'Email'),
     const AdminFieldSpec(key: 'fonction', label: 'Fonction'),
-    const AdminFieldSpec(key: 'section', label: 'Section'),
+    const AdminFieldSpec(
+      key: 'section',
+      label: 'Section',
+      type: AdminFieldType.select,
+      options: _sections,
+    ),
     const AdminFieldSpec(key: 'grade', label: 'Grade'),
     const AdminFieldSpec(key: 'tel', label: 'Téléphone'),
     const AdminFieldSpec(key: 'poste', label: 'Poste'),
@@ -59,7 +73,6 @@ class AdminPersonnelScreen extends StatelessWidget {
           await _key.currentState?.deleteItem(item);
         },
       ),
-    );
     );
   }
 
@@ -206,13 +219,25 @@ class _PersonnelDetailsSheet extends StatelessWidget {
   final Map<String, dynamic> item;
   final Future<void> Function() onEdit;
   final Future<void> Function() onDelete;
-  const _PersonnelDetailsSheet({required this.item, required this.onEdit, required this.onDelete});
+  const _PersonnelDetailsSheet({
+    required this.item,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   Future<Map<String, dynamic>> _loadAttendance() async {
     final data = await AdminApiClient.instance.get(
       '/personnel/${item['id']}/assiduite',
     );
     return data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+  }
+
+  Future<void> _openSchedule(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _TeacherScheduleSheet(item: item),
+    );
   }
 
   @override
@@ -256,10 +281,31 @@ class _PersonnelDetailsSheet extends StatelessWidget {
               const SizedBox(height: 16),
               Row(
                 children: [
-                  Expanded(child: OutlinedButton.icon(onPressed: onEdit, icon: const Icon(Icons.edit), label: const Text('Modifier'))),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onEdit,
+                      icon: const Icon(Icons.edit),
+                      label: const Text('Modifier'),
+                    ),
+                  ),
                   const SizedBox(width: 12),
-                  Expanded(child: FilledButton.icon(onPressed: onDelete, icon: const Icon(Icons.delete_outline), label: const Text('Supprimer'))),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: onDelete,
+                      icon: const Icon(Icons.delete_outline),
+                      label: const Text('Supprimer'),
+                    ),
+                  ),
                 ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => _openSchedule(context),
+                  icon: const Icon(Icons.calendar_month_outlined),
+                  label: const Text('Emploi du temps'),
+                ),
               ),
               const SizedBox(height: 12),
               ...details.map(
@@ -268,9 +314,21 @@ class _PersonnelDetailsSheet extends StatelessWidget {
                   dense: true,
                   title: Text(
                     entry.$1,
-                    style: const TextStyle(color: AuditronColors.ink500),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AuditronColors.brand700,
+                      letterSpacing: 0.3,
+                    ),
                   ),
-                  subtitle: Text(entry.$2.toString()),
+                  subtitle: Text(
+                    entry.$2.toString(),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AuditronColors.ink900,
+                    ),
+                  ),
                 ),
               ),
               const Divider(height: 24),
@@ -320,4 +378,149 @@ class _PersonnelDetailsSheet extends StatelessWidget {
       ),
     );
   }
+}
+
+class _TeacherScheduleSheet extends StatelessWidget {
+  final Map<String, dynamic> item;
+  const _TeacherScheduleSheet({required this.item});
+
+  Future<List<Map<String, dynamic>>> _load() async {
+    final data = await AdminApiClient.instance.getAllPages(
+      '/emplois?enseignant_id=${item['id']}',
+    );
+    return (data as List? ?? const [])
+        .whereType<Map>()
+        .map((entry) => Map<String, dynamic>.from(entry))
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'Emploi du temps',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          Text(
+            item['nom']?.toString() ?? 'Enseignant',
+            style: const TextStyle(color: AuditronColors.ink500),
+          ),
+          const SizedBox(height: 12),
+          Flexible(
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: _load(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done)
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(28),
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                if (snapshot.hasError)
+                  return Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      'Impossible de charger l’emploi du temps : ${snapshot.error}',
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  );
+                final byDay = <int, List<Map<String, dynamic>>>{};
+                for (final course in snapshot.data ?? const []) {
+                  byDay
+                      .putIfAbsent(
+                        (course['jour'] as num?)?.toInt() ?? 0,
+                        () => [],
+                      )
+                      .add(course);
+                }
+                if (byDay.isEmpty)
+                  return const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text('Aucun cours planifié.'),
+                  );
+                final today = DateTime.now().weekday;
+                final days = byDay.keys.toList()
+                  ..sort(
+                    (a, b) =>
+                        ((a - today + 7) % 7).compareTo((b - today + 7) % 7),
+                  );
+                return ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final day in days)
+                      ExpansionTile(
+                        initiallyExpanded: day == today,
+                        title: Text(
+                          _dayName(day),
+                          style: TextStyle(
+                            fontWeight: day == today
+                                ? FontWeight.w700
+                                : FontWeight.w400,
+                            color: day == today
+                                ? AuditronColors.brand700
+                                : null,
+                          ),
+                        ),
+                        subtitle: day == today
+                            ? const Text("Aujourd'hui")
+                            : null,
+                        children: [
+                          for (final course
+                              in (byDay[day]!..sort(
+                                (a, b) => '${a['heure_debut']}'.compareTo(
+                                  '${b['heure_debut']}',
+                                ),
+                              )))
+                            ListTile(
+                              leading: Icon(
+                                Icons.schedule,
+                                color: AuditronColors.brand700,
+                              ),
+                              title: Text(
+                                '${course['heure_debut']}–${course['heure_fin']}',
+                              ),
+                              subtitle: Text(
+                                '${course['classe']?['nom'] ?? 'Classe'} · ${course['discipline']?['nom'] ?? 'Matière'}${course['salle'] != null ? ' · ${course['salle']}' : ''}',
+                              ),
+                            ),
+                        ],
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  static String _dayName(int day) =>
+      const {
+        1: 'Lundi',
+        2: 'Mardi',
+        3: 'Mercredi',
+        4: 'Jeudi',
+        5: 'Vendredi',
+        6: 'Samedi',
+        7: 'Dimanche',
+      }[day] ??
+      'Jour inconnu';
 }

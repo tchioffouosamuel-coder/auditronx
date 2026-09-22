@@ -24,23 +24,23 @@ class PresenceValidationController extends Controller
         $cours = EmploiDuTemps::with(['enseignant', 'classe', 'discipline'])
             ->where('jour', $date->isoWeekday())
             ->whereIn('enseignant_id', $enseignantIds)
-            ->when($request->query('classe_id'), fn ($q, $v) => $q->where('classe_id', $v))
+            ->when($request->query('classe_id'), fn($q, $v) => $q->where('classe_id', $v))
             ->orderBy('heure_debut')
             ->get();
 
-        $validations = CoursValidation::whereDate('date', $date->toDateString())
+        $validations = CoursValidation::where('date', $date->toDateString())
             ->whereIn('emploi_du_temps_id', $cours->pluck('id'))
             ->get()
             ->keyBy('emploi_du_temps_id');
 
-        $calendrier = $cours->map(fn (EmploiDuTemps $c) => [
+        $calendrier = $cours->map(fn(EmploiDuTemps $c) => [
             'emploi_du_temps_id' => $c->id,
             'enseignant' => $c->enseignant->nom,
             'classe' => $c->classe->nom,
             'discipline' => $c->discipline->nom,
             'heure_debut' => $c->heure_debut,
             'heure_fin' => $c->heure_fin,
-            'status' => $validations->get($c->id)?->status ?? 'non_fait',
+            'status' => $validations->get($c->id)?->status ?? 'fait',
         ]);
 
         return response()->json(['date' => $date->toDateString(), 'cours' => $calendrier]);
@@ -62,7 +62,8 @@ class PresenceValidationController extends Controller
         ]);
 
         $validation->enseignant_id = $emploiDuTemps->enseignant_id;
-        $validation->status = $validation->status === 'fait' ? 'non_fait' : 'fait';
+        $currentStatus = $validation->exists ? $validation->status : 'fait';
+        $validation->status = $currentStatus === 'fait' ? 'non_fait' : 'fait';
         $validation->save();
 
         return response()->json($validation);

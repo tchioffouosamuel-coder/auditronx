@@ -40,6 +40,13 @@ class AdminCrudScreen extends StatefulWidget {
   leadingBuilder;
   final Future<void> Function(BuildContext context, Map<String, dynamic> item)?
   onItemTap;
+  final Widget Function(
+    BuildContext context,
+    List<dynamic> items,
+    Future<void> Function(Map<String, dynamic> item) onEdit,
+    Future<void> Function(Map<String, dynamic> item) onDelete,
+  )?
+  customListBuilder;
 
   /// Désactive la création/édition/suppression (utilisé pour des vues
   /// lecture seule qui n'ont pas besoin d'un écran dédié).
@@ -59,6 +66,7 @@ class AdminCrudScreen extends StatefulWidget {
     this.extraRowActions,
     this.leadingBuilder,
     this.onItemTap,
+    this.customListBuilder,
     this.readOnly = false,
   });
 
@@ -294,6 +302,15 @@ class AdminCrudScreenState extends State<AdminCrudScreen> {
                         child: Text('Aucun élément.'),
                       ),
                     ],
+                  );
+                }
+
+                if (widget.customListBuilder != null) {
+                  return widget.customListBuilder!(
+                    context,
+                    items,
+                    (item) => _openForm(item: item),
+                    _delete,
                   );
                 }
 

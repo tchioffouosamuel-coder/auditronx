@@ -31,21 +31,25 @@ class PresenceValidationTest extends TestCase
         $enseignant = Enseignant::factory()->create();
 
         $cours = EmploiDuTemps::create([
-            'enseignant_id' => $enseignant->id, 'classe_id' => $classe->id, 'discipline_id' => $discipline->id,
-            'jour' => now()->isoWeekday(), 'heure_debut' => '08:00', 'heure_fin' => '09:00',
+            'enseignant_id' => $enseignant->id,
+            'classe_id' => $classe->id,
+            'discipline_id' => $discipline->id,
+            'jour' => now()->isoWeekday(),
+            'heure_debut' => '08:00',
+            'heure_fin' => '09:00',
         ]);
 
         $premier = $this->postJson('/api/presences/validation/toggle', [
             'emploi_du_temps_id' => $cours->id,
             'date' => now()->toDateString(),
         ])->assertOk();
-        $this->assertSame('fait', $premier->json('status'));
+        $this->assertSame('non_fait', $premier->json('status'));
 
         $second = $this->postJson('/api/presences/validation/toggle', [
             'emploi_du_temps_id' => $cours->id,
             'date' => now()->toDateString(),
         ])->assertOk();
-        $this->assertSame('non_fait', $second->json('status'));
+        $this->assertSame('fait', $second->json('status'));
 
         $this->assertDatabaseCount('cours_validation', 1);
     }
