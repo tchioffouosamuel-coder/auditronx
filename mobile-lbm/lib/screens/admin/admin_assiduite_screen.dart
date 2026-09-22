@@ -35,11 +35,7 @@ class AdminAssiduiteScreen extends StatelessWidget {
           ),
           const Expanded(
             child: TabBarView(
-              children: [
-                _StatsTab(),
-                _JournalTab(),
-                _PersonnelInactifTab(),
-              ],
+              children: [_StatsTab(), _JournalTab(), _PersonnelInactifTab()],
             ),
           ),
         ],
@@ -129,9 +125,21 @@ class _StatsTabState extends State<_StatsTab> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: Row(
             children: [
-              Expanded(child: _DateFilterButton(label: 'Début', value: _debut, onTap: () => _pickDate(isDebut: true))),
+              Expanded(
+                child: _DateFilterButton(
+                  label: 'Début',
+                  value: _debut,
+                  onTap: () => _pickDate(isDebut: true),
+                ),
+              ),
               const SizedBox(width: 8),
-              Expanded(child: _DateFilterButton(label: 'Fin', value: _fin, onTap: () => _pickDate(isDebut: false))),
+              Expanded(
+                child: _DateFilterButton(
+                  label: 'Fin',
+                  value: _fin,
+                  onTap: () => _pickDate(isDebut: false),
+                ),
+              ),
             ],
           ),
         ),
@@ -158,17 +166,26 @@ class _StatsTabState extends State<_StatsTab> {
                   itemBuilder: (context, i) {
                     final l = lignes[i] as Map<String, dynamic>;
                     final taux = l['taux_assiduite'];
-                    final tauxNum = taux is num ? taux : num.tryParse('$taux') ?? 0;
+                    final tauxNum = taux is num
+                        ? taux
+                        : num.tryParse('$taux') ?? 0;
                     return Card(
                       child: ListTile(
-                        leading: const Icon(Icons.fact_check_outlined, color: AuditronColors.brand700),
+                        leading: const Icon(
+                          Icons.fact_check_outlined,
+                          color: AuditronColors.brand700,
+                        ),
                         title: Text('${l['nom'] ?? '—'}'),
-                        subtitle: Text('${l['section'] ?? '—'} · ${l['jours_presents'] ?? 0}/${l['jours_ouvres'] ?? 0} jours'),
+                        subtitle: Text(
+                          '${l['section'] ?? '—'} · ${l['jours_presents'] ?? 0}/${l['jours_attendus'] ?? 0} jours attendus',
+                        ),
                         trailing: Text(
                           '$taux%',
                           style: TextStyle(
                             fontWeight: FontWeight.w700,
-                            color: tauxNum >= 90 ? AuditronColors.brand600 : AuditronColors.ink900,
+                            color: tauxNum >= 90
+                                ? AuditronColors.brand600
+                                : AuditronColors.ink900,
                           ),
                         ),
                       ),
@@ -204,7 +221,10 @@ class _JournalTabState extends State<_JournalTab> {
   Future<List<dynamic>> _load() async {
     final data = await OfflineCache.instance.readThrough(
       'admin_assiduite_journal_${_isoDate(_date)}',
-      () => AdminApiClient.instance.get('/assiduite/journal', query: {'date': _isoDate(_date)}),
+      () => AdminApiClient.instance.get(
+        '/assiduite/journal',
+        query: {'date': _isoDate(_date)},
+      ),
     );
     return _asList(data);
   }
@@ -247,10 +267,18 @@ class _JournalTabState extends State<_JournalTab> {
             ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 200),
               child: InteractiveViewer(
-                child: Image.network(url, fit: BoxFit.contain, errorBuilder: (_, _, _) => const Padding(
-                  padding: EdgeInsets.all(32),
-                  child: Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
-                )),
+                child: Image.network(
+                  url,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) => const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Icon(
+                      Icons.broken_image_outlined,
+                      color: Colors.white54,
+                      size: 48,
+                    ),
+                  ),
+                ),
               ),
             ),
             IconButton(
@@ -283,7 +311,11 @@ class _JournalTabState extends State<_JournalTab> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: Align(
             alignment: Alignment.centerLeft,
-            child: _DateFilterButton(label: 'Date', value: _date, onTap: _pickDate),
+            child: _DateFilterButton(
+              label: 'Date',
+              value: _date,
+              onTap: _pickDate,
+            ),
           ),
         ),
         Expanded(
@@ -313,31 +345,55 @@ class _JournalTabState extends State<_JournalTab> {
                     final depart = _formatHeure(p['heure_depart']);
                     return Card(
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
                         child: Row(
                           children: [
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('$nom', style: const TextStyle(fontWeight: FontWeight.w700)),
+                                  Text(
+                                    '$nom',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
                                   const SizedBox(height: 4),
                                   Text(
                                     'Arrivée : ${arrivee ?? '—'}   ·   Départ : ${depart ?? '—'}',
-                                    style: const TextStyle(color: AuditronColors.ink500, fontSize: 13),
+                                    style: const TextStyle(
+                                      color: AuditronColors.ink500,
+                                      fontSize: 13,
+                                    ),
                                   ),
                                   if (p['source'] != null) ...[
                                     const SizedBox(height: 2),
-                                    Text('Source : ${p['source']}', style: const TextStyle(color: AuditronColors.ink500, fontSize: 12)),
+                                    Text(
+                                      'Source : ${p['source']}',
+                                      style: const TextStyle(
+                                        color: AuditronColors.ink500,
+                                        fontSize: 12,
+                                      ),
+                                    ),
                                   ],
                                 ],
                               ),
                             ),
-                            if (p['photo_url_arrivee'] != null || p['photo_url_depart'] != null)
+                            if (p['photo_url_arrivee'] != null ||
+                                p['photo_url_depart'] != null)
                               Row(
                                 children: [
-                                  _photoThumb(p['photo_url_arrivee'], "Photo à l'arrivée"),
-                                  _photoThumb(p['photo_url_depart'], 'Photo au départ'),
+                                  _photoThumb(
+                                    p['photo_url_arrivee'],
+                                    "Photo à l'arrivée",
+                                  ),
+                                  _photoThumb(
+                                    p['photo_url_depart'],
+                                    'Photo au départ',
+                                  ),
                                 ],
                               ),
                           ],
@@ -383,7 +439,10 @@ class _PersonnelInactifTabState extends State<_PersonnelInactifTab> {
   Future<List<dynamic>> _load() async {
     final data = await OfflineCache.instance.readThrough(
       'admin_assiduite_personnel_inactif_$_jours',
-      () => AdminApiClient.instance.get('/assiduite/personnel-inactif', query: {'jours': '$_jours'}),
+      () => AdminApiClient.instance.get(
+        '/assiduite/personnel-inactif',
+        query: {'jours': '$_jours'},
+      ),
     );
     return _asList(data);
   }
@@ -401,18 +460,30 @@ class _PersonnelInactifTabState extends State<_PersonnelInactifTab> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: Row(
             children: [
-              const Text('Inactifs depuis plus de', style: TextStyle(color: AuditronColors.ink700)),
+              const Text(
+                'Inactifs depuis plus de',
+                style: TextStyle(color: AuditronColors.ink700),
+              ),
               const SizedBox(width: 8),
               SizedBox(
                 width: 64,
                 child: TextField(
                   controller: _joursController,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8)),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
-              const Text('jours', style: TextStyle(color: AuditronColors.ink700)),
+              const Text(
+                'jours',
+                style: TextStyle(color: AuditronColors.ink700),
+              ),
               const Spacer(),
               FilledButton(onPressed: _refresh, child: const Text('Appliquer')),
             ],
@@ -432,7 +503,9 @@ class _PersonnelInactifTabState extends State<_PersonnelInactifTab> {
                 }
                 final inactifs = snapshot.data ?? [];
                 if (inactifs.isEmpty) {
-                  return _emptyList('Aucun personnel inactif sur cette période.');
+                  return _emptyList(
+                    'Aucun personnel inactif sur cette période.',
+                  );
                 }
                 return ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -442,13 +515,19 @@ class _PersonnelInactifTabState extends State<_PersonnelInactifTab> {
                     final p = inactifs[i] as Map<String, dynamic>;
                     return Card(
                       child: ListTile(
-                        leading: const Icon(Icons.person_off_outlined, color: AuditronColors.gold600),
+                        leading: const Icon(
+                          Icons.person_off_outlined,
+                          color: AuditronColors.gold600,
+                        ),
                         title: Text('${p['nom'] ?? '—'}'),
                         subtitle: Text('${p['section'] ?? '—'}'),
                         trailing: Text(
                           'Dernière présence :\n${p['derniere_presence'] ?? 'Jamais'}',
                           textAlign: TextAlign.right,
-                          style: const TextStyle(fontSize: 12, color: AuditronColors.ink500),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AuditronColors.ink500,
+                          ),
                         ),
                       ),
                     );
@@ -468,7 +547,11 @@ class _DateFilterButton extends StatelessWidget {
   final DateTime value;
   final VoidCallback onTap;
 
-  const _DateFilterButton({required this.label, required this.value, required this.onTap});
+  const _DateFilterButton({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -486,9 +569,20 @@ class _DateFilterButton extends StatelessWidget {
 }
 
 Widget _emptyList(String message) {
-  return ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Text(message))]);
+  return ListView(
+    children: [
+      Padding(padding: const EdgeInsets.all(24), child: Text(message)),
+    ],
+  );
 }
 
 Widget _errorList(String message) {
-  return ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Text('Erreur : $message'))]);
+  return ListView(
+    children: [
+      Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text('Erreur : $message'),
+      ),
+    ],
+  );
 }

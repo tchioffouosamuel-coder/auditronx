@@ -27,7 +27,7 @@ class DashboardController extends Controller
             ->orderBy('heure_debut')
             ->get()
             ->groupBy('enseignant_id');
-        $planifies = $enseignants->filter(fn (Enseignant $e) => $emploisDuJour->has($e->id))->values();
+        $planifies = $enseignants->filter(fn(Enseignant $e) => $emploisDuJour->has($e->id))->values();
         $presencesDuJour = Presence::where('date', $date->toDateString())
             ->whereIn('enseignant_id', $planifies->pluck('id'))
             ->get()
@@ -46,7 +46,7 @@ class DashboardController extends Controller
                 'matricule' => $enseignant->matricule,
                 'section' => $enseignant->section,
                 'fonction' => $enseignant->fonction,
-                'cours' => $cours->map(fn (EmploiDuTemps $emploi) => [
+                'cours' => $cours->map(fn(EmploiDuTemps $emploi) => [
                     'classe' => $emploi->classe?->nom,
                     'discipline' => $emploi->discipline?->nom,
                     'heure_debut' => substr((string) $emploi->heure_debut, 0, 5),
@@ -90,10 +90,10 @@ class DashboardController extends Controller
      */
     private function classementParSection($enseignants, $presencesDuJour, RetardCalculator $retards)
     {
-        return $enseignants->groupBy(fn (Enseignant $e) => mb_strtolower((string) $e->section))
+        return $enseignants->groupBy(fn(Enseignant $e) => mb_strtolower((string) $e->section))
             ->map(function ($groupe) use ($presencesDuJour, $retards) {
-                $presents = $groupe->filter(fn (Enseignant $e) => $presencesDuJour->get($e->id)?->heure_arrivee);
-                $retardsCount = $presents->filter(fn (Enseignant $e) => $retards->estEnRetard($e, $presencesDuJour->get($e->id)));
+                $presents = $groupe->filter(fn(Enseignant $e) => $presencesDuJour->get($e->id)?->heure_arrivee);
+                $retardsCount = $presents->filter(fn(Enseignant $e) => $retards->estEnRetard($e, $presencesDuJour->get($e->id)));
 
                 return [
                     'section' => $groupe->first()->section,

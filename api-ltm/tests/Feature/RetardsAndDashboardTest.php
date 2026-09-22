@@ -55,7 +55,7 @@ class RetardsAndDashboardTest extends TestCase
         Presence::create([
             'enseignant_id' => $enseignant->id,
             'date' => now()->toDateString(),
-            'heure_arrivee' => now()->toDateString().' 08:25:00',
+            'heure_arrivee' => now()->toDateString() . ' 08:25:00',
         ]);
 
         $response = $this->getJson('/api/retards')->assertOk();
@@ -75,7 +75,7 @@ class RetardsAndDashboardTest extends TestCase
         Presence::create([
             'enseignant_id' => $enseignant->id,
             'date' => now()->toDateString(),
-            'heure_arrivee' => now()->toDateString().' 08:05:00',
+            'heure_arrivee' => now()->toDateString() . ' 08:05:00',
         ]);
 
         $response = $this->getJson('/api/retards')->assertOk();
@@ -93,7 +93,7 @@ class RetardsAndDashboardTest extends TestCase
         Presence::create([
             'enseignant_id' => $present->id,
             'date' => now()->toDateString(),
-            'heure_arrivee' => now()->toDateString().' 08:00:00',
+            'heure_arrivee' => now()->toDateString() . ' 08:00:00',
         ]);
 
         $absent = Enseignant::factory()->create(['section' => 'Sciences']);

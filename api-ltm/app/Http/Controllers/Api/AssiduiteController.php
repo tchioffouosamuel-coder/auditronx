@@ -19,10 +19,9 @@ class AssiduiteController extends Controller
     {
         $debut = Carbon::parse($request->query('debut', now()->startOfMonth()));
         $fin = Carbon::parse($request->query('fin', now()->endOfMonth()));
-        $joursOuvres = $debut->diffInWeekdays($fin) + 1;
-
         $enseignants = $this->enseignantsAccessibles($request->user())
-            ->when($request->query('section'), fn ($q, $v) => $q->whereRaw('LOWER(section) = LOWER(?)', [$v]))
+            ->when($request->query('section'), fn($q, $v) => $q->whereRaw('LOWER(section) = LOWER(?)', [$v]))
+            ->with('emploiDuTemps')
             ->get();
 
         $presences = Presence::whereBetween('date', [$debut->toDateString(), $fin->toDateString()])
@@ -31,16 +30,27 @@ class AssiduiteController extends Controller
             ->get()
             ->groupBy('enseignant_id');
 
-        $lignes = $enseignants->map(function (Enseignant $enseignant) use ($presences, $joursOuvres) {
-            $joursPresents = $presences->get($enseignant->id, collect())->count();
+        $lignes = $enseignants->map(function (Enseignant $enseignant) use ($presences, $debut, $fin) {
+            $datesAttendues = collect();
+            for ($date = $debut->copy(); $date->lte($fin); $date->addDay()) {
+                if ($enseignant->emploiDuTemps->contains('jour', $date->isoWeekday())) {
+                    $datesAttendues->push($date->toDateString());
+                }
+            }
+            $datesAttendues = $datesAttendues->unique()->values();
+            $datesPresents = $presences->get($enseignant->id, collect())
+                ->pluck('date')
+                ->map(fn($date) => Carbon::parse($date)->toDateString());
+            $joursPresents = $datesPresents->intersect($datesAttendues)->unique()->count();
+            $joursAttendus = $datesAttendues->count();
 
             return [
                 'enseignant_id' => $enseignant->id,
                 'nom' => $enseignant->nom,
                 'section' => $enseignant->section,
                 'jours_presents' => $joursPresents,
-                'jours_ouvres' => $joursOuvres,
-                'taux_assiduite' => $joursOuvres > 0 ? round($joursPresents / $joursOuvres * 100, 1) : 0.0,
+                'jours_attendus' => $joursAttendus,
+                'taux_assiduite' => $joursAttendus > 0 ? round($joursPresents / $joursAttendus * 100, 1) : 0.0,
             ];
         });
 
@@ -53,7 +63,7 @@ class AssiduiteController extends Controller
         $date = Carbon::parse($request->query('date', now()));
 
         $enseignants = $this->enseignantsAccessibles($request->user())
-            ->when($request->query('section'), fn ($q, $v) => $q->whereRaw('LOWER(section) = LOWER(?)', [$v]))
+            ->when($request->query('section'), fn($q, $v) => $q->whereRaw('LOWER(section) = LOWER(?)', [$v]))
             ->pluck('id');
 
         $presences = Presence::with('enseignant')
@@ -84,7 +94,7 @@ class AssiduiteController extends Controller
             return ! $derniere || $derniere < $seuil;
         })->values();
 
-        return response()->json($inactifs->map(fn (Enseignant $e) => [
+        return response()->json($inactifs->map(fn(Enseignant $e) => [
             'enseignant_id' => $e->id,
             'nom' => $e->nom,
             'section' => $e->section,

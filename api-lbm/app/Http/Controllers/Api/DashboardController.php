@@ -25,7 +25,7 @@ class DashboardController extends Controller
             ->where('jour', $date->isoWeekday())
             ->whereIn('enseignant_id', $enseignants->pluck('id'))
             ->orderBy('heure_debut')->get()->groupBy('enseignant_id');
-        $planifies = $enseignants->filter(fn (Enseignant $e) => $emploisDuJour->has($e->id))->values();
+        $planifies = $enseignants->filter(fn(Enseignant $e) => $emploisDuJour->has($e->id))->values();
         $presencesDuJour = Presence::where('date', $date->toDateString())
             ->whereIn('enseignant_id', $planifies->pluck('id'))->get()->keyBy('enseignant_id');
 
@@ -36,8 +36,14 @@ class DashboardController extends Controller
         foreach ($planifies as $enseignant) {
             $presence = $presencesDuJour->get($enseignant->id);
             $cours = $emploisDuJour->get($enseignant->id, collect());
-            $detail = ['enseignant_id' => $enseignant->id, 'nom' => $enseignant->nom, 'matricule' => $enseignant->matricule, 'section' => $enseignant->section, 'fonction' => $enseignant->fonction,
-                'cours' => $cours->map(fn (EmploiDuTemps $emploi) => ['classe' => $emploi->classe?->nom, 'discipline' => $emploi->discipline?->nom, 'heure_debut' => substr((string) $emploi->heure_debut, 0, 5), 'heure_fin' => substr((string) $emploi->heure_fin, 0, 5)])->values()->all()];
+            $detail = [
+                'enseignant_id' => $enseignant->id,
+                'nom' => $enseignant->nom,
+                'matricule' => $enseignant->matricule,
+                'section' => $enseignant->section,
+                'fonction' => $enseignant->fonction,
+                'cours' => $cours->map(fn(EmploiDuTemps $emploi) => ['classe' => $emploi->classe?->nom, 'discipline' => $emploi->discipline?->nom, 'heure_debut' => substr((string) $emploi->heure_debut, 0, 5), 'heure_fin' => substr((string) $emploi->heure_fin, 0, 5)])->values()->all()
+            ];
 
             if ($presence?->heure_arrivee) {
                 $minutesRetard = $retards->minutesDeRetard($enseignant, $presence) ?? 0;
@@ -54,8 +60,13 @@ class DashboardController extends Controller
 
         return response()->json([
             'date' => $date->toDateString(),
-            'effectif' => $planifies->count(), 'presents' => count($scannes), 'absents' => count($absents), 'retardataires' => count($retardataires),
-            'scannes' => $scannes, 'absents_liste' => $absents, 'retardataires_liste' => $retardataires,
+            'effectif' => $planifies->count(),
+            'presents' => count($scannes),
+            'absents' => count($absents),
+            'retardataires' => count($retardataires),
+            'scannes' => $scannes,
+            'absents_liste' => $absents,
+            'retardataires_liste' => $retardataires,
             'classement_par_section' => $this->classementParSection($planifies, $presencesDuJour, $retards),
         ]);
     }
@@ -68,10 +79,10 @@ class DashboardController extends Controller
      */
     private function classementParSection($enseignants, $presencesDuJour, RetardCalculator $retards)
     {
-        return $enseignants->groupBy(fn (Enseignant $e) => mb_strtolower((string) $e->section))
+        return $enseignants->groupBy(fn(Enseignant $e) => mb_strtolower((string) $e->section))
             ->map(function ($groupe) use ($presencesDuJour, $retards) {
-                $presents = $groupe->filter(fn (Enseignant $e) => $presencesDuJour->get($e->id)?->heure_arrivee);
-                $retardsCount = $presents->filter(fn (Enseignant $e) => $retards->estEnRetard($e, $presencesDuJour->get($e->id)));
+                $presents = $groupe->filter(fn(Enseignant $e) => $presencesDuJour->get($e->id)?->heure_arrivee);
+                $retardsCount = $presents->filter(fn(Enseignant $e) => $retards->estEnRetard($e, $presencesDuJour->get($e->id)));
 
                 return [
                     'section' => $groupe->first()->section,
