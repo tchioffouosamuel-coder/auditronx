@@ -126,6 +126,10 @@ class AdminCrudScreenState extends State<AdminCrudScreen> {
     await _future;
   }
 
+  Future<void> editItem(Map<String, dynamic> item) => _openForm(item: item);
+
+  Future<void> deleteItem(Map<String, dynamic> item) => _delete(item);
+
   Future<void> _openForm({Map<String, dynamic>? item}) async {
     final saved = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,

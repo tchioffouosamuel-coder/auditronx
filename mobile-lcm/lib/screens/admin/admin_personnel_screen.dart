@@ -48,7 +48,18 @@ class AdminPersonnelScreen extends StatelessWidget {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _PersonnelDetailsSheet(item: item),
+      builder: (_) => _PersonnelDetailsSheet(
+        item: item,
+        onEdit: () async {
+          Navigator.pop(context);
+          await _key.currentState?.editItem(item);
+        },
+        onDelete: () async {
+          Navigator.pop(context);
+          await _key.currentState?.deleteItem(item);
+        },
+      ),
+    );
     );
   }
 
@@ -193,7 +204,9 @@ class AdminPersonnelScreen extends StatelessWidget {
 
 class _PersonnelDetailsSheet extends StatelessWidget {
   final Map<String, dynamic> item;
-  const _PersonnelDetailsSheet({required this.item});
+  final Future<void> Function() onEdit;
+  final Future<void> Function() onDelete;
+  const _PersonnelDetailsSheet({required this.item, required this.onEdit, required this.onDelete});
 
   Future<Map<String, dynamic>> _loadAttendance() async {
     final data = await AdminApiClient.instance.get(
@@ -241,6 +254,14 @@ class _PersonnelDetailsSheet extends StatelessWidget {
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(child: OutlinedButton.icon(onPressed: onEdit, icon: const Icon(Icons.edit), label: const Text('Modifier'))),
+                  const SizedBox(width: 12),
+                  Expanded(child: FilledButton.icon(onPressed: onDelete, icon: const Icon(Icons.delete_outline), label: const Text('Supprimer'))),
+                ],
+              ),
+              const SizedBox(height: 12),
               ...details.map(
                 (entry) => ListTile(
                   contentPadding: EdgeInsets.zero,

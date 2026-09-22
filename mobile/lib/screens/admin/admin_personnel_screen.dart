@@ -48,7 +48,17 @@ class AdminPersonnelScreen extends StatelessWidget {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _PersonnelDetailsSheet(item: item),
+      builder: (_) => _PersonnelDetailsSheet(
+        item: item,
+        onEdit: () async {
+          Navigator.pop(context);
+          await _key.currentState?.editItem(item);
+        },
+        onDelete: () async {
+          Navigator.pop(context);
+          await _key.currentState?.deleteItem(item);
+        },
+      ),
     );
   }
 
@@ -204,8 +214,10 @@ class AdminPersonnelScreen extends StatelessWidget {
 
 class _PersonnelDetailsSheet extends StatelessWidget {
   final Map<String, dynamic> item;
+  final Future<void> Function() onEdit;
+  final Future<void> Function() onDelete;
 
-  const _PersonnelDetailsSheet({required this.item});
+  const _PersonnelDetailsSheet({required this.item, required this.onEdit, required this.onDelete});
 
   Future<Map<String, dynamic>> _loadAttendance() async {
     final data = await AdminApiClient.instance.get(
@@ -283,6 +295,14 @@ class _PersonnelDetailsSheet extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       child: Text(
                         'Taux indisponible : ${snapshot.error}',
+                                Row(
+                                  children: [
+                                    Expanded(child: OutlinedButton.icon(onPressed: onEdit, icon: const Icon(Icons.edit), label: const Text('Modifier'))),
+                                    const SizedBox(width: 12),
+                                    Expanded(child: FilledButton.icon(onPressed: onDelete, icon: const Icon(Icons.delete_outline), label: const Text('Supprimer'))),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
                         style: const TextStyle(color: Colors.red),
                       ),
                     );
