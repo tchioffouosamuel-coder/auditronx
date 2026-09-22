@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/admin_api_client.dart';
+import '../../services/offline/offline_cache.dart';
 import 'admin_field_spec.dart';
 
 /// Cache mémoire très simple des options déjà chargées par endpoint —
@@ -11,7 +12,10 @@ class _OptionsCache {
 
   static Future<List<Map<String, dynamic>>> load(String endpoint) async {
     if (_cache.containsKey(endpoint)) return _cache[endpoint]!;
-    final data = await AdminApiClient.instance.get(endpoint);
+    final data = await OfflineCache.instance.readThrough(
+      'admin_options_$endpoint',
+      () => AdminApiClient.instance.get(endpoint),
+    );
     final list = data is Map && data['data'] is List
         ? (data['data'] as List)
         : (data is List ? data : const []);
@@ -41,8 +45,22 @@ class AdminSelectField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (field.options != null) {
+      var selectedValue = value;
+      if (field.key == 'section' && value is String) {
+        final normalized = value.trim().toLowerCase();
+        if (normalized == 'enseignement général' ||
+            normalized == 'enseignement general') {
+          selectedValue = field.options!
+              .where((option) => option.value == 'Générale')
+              .firstOrNull
+              ?.value;
+        }
+      }
+      final matchingItems = field.options!
+          .where((option) => option.value == selectedValue)
+          .length;
       return DropdownButtonFormField<dynamic>(
-        initialValue: value,
+        initialValue: matchingItems == 1 ? selectedValue : null,
         isExpanded: true,
         decoration: InputDecoration(
           labelText: field.label + (field.required ? ' *' : ''),

@@ -8,6 +8,9 @@ import 'package:share_plus/share_plus.dart';
 import '../../services/admin_api_client.dart';
 import '../../services/api_client.dart';
 import '../../services/offline/offline_cache.dart';
+import '../../services/offline/pending_action.dart';
+import '../../services/offline/pending_actions_queue.dart';
+import '../../services/offline/sync_engine.dart';
 import '../../theme.dart';
 
 DateTime _startOfMonth() {
@@ -26,6 +29,15 @@ String _monthLabel(DateTime month) {
   final label = DateFormat('MMMM yyyy', 'fr').format(month);
   return label[0].toUpperCase() + label.substring(1);
 }
+
+const _bilanSections = [
+  'Industrielle',
+  'STT',
+  'Administration',
+  'Générale',
+  'Anglophone',
+  'Francophone',
+];
 
 List<DateTime> _lastTwelveMonths() {
   final now = DateTime.now();
@@ -63,6 +75,7 @@ class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
   late Future<List<dynamic>> _future;
   bool _savingTolerance = false;
   bool _downloadingCumule = false;
+  bool _downloadingSection = false;
   String? _downloadingRowId;
 
   @override
@@ -128,6 +141,21 @@ class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
       if (mounted) _showMessage('Tolérance enregistrée.');
       await _refresh();
     } on ApiException catch (e) {
+      if (e.statusCode == 0) {
+        await OfflineCache.instance.overwrite('admin_retards_parametres', {
+          'tolerance_minutes': minutes,
+        });
+        await PendingActionsQueue.instance.enqueue(
+          authMode: AuthMode.admin,
+          method: 'PUT',
+          path: '/retards/parametres',
+          body: {'tolerance_minutes': minutes},
+          label: 'Mettre à jour la tolérance des retards',
+        );
+        await SyncEngine.instance.notifyEnqueued();
+        if (mounted) _showMessage('Tolérance enregistrée hors ligne.');
+        return;
+      }
       if (mounted) _showMessage(e.message);
     } finally {
       if (mounted) setState(() => _savingTolerance = false);
@@ -156,6 +184,28 @@ class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
       if (mounted) _showMessage(e.message);
     } finally {
       if (mounted) setState(() => _downloadingCumule = false);
+    }
+  }
+
+  Future<void> _downloadBilanSection(String section) async {
+    setState(() => _downloadingSection = true);
+    try {
+      final bytes = await AdminApiClient.instance.getBytes(
+        '/retards/bilan-cumule',
+        query: {
+          'debut': _isoDate(_debut),
+          'fin': _isoDate(_fin),
+          'section': section,
+        },
+      );
+      await _sharePdf(
+        bytes,
+        'bilan-retards-${section.toLowerCase()}-${_isoDate(_debut)}-${_isoDate(_fin)}.pdf',
+      );
+    } on ApiException catch (e) {
+      if (mounted) _showMessage(e.message);
+    } finally {
+      if (mounted) setState(() => _downloadingSection = false);
     }
   }
 
@@ -192,10 +242,12 @@ class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
           searchController: _searchController,
           savingTolerance: _savingTolerance,
           downloadingCumule: _downloadingCumule,
+          downloadingSection: _downloadingSection,
           onSelectMonth: _selectMonth,
           onSearchChanged: (_) => setState(() {}),
           onSaveTolerance: _saveTolerance,
           onDownloadCumule: _downloadBilanCumule,
+          onDownloadSection: _downloadBilanSection,
         ),
         Expanded(
           child: RefreshIndicator(
@@ -314,10 +366,12 @@ class _FilterBar extends StatelessWidget {
   final TextEditingController searchController;
   final bool savingTolerance;
   final bool downloadingCumule;
+  final bool downloadingSection;
   final ValueChanged<DateTime> onSelectMonth;
   final ValueChanged<String> onSearchChanged;
   final VoidCallback onSaveTolerance;
   final VoidCallback onDownloadCumule;
+  final ValueChanged<String> onDownloadSection;
 
   const _FilterBar({
     required this.selectedMonth,
@@ -325,10 +379,12 @@ class _FilterBar extends StatelessWidget {
     required this.searchController,
     required this.savingTolerance,
     required this.downloadingCumule,
+    required this.downloadingSection,
     required this.onSelectMonth,
     required this.onSearchChanged,
     required this.onSaveTolerance,
     required this.onDownloadCumule,
+    required this.onDownloadSection,
   });
 
   @override
@@ -435,6 +491,24 @@ class _FilterBar extends StatelessWidget {
                   : const Icon(Icons.picture_as_pdf_outlined, size: 18),
               label: const Text('Bilan PDF cumulé'),
             ),
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            initialValue: null,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Section du bilan',
+              prefixIcon: Icon(Icons.groups_outlined),
+            ),
+            items: [
+              for (final section in _bilanSections)
+                DropdownMenuItem(value: section, child: Text(section)),
+            ],
+            onChanged: downloadingSection
+                ? null
+                : (section) {
+                    if (section != null) onDownloadSection(section);
+                  },
           ),
         ],
       ),

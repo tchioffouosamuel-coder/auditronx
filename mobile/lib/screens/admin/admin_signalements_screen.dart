@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../services/admin_api_client.dart';
 import '../../services/api_client.dart';
+import '../../services/offline/offline_cache.dart';
+import '../../services/offline/pending_action.dart';
+import '../../services/offline/pending_actions_queue.dart';
+import '../../services/offline/sync_engine.dart';
 import '../../widgets/admin/admin_crud_screen.dart';
 import '../../widgets/admin/admin_field_spec.dart';
 
@@ -76,7 +80,10 @@ class _BulkSignalementFormState extends State<_BulkSignalementForm> {
   }
 
   Future<List<Map<String, dynamic>>> _load() async {
-    final data = await AdminApiClient.instance.get('/personnel?per_page=500');
+    final data = await OfflineCache.instance.readThrough(
+      'admin_options_/personnel?per_page=500',
+      () => AdminApiClient.instance.get('/personnel?per_page=500'),
+    );
     final list = data is Map && data['data'] is List ? data['data'] as List : const [];
     return list.cast<Map<String, dynamic>>();
   }
@@ -84,16 +91,29 @@ class _BulkSignalementFormState extends State<_BulkSignalementForm> {
   Future<void> _submit() async {
     if (_selected.isEmpty || _motifCtrl.text.trim().isEmpty) return;
     setState(() => _busy = true);
+    final body = {
+      'enseignant_ids': _selected.toList(),
+      'date': _dateCtrl.text.trim(),
+      'motif': _motifCtrl.text.trim(),
+      if (_dureeCtrl.text.trim().isNotEmpty) 'duree_jours': int.tryParse(_dureeCtrl.text.trim()),
+    };
     try {
-      await AdminApiClient.instance.post('/signalements/bulk', {
-        'enseignant_ids': _selected.toList(),
-        'date': _dateCtrl.text.trim(),
-        'motif': _motifCtrl.text.trim(),
-        if (_dureeCtrl.text.trim().isNotEmpty) 'duree_jours': int.tryParse(_dureeCtrl.text.trim()),
-      });
+      await AdminApiClient.instance.post('/signalements/bulk', body);
       widget.onDone();
       if (mounted) Navigator.pop(context);
     } on ApiException catch (e) {
+      if (e.statusCode == 0) {
+        await PendingActionsQueue.instance.enqueue(
+          authMode: AuthMode.admin,
+          path: '/signalements/bulk',
+          body: body,
+          label: 'Créer un signalement groupé',
+        );
+        await SyncEngine.instance.notifyEnqueued();
+        widget.onDone();
+        if (mounted) Navigator.pop(context);
+        return;
+      }
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _busy = false);

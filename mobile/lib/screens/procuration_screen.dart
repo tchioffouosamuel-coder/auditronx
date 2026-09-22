@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/enseignant.dart';
 import '../services/api_client.dart';
+import '../services/offline/offline_cache.dart';
 import 'scan_screen.dart';
 
 /// Mode procuration (§4.1, rôle restreint) : sélection de l'enseignant
@@ -23,11 +24,35 @@ class _ProcurationScreenState extends State<ProcurationScreen> {
   Future<void> _search(String query) async {
     setState(() => _searching = true);
     try {
-      final data = await ApiClient.instance.get('/personnel', query: {'q': query, 'per_page': '20'});
-      final list = (data['data'] as List<dynamic>).map((e) => Enseignant.fromJson(e as Map<String, dynamic>)).toList();
+      final data = await _searchPersonnel(query);
+      final list = data
+          .map((e) => Enseignant.fromJson(e as Map<String, dynamic>))
+          .toList();
       setState(() => _resultats = list);
     } finally {
       if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  Future<List<dynamic>> _searchPersonnel(String query) async {
+    try {
+      final data = await OfflineCache.instance.readThrough(
+        'teacher_personnel_search_$query',
+        () => ApiClient.instance.get('/personnel', query: {'q': query, 'per_page': '20'}),
+      );
+      return data is Map && data['data'] is List ? data['data'] as List<dynamic> : const [];
+    } catch (_) {
+      final cached = await OfflineCache.instance.read('admin_personnel');
+      final list = cached is Map && cached['data'] is List
+          ? cached['data'] as List<dynamic>
+          : (cached is List ? cached : const []);
+      final normalized = query.trim().toLowerCase();
+      return list.where((entry) {
+        if (entry is! Map) return false;
+        return ['nom', 'matricule', 'section', 'tel'].any(
+          (key) => '${entry[key] ?? ''}'.toLowerCase().contains(normalized),
+        );
+      }).take(20).toList();
     }
   }
 

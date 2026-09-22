@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import '../services/api_client.dart';
+import '../services/offline/offline_cache.dart';
+import '../services/offline/pending_action.dart';
+import '../services/offline/pending_actions_queue.dart';
+import '../services/offline/sync_engine.dart';
 
 class CoursDuJourScreen extends StatefulWidget {
   const CoursDuJourScreen({super.key});
@@ -9,6 +13,7 @@ class CoursDuJourScreen extends StatefulWidget {
 }
 
 class _CoursDuJourScreenState extends State<CoursDuJourScreen> {
+  static const _cacheKey = 'teacher_courses_today';
   late Future<Map<String, dynamic>> _future;
 
   @override
@@ -18,8 +23,11 @@ class _CoursDuJourScreenState extends State<CoursDuJourScreen> {
   }
 
   Future<Map<String, dynamic>> _load() async {
-    return await ApiClient.instance.get('/mes-cours-du-jour')
-        as Map<String, dynamic>;
+    final data = await OfflineCache.instance.readThrough(
+      _cacheKey,
+      () => ApiClient.instance.get('/mes-cours-du-jour'),
+    );
+    return Map<String, dynamic>.from(data as Map);
   }
 
   Future<void> _refresh() async {
@@ -33,6 +41,7 @@ class _CoursDuJourScreenState extends State<CoursDuJourScreen> {
   ) async {
     final faite = lecon['faite'] == true;
     setState(() => lecon['faite'] = !faite);
+    await _cacheLessonState(cours, lecon, !faite);
 
     try {
       await ApiClient.instance.post('/mes-cours-du-jour/lecon-toggle', {
@@ -40,10 +49,54 @@ class _CoursDuJourScreenState extends State<CoursDuJourScreen> {
         'progression_lecon_id': lecon['id'],
         'date': DateTime.now().toIso8601String().substring(0, 10),
       });
-    } catch (_) {
+    } on ApiException catch (e) {
+      if (e.statusCode == 0) {
+        await PendingActionsQueue.instance.enqueue(
+          authMode: AuthMode.teacher,
+          path: '/mes-cours-du-jour/lecon-toggle',
+          body: {
+            'emploi_du_temps_id': cours['emploi_du_temps_id'],
+            'progression_lecon_id': lecon['id'],
+            'date': DateTime.now().toIso8601String().substring(0, 10),
+          },
+          label: 'Mettre à jour une leçon du jour',
+        );
+        await SyncEngine.instance.notifyEnqueued();
+        return;
+      }
       if (mounted) setState(() => lecon['faite'] = faite);
+      await _cacheLessonState(cours, lecon, faite);
       rethrow;
     }
+  }
+
+  Future<void> _cacheLessonState(
+    Map<String, dynamic> cours,
+    Map<String, dynamic> lecon,
+    bool faite,
+  ) async {
+    final cached = await OfflineCache.instance.read(_cacheKey);
+    if (cached is! Map) return;
+
+    final data = Map<String, dynamic>.from(cached);
+    final coursList = data['cours'];
+    if (coursList is! List) return;
+
+    for (final rawCours in coursList) {
+      if (rawCours is! Map) continue;
+      if (rawCours['emploi_du_temps_id'] != cours['emploi_du_temps_id']) {
+        continue;
+      }
+      final lecons = rawCours['lecons'];
+      if (lecons is! List) continue;
+      for (final rawLecon in lecons) {
+        if (rawLecon is Map && rawLecon['id'] == lecon['id']) {
+          rawLecon['faite'] = faite;
+        }
+      }
+    }
+
+    await OfflineCache.instance.overwrite(_cacheKey, data);
   }
 
   @override
@@ -212,7 +265,24 @@ class _CahierTexteFormState extends State<_CahierTexteForm> {
         if (_referenceCtrl.text.trim().isNotEmpty) 'reference_programme': _referenceCtrl.text.trim(),
       });
       if (mounted) Navigator.pop(context, true);
-    } catch (error) {
+    } on ApiException catch (error) {
+      if (error.statusCode == 0) {
+        await PendingActionsQueue.instance.enqueue(
+          authMode: AuthMode.teacher,
+          path: '/cahier-texte',
+          body: {
+            'emploi_du_temps_id': widget.cours['emploi_du_temps_id'],
+            'date': DateTime.now().toIso8601String().substring(0, 10),
+            'contenu': _contenuCtrl.text.trim(),
+            if (_referenceCtrl.text.trim().isNotEmpty)
+              'reference_programme': _referenceCtrl.text.trim(),
+          },
+          label: 'Créer une entrée de cahier de texte',
+        );
+        await SyncEngine.instance.notifyEnqueued();
+        if (mounted) Navigator.pop(context, true);
+        return;
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error')));
       }

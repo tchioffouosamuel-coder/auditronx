@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/admin_api_client.dart';
+import '../../services/offline/offline_cache.dart';
 import '../../theme.dart';
 import '../../widgets/admin/admin_field_spec.dart';
 import '../../widgets/admin/admin_select_field.dart';
@@ -35,7 +36,10 @@ class _AdminCahierTexteScreenState extends State<AdminCahierTexteScreen> {
   }
 
   Future<List<dynamic>> _load(dynamic enseignantId) async {
-    final data = await AdminApiClient.instance.get('/cahier-texte/$enseignantId');
+    final data = await OfflineCache.instance.readThrough(
+      'admin_cahier_texte_$enseignantId',
+      () => AdminApiClient.instance.get('/cahier-texte/$enseignantId'),
+    );
     if (data is Map && data['data'] is List) return data['data'] as List<dynamic>;
     if (data is List) return data;
     return const [];

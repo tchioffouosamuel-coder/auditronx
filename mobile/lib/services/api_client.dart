@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
@@ -68,7 +69,9 @@ class ApiClient {
   /// pas puisqu'ils ne catchent que ApiException.
   Future<http.Response> _guarded(Future<http.Response> Function() request) async {
     try {
-      return await request();
+      return await request().timeout(const Duration(seconds: 20));
+    } on TimeoutException {
+      throw ApiException("Connexion au serveur trop lente. L'action sera synchronisée dès que possible.", 0);
     } on SocketException {
       throw ApiException("Pas de connexion internet. Vérifiez votre réseau et réessayez.", 0);
     } on HttpException {

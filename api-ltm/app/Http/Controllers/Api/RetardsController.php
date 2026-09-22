@@ -196,7 +196,17 @@ class RetardsController extends Controller
         $fin = Carbon::parse($request->query('fin', now()->endOfMonth()));
 
         $enseignants = $this->enseignantsAccessibles($request->user())
-            ->when($request->query('section'), fn($q, $v) => $q->where('section', $v))
+            ->when($request->query('section'), function ($q, $section) {
+                $normalized = mb_strtolower((string) $section);
+                $sections = $normalized === 'générale'
+                    ? ['générale', 'enseignement générale', 'enseignement général']
+                    : [$normalized];
+
+                return $q->whereRaw(
+                    'LOWER(section) IN (' . implode(',', array_fill(0, count($sections), '?')) . ')',
+                    $sections,
+                );
+            })
             ->get();
 
         return [$debut, $fin, $enseignants];

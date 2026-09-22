@@ -1,11 +1,18 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'admin_api_client.dart';
+import 'api_client.dart';
 
 /// Session de l'espace admin (§admin-mobile) — mode secondaire de l'app,
 /// indépendant de [Session] (enseignant/kiosque). Contrairement au flux
 /// enseignant (OTP, jamais de re-login), l'admin s'authentifie comme sur le
 /// backoffice web : email + mot de passe (`User`), token Sanctum classique.
 class AdminSession extends ChangeNotifier {
+  final _storage = const FlutterSecureStorage();
+  static const _userCacheKey = 'auditron_admin_user_cache';
+
   bool _loading = true;
   bool _loggedIn = false;
   Map<String, dynamic>? _user;
@@ -19,12 +26,16 @@ class AdminSession extends ChangeNotifier {
     _loggedIn = await AdminApiClient.instance.isLoggedIn;
 
     if (_loggedIn) {
+      _user = await _loadCachedUser();
       try {
         _user = await AdminApiClient.instance.get('/me') as Map<String, dynamic>;
-      } catch (_) {
-        // Token invalide/expiré : AdminApiClient a déjà purgé le stockage sur
-        // un 401 ; on retombe simplement sur l'écran de connexion admin.
-        _loggedIn = await AdminApiClient.instance.isLoggedIn;
+        await _cacheUser(_user!);
+      } on ApiException catch (e) {
+        if (e.statusCode == 401) {
+          _loggedIn = false;
+          _user = null;
+          await _storage.delete(key: _userCacheKey);
+        }
       }
     }
 
@@ -40,8 +51,22 @@ class AdminSession extends ChangeNotifier {
 
     await AdminApiClient.instance.saveToken(response['token'] as String);
     _user = response['user'] as Map<String, dynamic>;
+    await _cacheUser(_user!);
     _loggedIn = true;
     notifyListeners();
+  }
+
+  Future<void> _cacheUser(Map<String, dynamic> user) =>
+      _storage.write(key: _userCacheKey, value: jsonEncode(user));
+
+  Future<Map<String, dynamic>?> _loadCachedUser() async {
+    final raw = await _storage.read(key: _userCacheKey);
+    if (raw == null) return null;
+    try {
+      return jsonDecode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Modification du mot de passe (§mon-compte) — exige le mot de passe
@@ -62,6 +87,7 @@ class AdminSession extends ChangeNotifier {
       // on déconnecte localement.
     }
     await AdminApiClient.instance.clearToken();
+    await _storage.delete(key: _userCacheKey);
     _loggedIn = false;
     _user = null;
     notifyListeners();

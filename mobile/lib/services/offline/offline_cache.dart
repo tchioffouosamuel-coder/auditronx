@@ -35,6 +35,17 @@ class OfflineCache {
     }
   }
 
+  /// Lit directement la dernière valeur locale, sans tenter le réseau.
+  Future<dynamic> read(String cacheKey) async {
+    final cached = await _storage.read(key: _key(cacheKey));
+    if (cached == null) return null;
+    try {
+      return jsonDecode(cached);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Écrase le cache local sans appel réseau — utilisé pour la mise à jour
   /// "optimiste" de l'UI après une action mise en file d'attente hors-ligne
   /// (§offline-sync), avant même que la synchro ne l'ait confirmée au serveur.

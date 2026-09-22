@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/admin_api_client.dart';
 import '../../services/api_client.dart';
+import '../../services/offline/offline_cache.dart';
 import '../../theme.dart';
 import '../../widgets/admin/admin_crud_screen.dart';
 import '../../widgets/admin/admin_field_spec.dart';
@@ -238,8 +239,9 @@ class _PersonnelDetailsSheet extends StatelessWidget {
   });
 
   Future<Map<String, dynamic>> _loadAttendance() async {
-    final data = await AdminApiClient.instance.get(
-      '/personnel/${item['id']}/assiduite',
+    final data = await OfflineCache.instance.readThrough(
+      'admin_personnel_${item['id']}_assiduite',
+      () => AdminApiClient.instance.get('/personnel/${item['id']}/assiduite'),
     );
     return data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
   }
@@ -399,8 +401,9 @@ class _TeacherScheduleSheet extends StatelessWidget {
   const _TeacherScheduleSheet({required this.item});
 
   Future<List<Map<String, dynamic>>> _load() async {
-    final data = await AdminApiClient.instance.getAllPages(
-      '/emplois?enseignant_id=${item['id']}',
+    final data = await OfflineCache.instance.readThrough(
+      'admin_personnel_${item['id']}_emplois',
+      () => AdminApiClient.instance.getAllPages('/emplois?enseignant_id=${item['id']}'),
     );
     return (data as List? ?? const [])
         .whereType<Map>()
