@@ -131,6 +131,16 @@ class AdminPersonnelScreen extends StatelessWidget {
     try {
       await AdminApiClient.instance.delete('/personnel/${item['id']}/photo');
       await _key.currentState?.refresh();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text('Suppression réussie.'),
+              backgroundColor: AuditronColors.brand700,
+            ),
+          );
+      }
     } on ApiException catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(
@@ -403,7 +413,9 @@ class _TeacherScheduleSheet extends StatelessWidget {
   Future<List<Map<String, dynamic>>> _load() async {
     final data = await OfflineCache.instance.readThrough(
       'admin_personnel_${item['id']}_emplois',
-      () => AdminApiClient.instance.getAllPages('/emplois?enseignant_id=${item['id']}'),
+      () => AdminApiClient.instance.getAllPages(
+        '/emplois?enseignant_id=${item['id']}',
+      ),
     );
     return (data as List? ?? const [])
         .whereType<Map>()

@@ -12,6 +12,8 @@ import '../../services/offline/pending_action.dart';
 import '../../services/offline/pending_actions_queue.dart';
 import '../../services/offline/sync_engine.dart';
 import '../../theme.dart';
+import '../../widgets/admin/admin_field_spec.dart';
+import '../../widgets/admin/admin_select_field.dart';
 
 DateTime _startOfMonth() {
   final now = DateTime.now();
@@ -400,20 +402,14 @@ class _FilterBar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          DropdownButtonFormField<DateTime>(
-            initialValue: selectedMonth,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: 'Période du bilan',
-              prefixIcon: Icon(Icons.calendar_month_outlined),
-            ),
-            items: [
+          AdminSearchableSelect(
+            value: selectedMonth,
+            label: 'Période du bilan',
+            options: [
               for (final month in _lastTwelveMonths())
-                DropdownMenuItem(value: month, child: Text(_monthLabel(month))),
+                AdminFieldOption(month, _monthLabel(month)),
             ],
-            onChanged: (month) {
-              if (month != null) onSelectMonth(month);
-            },
+            onChanged: (month) => onSelectMonth(month as DateTime),
           ),
           const SizedBox(height: 8),
           TextField(
@@ -493,22 +489,16 @@ class _FilterBar extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          DropdownButtonFormField<String>(
-            initialValue: null,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: 'Section du bilan',
-              prefixIcon: Icon(Icons.groups_outlined),
-            ),
-            items: [
+          AdminSearchableSelect(
+            value: null,
+            label: 'Section du bilan',
+            options: [
               for (final section in _bilanSections)
-                DropdownMenuItem(value: section, child: Text(section)),
+                AdminFieldOption(section, section),
             ],
             onChanged: downloadingSection
-                ? null
-                : (section) {
-                    if (section != null) onDownloadSection(section);
-                  },
+                ? (_) {}
+                : (section) => onDownloadSection(section as String),
           ),
         ],
       ),

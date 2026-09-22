@@ -59,23 +59,13 @@ class AdminSelectField extends StatelessWidget {
       final matchingItems = field.options!
           .where((option) => option.value == selectedValue)
           .length;
-      return DropdownButtonFormField<dynamic>(
+      return _FormSearchableSelect(
         initialValue: matchingItems == 1 ? selectedValue : null,
-        isExpanded: true,
-        decoration: InputDecoration(
-          labelText: field.label + (field.required ? ' *' : ''),
-        ),
-        items: field.options!
-            .map(
-              (o) => DropdownMenuItem(
-                value: o.value,
-                child: Text(o.label, overflow: TextOverflow.ellipsis),
-              ),
-            )
-            .toList(),
+        label: field.label + (field.required ? ' *' : ''),
+        options: field.options!,
         onChanged: onChanged,
         validator: field.required
-            ? (v) => v == null ? 'Champ requis' : null
+            ? (selected) => selected == null ? 'Champ requis' : null
             : null,
       );
     }
@@ -99,27 +89,23 @@ class AdminSelectField extends StatelessWidget {
         final currentValid = items.any(
           (i) => (field.optionValue?.call(i) ?? i['id']) == value,
         );
-        return DropdownButtonFormField<dynamic>(
+        return _FormSearchableSelect(
           initialValue: currentValid ? value : null,
-          isExpanded: true,
-          decoration: InputDecoration(
-            labelText: field.label + (field.required ? ' *' : ''),
-          ),
-          items: items
+          label: field.label + (field.required ? ' *' : ''),
+          options: items
               .map(
-                (i) => DropdownMenuItem(
-                  value: field.optionValue?.call(i) ?? i['id'],
-                  child: Text(
-                    field.optionLabel?.call(i) ??
-                        (i['nom']?.toString() ?? i['label']?.toString() ?? '—'),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                (item) => AdminFieldOption(
+                  field.optionValue?.call(item) ?? item['id'],
+                  field.optionLabel?.call(item) ??
+                      (item['nom']?.toString() ??
+                          item['label']?.toString() ??
+                          '—'),
                 ),
               )
               .toList(),
           onChanged: onChanged,
           validator: field.required
-              ? (v) => v == null ? 'Champ requis' : null
+              ? (selected) => selected == null ? 'Champ requis' : null
               : null,
         );
       },
@@ -128,4 +114,185 @@ class AdminSelectField extends StatelessWidget {
 
   static void invalidateCache(String endpoint) =>
       _OptionsCache.invalidate(endpoint);
+}
+
+class _FormSearchableSelect extends StatelessWidget {
+  final dynamic initialValue;
+  final String label;
+  final List<AdminFieldOption> options;
+  final ValueChanged<dynamic> onChanged;
+  final String? Function(dynamic)? validator;
+
+  const _FormSearchableSelect({
+    required this.initialValue,
+    required this.label,
+    required this.options,
+    required this.onChanged,
+    this.validator,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FormField<dynamic>(
+      initialValue: initialValue,
+      validator: validator,
+      builder: (state) => AdminSearchableSelect(
+        value: state.value,
+        label: label,
+        options: options,
+        errorText: state.errorText,
+        onChanged: (selected) {
+          state.didChange(selected);
+          onChanged(selected);
+        },
+      ),
+    );
+  }
+}
+
+class AdminSearchableSelect extends StatelessWidget {
+  final dynamic value;
+  final String label;
+  final List<AdminFieldOption> options;
+  final String? errorText;
+  final ValueChanged<dynamic> onChanged;
+
+  const AdminSearchableSelect({
+    super.key,
+    required this.value,
+    required this.label,
+    required this.options,
+    required this.onChanged,
+    this.errorText,
+  });
+
+  Future<void> _openPicker(BuildContext context) async {
+    final selected = await showModalBottomSheet<dynamic>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _SearchableOptionsSheet(
+        label: label,
+        options: options,
+        selectedValue: value,
+      ),
+    );
+    if (selected != null) onChanged(selected);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedLabel = options
+        .where((option) => option.value == value)
+        .map((option) => option.label)
+        .firstOrNull;
+    return InkWell(
+      onTap: () => _openPicker(context),
+      borderRadius: BorderRadius.circular(4),
+      child: InputDecorator(
+        isEmpty: selectedLabel == null,
+        decoration: InputDecoration(
+          labelText: label,
+          errorText: errorText,
+          suffixIcon: const Icon(Icons.keyboard_arrow_down),
+        ),
+        child: Text(
+          selectedLabel ?? 'Sélectionner',
+          overflow: TextOverflow.ellipsis,
+          style: selectedLabel == null
+              ? TextStyle(color: Theme.of(context).hintColor)
+              : null,
+        ),
+      ),
+    );
+  }
+}
+
+class _SearchableOptionsSheet extends StatefulWidget {
+  final String label;
+  final List<AdminFieldOption> options;
+  final dynamic selectedValue;
+
+  const _SearchableOptionsSheet({
+    required this.label,
+    required this.options,
+    required this.selectedValue,
+  });
+
+  @override
+  State<_SearchableOptionsSheet> createState() =>
+      _SearchableOptionsSheetState();
+}
+
+class _SearchableOptionsSheetState extends State<_SearchableOptionsSheet> {
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final query = _searchController.text.trim().toLowerCase();
+    final filteredOptions = widget.options
+        .where((option) => option.label.toLowerCase().contains(query))
+        .toList();
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: SafeArea(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 560),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    labelText: 'Rechercher ${widget.label.toLowerCase()}',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchController.text.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {});
+                            },
+                          ),
+                  ),
+                ),
+              ),
+              Flexible(
+                child: filteredOptions.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Text('Aucun résultat'),
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: filteredOptions.length,
+                        itemBuilder: (context, index) {
+                          final option = filteredOptions[index];
+                          return ListTile(
+                            title: Text(option.label),
+                            trailing: option.value == widget.selectedValue
+                                ? const Icon(Icons.check)
+                                : null,
+                            onTap: () => Navigator.pop(context, option.value),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

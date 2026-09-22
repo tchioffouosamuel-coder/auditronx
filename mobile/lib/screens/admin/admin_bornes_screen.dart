@@ -14,6 +14,7 @@ class AdminBornesScreen extends StatelessWidget {
       resourcePath: '/access-points',
       cacheKey: 'admin_bornes',
       icon: Icons.bluetooth,
+      readOnly: true,
       fields: const [
         AdminFieldSpec(
           key: 'bssid',
@@ -24,10 +25,12 @@ class AdminBornesScreen extends StatelessWidget {
         AdminFieldSpec(key: 'ssid', label: 'Nom BLE annoncé (facultatif)'),
         AdminFieldSpec(key: 'label', label: 'Libellé'),
       ],
-      itemTitle: (item) => item['label']?.toString() ?? item['bssid']?.toString() ?? '—',
-      itemSubtitle: (item) => [item['bssid'], item['ssid']]
-          .where((v) => v != null && v.toString().isNotEmpty)
-          .join(' · '),
+      itemTitle: (item) =>
+          item['label']?.toString() ?? item['bssid']?.toString() ?? '—',
+      itemSubtitle: (item) => [
+        item['bssid'],
+        item['ssid'],
+      ].where((v) => v != null && v.toString().isNotEmpty).join(' · '),
     );
   }
 }

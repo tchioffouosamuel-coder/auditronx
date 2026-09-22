@@ -4,7 +4,6 @@ import '../../services/admin_session.dart';
 import '../../theme.dart';
 import '../../widgets/sync_status_banner.dart';
 import '../change_password_screen.dart';
-import 'admin_accreditations_screen.dart';
 import 'admin_activation_requests_screen.dart';
 import 'admin_alertes_screen.dart';
 import 'admin_assiduite_screen.dart';
@@ -92,11 +91,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           icon: Icons.schedule,
           screen: const AdminEmploisScreen(),
         ),
-        _AdminMenuEntry(
-          title: 'Accréditations',
-          icon: Icons.verified_user,
-          screen: const AdminAccreditationsScreen(),
-        ),
       ],
     ),
     _AdminMenuGroup(
@@ -179,7 +173,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   late final List<_AdminMenuEntry> _flatEntries = [
     for (final g in _groups) ...g.entries,
   ];
-  static const _primaryIndexes = [0, 1, 8, 2];
+  static const _primaryIndexes = [0, 1, 7, 2];
 
   int _index = 0;
 
