@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\DeviceActivationRequest;
 use App\Models\Otp;
-use App\Models\TeacherNotification;
 use App\Services\PushNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -67,12 +66,12 @@ class DeviceActivationRequestController extends Controller
             );
         }
 
-        TeacherNotification::create([
-            'enseignant_id' => $activationRequest->enseignant_id,
-            'type' => 'otp_delivery',
-            'message' => "Code d'activation envoyé : {$code}",
-        ]);
-
+        // Pas de TeacherNotification ici : ce fil (NotificationController,
+        // table teacher_notifications) sert à alerter l'enseignant d'un scan
+        // effectué en son nom par un tiers (§procuration), pas à journaliser
+        // la livraison de son propre code d'activation — celle-ci est déjà
+        // poussée en direct via FCM ci-dessus, et reste consultable côté
+        // admin dans "Demandes d'activation" (index() avec statut=toutes).
         $activationRequest->update(['fulfilled_at' => now()]);
         Cache::forget("otp-plain:{$activationRequest->otp_id}");
 

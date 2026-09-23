@@ -5,6 +5,7 @@ import '../services/offline/offline_cache.dart';
 import '../services/offline/pending_action.dart';
 import '../services/offline/pending_actions_queue.dart';
 import '../services/offline/sync_engine.dart';
+import '../utils/date_format_utils.dart';
 
 const _cacheKey = 'teacher_notifications';
 
@@ -94,7 +95,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 child: ListTile(
                   leading: Icon(e.isRead ? Icons.notifications_none : Icons.notifications_active, color: e.isRead ? Colors.grey : Colors.blue),
                   title: Text(e.message),
-                  subtitle: Text(e.createdAt),
+                  subtitle: Text(formatDateTime(e.createdAt)),
                   onTap: () => _markRead(e),
                 ),
               );

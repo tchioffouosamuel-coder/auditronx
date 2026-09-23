@@ -230,7 +230,8 @@ class AdminCrudScreenState extends State<AdminCrudScreen> {
     );
     if (confirmed != true) return;
 
-    final items = List<dynamic>.from(await _future)
+    final previousItems = List<dynamic>.from(await _future);
+    final items = List<dynamic>.from(previousItems)
       ..removeWhere((e) => e[widget.idKey] == item[widget.idKey]);
     await OfflineCache.instance.overwrite(widget.cacheKey, {'data': items});
     if (mounted) setState(() => _future = Future.value(items));
@@ -242,6 +243,13 @@ class AdminCrudScreenState extends State<AdminCrudScreen> {
       if (mounted) _showSuccess('Suppression réussie.');
     } on ApiException catch (e) {
       if (e.statusCode != 0) {
+        // Échec réel côté serveur (ex. 403/422/500) : on annule la
+        // suppression optimiste pour ne pas laisser l'élément disparaître
+        // silencieusement de la liste/cache alors qu'il existe toujours.
+        await OfflineCache.instance.overwrite(widget.cacheKey, {
+          'data': previousItems,
+        });
+        if (mounted) setState(() => _future = Future.value(previousItems));
         if (mounted) _showError(e);
         return;
       }

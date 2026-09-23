@@ -6,8 +6,9 @@ import '../../services/offline/pending_action.dart';
 import '../../services/offline/pending_actions_queue.dart';
 import '../../services/offline/sync_engine.dart';
 import '../../theme.dart';
+import '../../utils/date_format_utils.dart';
 
-const _cacheKey = 'admin_activation_requests';
+String _cacheKeyFor(String statut) => 'admin_activation_requests_$statut';
 
 /// Demandes d'activation (§admin-mobile, §otp-approval) — équivalent mobile de
 /// l'onglet "Demandes d'activation" d'AppareilsPage.jsx : Valider pousse l'OTP
@@ -26,6 +27,12 @@ class _AdminActivationRequestsScreenState extends State<AdminActivationRequestsS
   late Future<List<dynamic>> _future;
   String? _error;
 
+  /// 'en_attente' : demandes à traiter (Valider/Refuser).
+  /// 'toutes' : historique récent, y compris déjà validées/refusées, pour
+  /// retrouver une demande qu'on n'a pas pu (ou pas eu besoin de) traiter
+  /// depuis la notification push.
+  String _statut = 'en_attente';
+
   @override
   void initState() {
     super.initState();
@@ -34,8 +41,8 @@ class _AdminActivationRequestsScreenState extends State<AdminActivationRequestsS
 
   Future<List<dynamic>> _load() async {
     final data = await OfflineCache.instance.readThrough(
-      _cacheKey,
-      () => AdminApiClient.instance.get('/devices/activation-requests', query: {'statut': 'en_attente'}),
+      _cacheKeyFor(_statut),
+      () => AdminApiClient.instance.get('/devices/activation-requests', query: {'statut': _statut}),
     );
     return (data as Map<String, dynamic>)['data'] as List<dynamic>;
   }
@@ -45,13 +52,22 @@ class _AdminActivationRequestsScreenState extends State<AdminActivationRequestsS
     await _future;
   }
 
+  void _setStatut(String statut) {
+    if (statut == _statut) return;
+    setState(() {
+      _statut = statut;
+      _error = null;
+      _future = _load();
+    });
+  }
+
   /// Retire optimistement la demande de la liste affichée/mise en cache
   /// (§offline-sync) : qu'elle parte tout de suite au serveur ou soit mise en
   /// file d'attente hors-ligne, l'admin ne doit pas la revoir comme "en
   /// attente" après avoir déjà tranché.
   Future<void> _removeFromCache(int requestId) async {
     final requests = List<dynamic>.from(await _future)..removeWhere((r) => r['id'] == requestId);
-    await OfflineCache.instance.overwrite(_cacheKey, {'data': requests});
+    await OfflineCache.instance.overwrite(_cacheKeyFor(_statut), {'data': requests});
     setState(() => _future = Future.value(requests));
   }
 
@@ -108,64 +124,108 @@ class _AdminActivationRequestsScreenState extends State<AdminActivationRequestsS
 
   @override
   Widget build(BuildContext context) {
-    return RefreshIndicator(
-      onRefresh: _refresh,
-      child: FutureBuilder<List<dynamic>>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final requests = snapshot.data ?? [];
-
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              if (_error != null) ...[
-                Text(_error!, style: const TextStyle(color: Colors.red)),
-                const SizedBox(height: 12),
-              ],
-              if (requests.isEmpty) const Padding(padding: EdgeInsets.all(8), child: Text('Aucune demande en attente.')),
-              ...requests.map((r) {
-                final request = r as Map<String, dynamic>;
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(request['enseignant']?['nom'] ?? '—', style: const TextStyle(fontWeight: FontWeight.w700)),
-                        Text(request['enseignant']?['tel'] ?? '', style: const TextStyle(color: AuditronColors.ink500)),
-                        if (request['code'] != null) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            request['code'],
-                            style: const TextStyle(fontFamily: 'monospace', fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 4),
-                          ),
-                        ],
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: FilledButton(onPressed: () => _approve(request), child: const Text('Valider')),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: OutlinedButton(onPressed: () => _reject(request), child: const Text('Refuser')),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }),
+    final isPending = _statut == 'en_attente';
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'en_attente', label: Text('En attente')),
+              ButtonSegment(value: 'toutes', label: Text('Récentes')),
             ],
-          );
-        },
-      ),
+            selected: {_statut},
+            onSelectionChanged: (s) => _setStatut(s.first),
+          ),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _refresh,
+            child: FutureBuilder<List<dynamic>>(
+              future: _future,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                final requests = snapshot.data ?? [];
+
+                return ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    if (_error != null) ...[
+                      Text(_error!, style: const TextStyle(color: Colors.red)),
+                      const SizedBox(height: 12),
+                    ],
+                    if (requests.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Text(isPending ? 'Aucune demande en attente.' : 'Aucune demande récente.'),
+                      ),
+                    ...requests.map((r) {
+                      final request = r as Map<String, dynamic>;
+                      final fulfilledAt = request['fulfilled_at'] as String?;
+                      final rejectedAt = request['rejected_at'] as String?;
+                      final resolved = fulfilledAt != null || rejectedAt != null;
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(request['enseignant']?['nom'] ?? '—', style: const TextStyle(fontWeight: FontWeight.w700)),
+                                  ),
+                                  if (!isPending && resolved)
+                                    Chip(
+                                      label: Text(fulfilledAt != null ? 'Validée' : 'Refusée'),
+                                      backgroundColor: fulfilledAt != null ? Colors.green.shade100 : Colors.red.shade100,
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                ],
+                              ),
+                              Text(request['enseignant']?['tel'] ?? '', style: const TextStyle(color: AuditronColors.ink500)),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Demandée le ${formatDateTime(request['requested_at'] as String?)}',
+                                style: const TextStyle(color: AuditronColors.ink500, fontSize: 12),
+                              ),
+                              if (request['code'] != null) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  request['code'],
+                                  style: const TextStyle(fontFamily: 'monospace', fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 4),
+                                ),
+                              ],
+                              if (!resolved) ...[
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: FilledButton(onPressed: () => _approve(request), child: const Text('Valider')),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: OutlinedButton(onPressed: () => _reject(request), child: const Text('Refuser')),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
