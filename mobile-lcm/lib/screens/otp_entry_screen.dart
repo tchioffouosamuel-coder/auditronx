@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/api_client.dart';
@@ -18,6 +21,38 @@ class _OtpEntryScreenState extends State<OtpEntryScreen> {
   final _codeController = TextEditingController();
   bool _submitting = false;
   String? _error;
+  StreamSubscription<RemoteMessage>? _foregroundSub;
+  StreamSubscription<RemoteMessage>? _openedSub;
+
+  @override
+  void initState() {
+    super.initState();
+    // App au premier plan : l'OS n'affiche pas les notifications FCM, le code
+    // poussé à la validation admin (type `otp_delivery`) serait perdu sans
+    // cet écouteur — on pré-remplit directement le champ.
+    _foregroundSub = FirebaseMessaging.onMessage.listen(_onPush);
+    // Notification système touchée alors que l'app était en arrière-plan.
+    _openedSub = FirebaseMessaging.onMessageOpenedApp.listen(_onPush);
+  }
+
+  @override
+  void dispose() {
+    _foregroundSub?.cancel();
+    _openedSub?.cancel();
+    _codeController.dispose();
+    super.dispose();
+  }
+
+  void _onPush(RemoteMessage message) {
+    final code = message.data['code'];
+    if (message.data['type'] != 'otp_delivery' || code is! String || !mounted) return;
+
+    _codeController.text = code;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Demande validée : code d'activation reçu.")),
+    );
+    if (!_submitting) _submit();
+  }
 
   Future<void> _submit() async {
     if (_codeController.text.trim().isEmpty) return;

@@ -141,16 +141,23 @@ function ActivationRequestsTable() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [statut, setStatut] = useState("en_attente");
 
   function load() {
     setLoading(true);
+    setError(null);
     api
-      .get("/devices/activation-requests", { params: { statut: "en_attente" } })
+      .get("/devices/activation-requests", { params: { statut } })
       .then(({ data }) => setRequests(data.data ?? []))
+      .catch((e) =>
+        setError(
+          e.response?.data?.message ?? "Échec du chargement des demandes.",
+        ),
+      )
       .finally(() => setLoading(false));
   }
 
-  useEffect(load, []);
+  useEffect(load, [statut]);
 
   async function approve(request) {
     setError(null);
@@ -176,6 +183,24 @@ function ActivationRequestsTable() {
 
   return (
     <>
+      <div className="mb-3 flex gap-2">
+        {[
+          ["en_attente", "En attente"],
+          ["toutes", "Récentes"],
+        ].map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setStatut(key)}
+            className={`rounded-md px-3 py-1 text-sm ${
+              statut === key
+                ? "bg-brand-700 text-white"
+                : "bg-white text-ink-700 border border-ink-100"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       {error && (
         <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
@@ -183,7 +208,11 @@ function ActivationRequestsTable() {
       )}
       <DataTable
         loading={loading}
-        emptyMessage="Aucune demande en attente."
+        emptyMessage={
+          statut === "en_attente"
+            ? "Aucune demande en attente."
+            : "Aucune demande récente."
+        }
         rows={requests}
         columns={[
           {
@@ -217,23 +246,39 @@ function ActivationRequestsTable() {
             render: (r) => new Date(r.requested_at).toLocaleString("fr-FR"),
             sortValue: (r) => r.requested_at,
           },
+          {
+            key: "statut",
+            label: "Statut",
+            sortable: false,
+            render: (r) =>
+              r.fulfilled_at ? (
+                <span className="text-green-600">Validée</span>
+              ) : r.rejected_at ? (
+                <span className="text-red-600">Refusée</span>
+              ) : (
+                <span className="text-ink-500">En attente</span>
+              ),
+          },
         ]}
-        renderActions={(r) => (
-          <div className="flex gap-2">
-            <button
-              onClick={() => approve(r)}
-              className="rounded-md bg-brand-700 px-3 py-1 text-white hover:bg-brand-800"
-            >
-              Valider
-            </button>
-            <button
-              onClick={() => reject(r)}
-              className="rounded-md border border-red-200 px-3 py-1 text-red-600 hover:bg-red-50"
-            >
-              Refuser
-            </button>
-          </div>
-        )}
+        renderActions={(r) =>
+          !r.fulfilled_at &&
+          !r.rejected_at && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => approve(r)}
+                className="rounded-md bg-brand-700 px-3 py-1 text-white hover:bg-brand-800"
+              >
+                Valider
+              </button>
+              <button
+                onClick={() => reject(r)}
+                className="rounded-md border border-red-200 px-3 py-1 text-red-600 hover:bg-red-50"
+              >
+                Refuser
+              </button>
+            </div>
+          )
+        }
       />
     </>
   );
