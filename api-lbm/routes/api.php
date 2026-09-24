@@ -46,7 +46,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/me/fcm-token', [AuthController::class, 'updateFcmToken']);
     Route::put('/me/password', [AuthController::class, 'updatePassword']);
 
-    Route::post('/otp/generate', [OtpController::class, 'generate']);
+    Route::post('/otp/generate', [OtpController::class, 'generate'])->middleware('backoffice');
     Route::post('/devices/{device}/revoke', [DeviceController::class, 'revoke']);
     Route::post('/devices/{device}/rotate-token', [DeviceController::class, 'rotateToken']);
     Route::post('/devices/provision-relay', [DeviceController::class, 'provisionRelay']);
@@ -121,9 +121,13 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Administration des appareils (§4.2)
     Route::get('/devices', [DeviceController::class, 'index']);
-    Route::get('/devices/activation-requests', [DeviceActivationRequestController::class, 'index']);
-    Route::post('/devices/activation-requests/{activationRequest}/approve', [DeviceActivationRequestController::class, 'approve']);
-    Route::post('/devices/activation-requests/{activationRequest}/reject', [DeviceActivationRequestController::class, 'reject']);
+    // Demandes d'activation : exposent les OTP en clair, réservées aux
+    // administrateurs (jamais à un token enseignant).
+    Route::middleware('backoffice')->group(function () {
+        Route::get('/devices/activation-requests', [DeviceActivationRequestController::class, 'index']);
+        Route::post('/devices/activation-requests/{activationRequest}/approve', [DeviceActivationRequestController::class, 'approve']);
+        Route::post('/devices/activation-requests/{activationRequest}/reject', [DeviceActivationRequestController::class, 'reject']);
+    });
     Route::apiResource('access-points', AccessPointController::class)
         ->parameters(['access-points' => 'accessPoint'])
         ->except(['show']);

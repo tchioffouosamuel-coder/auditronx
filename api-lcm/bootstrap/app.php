@@ -13,6 +13,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->alias([
+            'backoffice' => \App\Http\Middleware\EnsureBackofficeUser::class,
+        ]);
+
         $middleware->redirectGuestsTo(function (Request $request): ?string {
             // Les routes API doivent renvoyer 401 JSON, jamais chercher une
             // route web `login` qui n'existe pas dans cette application.
