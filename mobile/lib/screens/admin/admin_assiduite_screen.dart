@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../services/admin_api_client.dart';
 import '../../services/offline/offline_cache.dart';
 import '../../theme.dart';
+import '../../utils/date_format_utils.dart';
 
 /// Assiduité & rapports (§admin-mobile) — équivalent mobile d'AssiduitePage.jsx.
 /// Lecture seule, 3 onglets : Statistiques / Journal des présences /
@@ -278,9 +279,7 @@ class _JournalTabState extends State<_JournalTab> {
 
   String? _formatHeure(dynamic iso) {
     if (iso == null) return null;
-    final dt = DateTime.tryParse('$iso');
-    if (dt == null) return null;
-    return DateFormat('HH:mm').format(dt.toLocal());
+    return formatTime('$iso');
   }
 
   void _openPhoto(String url, String title) {

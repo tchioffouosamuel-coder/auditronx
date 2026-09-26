@@ -11,7 +11,7 @@ class _OptionsCache {
 
   static Future<List<Map<String, dynamic>>> load(String endpoint) async {
     if (_cache.containsKey(endpoint)) return _cache[endpoint]!;
-    final data = await AdminApiClient.instance.get(endpoint);
+    final data = await AdminApiClient.instance.getAllPages(endpoint);
     final list = data is Map && data['data'] is List
         ? (data['data'] as List)
         : (data is List ? data : const []);

@@ -15,7 +15,9 @@ function DevicesTable() {
       .get("/devices")
       .then(({ data }) =>
         setDevices(
-          (data.data ?? []).filter((device) => device.device_type === "relay_gateway"),
+          (data.data ?? []).filter(
+            (device) => device.device_type === "relay_gateway",
+          ),
         ),
       )
       .finally(() => setLoading(false));
@@ -131,11 +133,8 @@ function DevicesTable() {
 }
 
 /**
- * Demandes d'activation (§4.1 revu, §otp-approval) : un enseignant non-admin
- * s'est identifié (tel + mot de passe). L'OTP est déjà généré côté serveur ;
- * une notification de validation (Valider/Refuser) a été poussée aux admins
- * connectés — ce tableau est le relais/secours pour agir depuis le backoffice
- * si la notification n'a pas été reçue.
+ * Demandes d'activation : un enseignant non-admin s'est identifié (téléphone +
+ * mot de passe) et attend l'approbation de l'administration.
  */
 function ActivationRequestsTable() {
   const [requests, setRequests] = useState([]);
@@ -165,7 +164,9 @@ function ActivationRequestsTable() {
       await api.post(`/devices/activation-requests/${request.id}/approve`);
       load();
     } catch (e) {
-      setError(e.response?.data?.message ?? "Échec de l'envoi du code.");
+      setError(
+        e.response?.data?.message ?? "Échec de la validation de la demande.",
+      );
     }
   }
 
@@ -226,19 +227,6 @@ function ActivationRequestsTable() {
             label: "Téléphone",
             render: (r) => r.enseignant?.tel,
             sortValue: (r) => r.enseignant?.tel,
-          },
-          {
-            key: "code",
-            label: "Code",
-            sortable: false,
-            render: (r) =>
-              r.code ? (
-                <span className="font-mono font-semibold tracking-widest">
-                  {r.code}
-                </span>
-              ) : (
-                "—"
-              ),
           },
           {
             key: "requested_at",

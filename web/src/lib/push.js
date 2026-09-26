@@ -1,6 +1,11 @@
-import { initializeApp } from 'firebase/app'
-import { getMessaging, getToken, isSupported, onMessage } from 'firebase/messaging'
-import api from './api'
+import { initializeApp } from "firebase/app";
+import {
+  getMessaging,
+  getToken,
+  isSupported,
+  onMessage,
+} from "firebase/messaging";
+import api from "./api";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -8,13 +13,14 @@ const firebaseConfig = {
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
-}
+};
 
-let messagingInstance = null
+let messagingInstance = null;
 
 function getMessagingInstance() {
-  if (!messagingInstance) messagingInstance = getMessaging(initializeApp(firebaseConfig))
-  return messagingInstance
+  if (!messagingInstance)
+    messagingInstance = getMessaging(initializeApp(firebaseConfig));
+  return messagingInstance;
 }
 
 /**
@@ -27,46 +33,57 @@ function getMessagingInstance() {
  * le tableau "Demandes d'activation" du backoffice comme secours.
  */
 export async function registerAdminPush() {
-  if (!import.meta.env.VITE_FIREBASE_API_KEY || !import.meta.env.VITE_FIREBASE_VAPID_KEY) return
-  if (!('serviceWorker' in navigator) || !('Notification' in window)) return
+  if (
+    !import.meta.env.VITE_FIREBASE_API_KEY ||
+    !import.meta.env.VITE_FIREBASE_VAPID_KEY
+  )
+    return;
+  if (!("serviceWorker" in navigator) || !("Notification" in window)) return;
 
   try {
-    if (!(await isSupported())) return
+    if (!(await isSupported())) return;
 
-    const permission = await Notification.requestPermission()
-    if (permission !== 'granted') return
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") return;
 
-    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js')
-    const messaging = getMessagingInstance()
+    const registration = await navigator.serviceWorker.register(
+      "/firebase-messaging-sw.js",
+    );
+    const messaging = getMessagingInstance();
 
     const token = await getToken(messaging, {
       vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
       serviceWorkerRegistration: registration,
-    })
-    if (token) await api.post('/me/fcm-token', { fcm_token: token })
+    });
+    if (token) await api.post("/me/fcm-token", { fcm_token: token });
 
     // Onglet au premier plan : FCM n'affiche pas de notification système pour
     // un message data-only (voir PushNotificationService::sendToAdmins côté
     // API) — on la construit nous-mêmes, avec les mêmes actions Valider/Refuser
     // qu'en arrière-plan (firebase-messaging-sw.js).
-    onMessage(messaging, (payload) => showApprovalNotification(registration, payload.data))
+    onMessage(messaging, (payload) =>
+      showApprovalNotification(registration, payload.data),
+    );
   } catch (e) {
-    console.warn('push: échec activation des notifications admin', e)
+    console.warn("push: échec activation des notifications admin", e);
   }
 }
 
 function showApprovalNotification(registration, data) {
-  if (!data || data.type !== 'otp_approval') return
+  if (!data || !["activation_request", "otp_approval"].includes(data.type))
+    return;
 
   registration.showNotification(data.title ?? "Demande d'activation", {
-    body: data.body ?? `${data.enseignant_nom} demande un code d'accès — code : ${data.code}`,
-    icon: '/logo.png',
-    tag: `otp-approval-${data.activation_request_id}`,
+    body:
+      data.body ??
+      `${data.enseignant_nom} demande l’activation d’un téléphone.`,
+    icon: "/logo.png",
+    tag: `activation-${data.activation_request_id}`,
     data,
     requireInteraction: true,
     actions: [
-      { action: 'approve', title: 'Valider' },
-      { action: 'reject', title: 'Refuser' },
+      { action: "approve", title: "Valider" },
+      { action: "reject", title: "Refuser" },
     ],
-  })
+  });
 }

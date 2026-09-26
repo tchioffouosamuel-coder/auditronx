@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CahierTexteController;
 use App\Http\Controllers\Api\ClasseController;
+use App\Http\Controllers\Api\CoursEnseignantController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DeviceActivationRequestController;
 use App\Http\Controllers\Api\DeviceController;
@@ -16,7 +17,6 @@ use App\Http\Controllers\Api\EmploiDuTempsController;
 use App\Http\Controllers\Api\EnseignantController;
 use App\Http\Controllers\Api\FerieController;
 use App\Http\Controllers\Api\FicheProgressionController;
-use App\Http\Controllers\Api\CoursEnseignantController;
 use App\Http\Controllers\Api\MyPresenceController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OtpController;
@@ -37,7 +37,7 @@ Route::post('/login', [AuthController::class, 'login']);
 // Identification (tel + mot de passe) et activation d'un device — §4.1 revu,
 // accessibles sans authentification préalable.
 Route::post('/devices/request-activation', [DeviceController::class, 'requestActivation']);
-Route::post('/devices/activate', [DeviceController::class, 'activate']);
+Route::post('/devices/activation-requests/{activationRequest}/complete', [DeviceController::class, 'completeApprovedActivation']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', fn(Request $request) => $request->user());

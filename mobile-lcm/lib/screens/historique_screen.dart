@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/presence.dart';
 import '../services/presence_repository.dart';
+import '../utils/date_format_utils.dart';
 
 /// Historique personnel (§4.1) : consultation de ses propres présences/retards
 /// du mois en cours.
@@ -82,7 +83,7 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
                 child: ListTile(
                   title: Text(e.date),
                   subtitle: Text(
-                    'Arrivée : ${e.heureArrivee ?? '—'}   Départ : ${e.heureDepart ?? '—'}',
+                    'Arrivée : ${formatTime(e.heureArrivee)}   Départ : ${formatTime(e.heureDepart)}',
                   ),
                   trailing: e.enRetard
                       ? Chip(

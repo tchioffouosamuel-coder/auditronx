@@ -1,14 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/api_client.dart';
 import '../services/session.dart';
 import '../theme.dart';
 import 'admin/admin_login_screen.dart';
-import 'otp_entry_screen.dart';
 
-/// Identification (§4.1 revu) : téléphone + mot de passe. Un enseignant admin
-/// est activé immédiatement ; sinon l'écran de saisie de l'OTP (remis en
-/// personne par l'administration) prend le relais.
+/// Identification par téléphone et mot de passe; les autres enseignants
+/// attendent l'approbation admin avant l'activation automatique.
 class ActivationScreen extends StatefulWidget {
   const ActivationScreen({super.key});
 
@@ -21,6 +21,10 @@ class _ActivationScreenState extends State<ActivationScreen> {
   final _passwordController = TextEditingController();
   bool _submitting = false;
   bool _obscurePassword = true;
+  bool _waitingForApproval = false;
+  bool _checkingApproval = false;
+  int? _activationRequestId;
+  Timer? _approvalPollTimer;
   String? _error;
 
   @override
@@ -36,14 +40,17 @@ class _ActivationScreenState extends State<ActivationScreen> {
 
   @override
   void dispose() {
+    _approvalPollTimer?.cancel();
     _telController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
-    if (_telController.text.trim().isEmpty || _passwordController.text.isEmpty)
+    if (_telController.text.trim().isEmpty ||
+        _passwordController.text.isEmpty) {
       return;
+    }
 
     setState(() {
       _submitting = true;
@@ -51,20 +58,52 @@ class _ActivationScreenState extends State<ActivationScreen> {
     });
 
     try {
-      final activated = await context.read<Session>().requestActivation(
+      final requestId = await context.read<Session>().requestActivation(
         _telController.text.trim(),
         _passwordController.text,
       );
 
-      if (!activated && mounted) {
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const OtpEntryScreen()));
+      if (requestId != null && mounted) {
+        setState(() {
+          _activationRequestId = requestId;
+          _waitingForApproval = true;
+        });
+        _approvalPollTimer = Timer.periodic(
+          const Duration(seconds: 5),
+          (_) => _checkApproval(),
+        );
       }
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _checkApproval() async {
+    final requestId = _activationRequestId;
+    if (_checkingApproval || requestId == null) return;
+    _checkingApproval = true;
+
+    try {
+      await context.read<Session>().completeApprovedActivation(
+        requestId,
+        _telController.text.trim(),
+        _passwordController.text,
+      );
+    } on ApiException catch (e) {
+      if (e.statusCode != 0) {
+        _approvalPollTimer?.cancel();
+        if (mounted) {
+          setState(() {
+            _waitingForApproval = false;
+            _activationRequestId = null;
+            _error = e.message;
+          });
+        }
+      }
+    } finally {
+      _checkingApproval = false;
     }
   }
 
@@ -119,12 +158,14 @@ class _ActivationScreenState extends State<ActivationScreen> {
                     TextField(
                       controller: _telController,
                       keyboardType: TextInputType.phone,
+                      enabled: !_submitting && !_waitingForApproval,
                       decoration: const InputDecoration(labelText: 'Téléphone'),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _passwordController,
                       obscureText: _obscurePassword,
+                      enabled: !_submitting && !_waitingForApproval,
                       decoration: InputDecoration(
                         labelText: 'Mot de passe',
                         suffixIcon: IconButton(
@@ -153,8 +194,10 @@ class _ActivationScreenState extends State<ActivationScreen> {
                     ],
                     const SizedBox(height: 20),
                     FilledButton(
-                      onPressed: _submitting ? null : _submit,
-                      child: _submitting
+                      onPressed: _submitting || _waitingForApproval
+                          ? null
+                          : _submit,
+                      child: _submitting || _waitingForApproval
                           ? const SizedBox(
                               height: 20,
                               width: 20,
@@ -165,17 +208,15 @@ class _ActivationScreenState extends State<ActivationScreen> {
                             )
                           : const Text('Se connecter'),
                     ),
+                    if (_waitingForApproval) ...[
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Demande envoyée. En attente de validation par l’administration.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: AuditronColors.ink700),
+                      ),
+                    ],
                     const SizedBox(height: 12),
-                    TextButton(
-                      onPressed: _submitting
-                          ? null
-                          : () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const OtpEntryScreen(),
-                              ),
-                            ),
-                      child: const Text("J'ai déjà reçu mon code d'activation"),
-                    ),
                     TextButton(
                       onPressed: _submitting
                           ? null

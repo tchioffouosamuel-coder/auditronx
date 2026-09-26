@@ -7,7 +7,7 @@ import '../../theme.dart';
 
 /// Connexion admin (§admin-mobile) : mêmes identifiants que le backoffice web
 /// (compte `User`, email + mot de passe), distincte de l'identification
-/// enseignant (tel + mot de passe + OTP) de [ActivationScreen].
+/// enseignant (téléphone + mot de passe) de [ActivationScreen].
 class AdminLoginScreen extends StatefulWidget {
   const AdminLoginScreen({super.key});
 

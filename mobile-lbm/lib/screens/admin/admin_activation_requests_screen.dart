@@ -9,12 +9,8 @@ import '../../theme.dart';
 
 const _cacheKey = 'admin_activation_requests';
 
-/// Demandes d'activation (§admin-mobile, §otp-approval) — équivalent mobile de
-/// l'onglet "Demandes d'activation" d'AppareilsPage.jsx : Valider pousse l'OTP
-/// par notification à l'enseignant, Refuser annule la demande. C'est la même
-/// notification de validation (Google-style) qui peut aussi arriver ici sans
-/// avoir eu besoin d'ouvrir l'app, mais ce tableau reste consultable pour agir
-/// à tout moment.
+/// Demandes d'activation — Valider autorise le téléphone à terminer son
+/// activation, Refuser annule la demande.
 class AdminActivationRequestsScreen extends StatefulWidget {
   const AdminActivationRequestsScreen({super.key});
 
@@ -93,7 +89,7 @@ class _AdminActivationRequestsScreenState
       builder: (_) => AlertDialog(
         title: const Text('Refuser la demande ?'),
         content: Text(
-          "${request['enseignant']?['nom']} ne recevra pas de code d'activation.",
+          "La demande d’activation de ${request['enseignant']?['nom']} sera annulée.",
         ),
         actions: [
           TextButton(
@@ -170,18 +166,6 @@ class _AdminActivationRequestsScreenState
                           request['enseignant']?['tel'] ?? '',
                           style: const TextStyle(color: AuditronColors.ink500),
                         ),
-                        if (request['code'] != null) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            request['code'],
-                            style: const TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 20,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 4,
-                            ),
-                          ),
-                        ],
                         const SizedBox(height: 12),
                         Row(
                           children: [

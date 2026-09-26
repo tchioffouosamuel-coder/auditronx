@@ -30,18 +30,7 @@ class PushNotificationService
     }
 
     /**
-     * Envoi à un token FCM connu directement (pas de Device : cas de la
-     * livraison d'OTP par notification, §otp-approval — à ce stade
-     * l'enseignant n'a pas encore de device Sanctum/activé, donc pas de ligne
-     * `devices` où chercher un token).
-     */
-    public function sendToToken(string $fcmToken, string $title, string $body, array $data = []): void
-    {
-        $this->send($fcmToken, $title, $body, $data);
-    }
-
-    /**
-     * Notification de validation OTP (§otp-approval) envoyée à tous les admins
+     * Notification de demande d'activation envoyée à tous les admins
      * connectés au backoffice. Message *data-only* (sans bloc `notification`) :
      * ça laisse le service worker web construire lui-même la notification avec
      * les actions Valider/Refuser plutôt que de subir l'affichage par défaut du

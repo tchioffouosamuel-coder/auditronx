@@ -4,12 +4,13 @@ namespace Tests\Feature;
 
 use App\Models\AccessPoint;
 use App\Models\Device;
+use App\Models\DeviceActivationRequest;
 use App\Models\Enseignant;
-use App\Models\Otp;
 use App\Models\Presence;
 use App\Models\QrPoint;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class AttendanceScanTest extends TestCase
@@ -18,15 +19,21 @@ class AttendanceScanTest extends TestCase
 
     public function test_un_enseignant_peut_sactiver_puis_scanner_sa_presence(): void
     {
-        $enseignant = Enseignant::factory()->create();
-        $otp = Otp::create([
-            'teacher_id' => $enseignant->id,
-            'code' => '123456',
-            'expires_at' => now()->addMinutes(15),
+        $enseignant = Enseignant::factory()->create([
+            'tel' => '699000010',
+            'password' => Hash::make('secret123'),
+        ]);
+        $activationRequest = DeviceActivationRequest::create([
+            'enseignant_id' => $enseignant->id,
+            'device_uuid' => 'device-uuid-1',
+            'device_type' => 'mobile',
+            'requested_at' => now(),
+            'fulfilled_at' => now(),
         ]);
 
-        $activation = $this->postJson('/api/devices/activate', [
-            'code' => '123456',
+        $activation = $this->postJson("/api/devices/activation-requests/{$activationRequest->id}/complete", [
+            'tel' => '699000010',
+            'password' => 'secret123',
             'device_uuid' => 'device-uuid-1',
         ]);
 
@@ -37,8 +44,6 @@ class AttendanceScanTest extends TestCase
             'teacher_id' => $enseignant->id,
             'device_uuid' => 'device-uuid-1',
         ]);
-        $this->assertNotNull($otp->fresh()->used_at);
-
         $qrPoint = QrPoint::factory()->create(['code' => 'QR-PORTAIL-1']);
         $accessPoint = AccessPoint::factory()->create(['bssid' => 'AA:BB:CC:DD:EE:FF']);
 

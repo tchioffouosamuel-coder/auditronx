@@ -6,8 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Device;
 use App\Models\DeviceActivationRequest;
 use App\Models\Enseignant;
-use App\Models\Otp;
 use App\Services\PushNotificationService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
@@ -19,24 +19,17 @@ class DeviceController extends Controller
     /**
      * POST /api/devices/request-activation — identification par téléphone + mot
      * de passe (§4.1 revu). Un enseignant admin (`est_admin`) est activé
-     * immédiatement ; sinon une demande d'activation est créée et l'OTP généré
-     * dès maintenant (§otp-approval) — une notification de validation
-     * (Valider/Refuser) est poussée aux admins ; sur validation, le code est
-     * envoyé par notification push à ce téléphone, plus besoin de le remettre
-     * en personne.
+     * immédiatement ; sinon une demande d'activation est créée pour validation
+     * par l'administration. Après approbation, l'enseignant termine l'activation
+     * en confirmant ses identifiants et le même appareil.
      */
-    public function requestActivation(Request $request)
+    public function requestActivation(Request $request): JsonResponse
     {
         $data = $request->validate([
             'tel' => ['required', 'string'],
             'password' => ['required', 'string'],
             'device_uuid' => ['required', 'string'],
             'device_type' => ['sometimes', 'in:mobile'],
-            // Capturé avant toute authentification (pas encore de device
-            // Sanctum) : seul moyen de pousser l'OTP par notification une fois
-            // l'admin d'accord (§otp-approval) plutôt que de le remettre en
-            // personne.
-            'fcm_token' => ['sometimes', 'nullable', 'string'],
         ]);
 
         $enseignant = Enseignant::where('tel', $data['tel'])->first();
@@ -50,44 +43,55 @@ class DeviceController extends Controller
         $this->ensureTeacherDeviceAvailable($enseignant, $data['device_uuid']);
 
         if ($enseignant->est_admin) {
-            // updateOrCreate plutôt que create() : le device_uuid (généré une
-            // fois côté app et persisté sur le téléphone) peut déjà exister en
-            // base si ce même appareil a été révoqué puis se ré-active — sans
-            // ça, l'unicité de device_uuid fait planter l'activation avec une
-            // erreur SQL brute au lieu de la réactiver proprement.
-            $device = Device::updateOrCreate(
-                ['device_uuid' => $data['device_uuid']],
-                [
-                    'teacher_id' => $enseignant->id,
-                    'device_type' => $data['device_type'] ?? 'mobile',
-                    'activated_at' => now(),
-                    'revoked_at' => null,
-                ]
+            $session = $this->createTeacherDeviceSession(
+                $enseignant,
+                $data['device_uuid'],
+                $data['device_type'] ?? 'mobile',
             );
-            $enseignant->tokens()->where('name', $data['device_uuid'])->delete();
-
-            $token = $enseignant->createToken($data['device_uuid'])->plainTextToken;
 
             return response()->json([
                 'activated' => true,
-                'token' => $token,
-                'device' => $device,
+                'token' => $session['token'],
+                'device' => $session['device'],
             ], 201);
         }
 
-        $activationRequest = DeviceActivationRequest::updateOrCreate(
-            ['enseignant_id' => $enseignant->id, 'device_uuid' => $data['device_uuid'], 'fulfilled_at' => null, 'rejected_at' => null],
-            [
-                'device_type' => $data['device_type'] ?? 'mobile',
-                'fcm_token' => $data['fcm_token'] ?? null,
-                'requested_at' => now(),
-            ]
-        );
+        $activationRequest = DeviceActivationRequest::query()
+            ->where('enseignant_id', $enseignant->id)
+            ->where('device_uuid', $data['device_uuid'])
+            ->latest('requested_at')
+            ->first();
 
-        // Uniquement sur une demande réellement nouvelle : une requête déjà en
-        // attente (retry/poll côté app) ne doit pas re-générer un OTP ni
-        // spammer les admins d'une notification de validation à chaque appel.
-        if ($activationRequest->wasRecentlyCreated) {
+        if (
+            $activationRequest?->fulfilled_at
+            && ! $activationRequest->rejected_at
+            && ! $activationRequest->completed_at
+        ) {
+            $session = $this->createTeacherDeviceSession(
+                $enseignant,
+                $data['device_uuid'],
+                $data['device_type'] ?? 'mobile',
+            );
+            $activationRequest->update(['completed_at' => now()]);
+
+            return response()->json([
+                'activated' => true,
+                'token' => $session['token'],
+                'device' => $session['device'],
+            ], 201);
+        }
+
+        if (
+            ! $activationRequest
+            || $activationRequest->rejected_at
+            || $activationRequest->completed_at
+        ) {
+            $activationRequest = DeviceActivationRequest::create([
+                'enseignant_id' => $enseignant->id,
+                'device_uuid' => $data['device_uuid'],
+                'device_type' => $data['device_type'] ?? 'mobile',
+                'requested_at' => now(),
+            ]);
             $this->notifyAdminsOfActivationRequest($activationRequest, $enseignant);
         }
 
@@ -98,39 +102,86 @@ class DeviceController extends Controller
         ], 202);
     }
 
-    /**
-     * Génère l'OTP dès la demande (plutôt qu'à la validation admin) et notifie
-     * les admins pour approbation (§otp-approval — notification de type
-     * "activité suspecte" avec Valider/Refuser). Le code en clair n'est jamais
-     * "activité suspecte" avec Valider/Refuser). Le code est conservé avec
-     * son expiration pour rester visible dans l'application d'administration
-     * jusqu'à sa validation ou son utilisation.
-     */
-    private function notifyAdminsOfActivationRequest(DeviceActivationRequest $activationRequest, Enseignant $enseignant): void
+    public function completeApprovedActivation(Request $request, DeviceActivationRequest $activationRequest): JsonResponse
     {
-        $code = (string) random_int(100000, 999999);
-
-        $otp = Otp::create([
-            'teacher_id' => $enseignant->id,
-            'code' => $code,
-            'expires_at' => now()->addMinutes(15),
+        $data = $request->validate([
+            'tel' => ['required', 'string'],
+            'password' => ['required', 'string'],
+            'device_uuid' => ['required', 'string'],
+            'device_type' => ['sometimes', 'in:mobile'],
         ]);
 
-        $activationRequest->update(['otp_id' => $otp->id]);
+        $enseignant = Enseignant::where('tel', $data['tel'])->first();
+        if (! $enseignant || ! $enseignant->password || ! Hash::check($data['password'], $enseignant->password)) {
+            throw ValidationException::withMessages([
+                'tel' => ['Identifiants invalides.'],
+            ]);
+        }
 
+        abort_unless(
+            $activationRequest->enseignant_id === $enseignant->id
+                && $activationRequest->device_uuid === $data['device_uuid'],
+            403,
+            'Cette demande ne correspond pas à cet appareil.',
+        );
+        abort_if($activationRequest->rejected_at, 403, 'La demande d’activation a été refusée.');
+        abort_if($activationRequest->completed_at, 409, 'Cette demande a déjà été utilisée.');
+
+        if (! $activationRequest->fulfilled_at) {
+            return response()->json(['activated' => false], 202);
+        }
+
+        $session = $this->createTeacherDeviceSession(
+            $enseignant,
+            $data['device_uuid'],
+            $data['device_type'] ?? 'mobile',
+        );
+        $activationRequest->update(['completed_at' => now()]);
+
+        return response()->json([
+            'activated' => true,
+            'token' => $session['token'],
+            'device' => $session['device'],
+        ], 201);
+    }
+
+    private function notifyAdminsOfActivationRequest(DeviceActivationRequest $activationRequest, Enseignant $enseignant): void
+    {
         $this->push->sendToAdmins(
-            "Demande d'activation",
-            "{$enseignant->nom} demande un code d'accès — code : {$code}",
+            'Demande d’activation',
+            "{$enseignant->nom} demande l’activation d’un téléphone.",
             [
-                'type' => 'otp_approval',
+                'type' => 'activation_request',
                 'activation_request_id' => (string) $activationRequest->id,
                 'enseignant_nom' => $enseignant->nom,
-                'code' => $code,
             ]
         );
     }
 
-    /** GET /api/devices — vue des activations OTP / devices (§4.2 — administration des appareils). */
+    /** @return array{device: Device, token: string} */
+    private function createTeacherDeviceSession(Enseignant $enseignant, string $deviceUuid, string $deviceType): array
+    {
+        $this->ensureTeacherDeviceAvailable($enseignant, $deviceUuid);
+
+        $device = Device::updateOrCreate(
+            ['device_uuid' => $deviceUuid],
+            [
+                'teacher_id' => $enseignant->id,
+                'device_type' => $deviceType,
+                'activated_at' => now(),
+                'otp_id' => null,
+                'revoked_at' => null,
+            ]
+        );
+        $enseignant->tokens()->where('name', $deviceUuid)->delete();
+
+        return [
+            'device' => $device,
+            'token' => $enseignant->createToken($deviceUuid)->plainTextToken,
+        ];
+    }
+
+    /** GET /api/devices — vue des appareils (§4.2 — administration des appareils). */
     public function index(Request $request)
     {
         $devices = Device::with('teacher')
@@ -142,55 +193,6 @@ class DeviceController extends Controller
             ->paginate(30);
 
         return response()->json($devices);
-    }
-
-    /** POST /api/devices/activate — active un device par OTP (§4.3). */
-    public function activate(Request $request)
-    {
-        $data = $request->validate([
-            'code' => ['required', 'digits:6'],
-            'device_uuid' => ['required', 'string'],
-            'device_type' => ['sometimes', 'in:mobile,kiosk_facial'],
-        ]);
-
-        $otp = Otp::where('code', $data['code'])
-            ->whereNull('used_at')
-            ->where('expires_at', '>', now())
-            ->first();
-
-        if (! $otp) {
-            throw ValidationException::withMessages([
-                'code' => ['Code OTP invalide ou expiré.'],
-            ]);
-        }
-
-        $this->ensureTeacherDeviceAvailable($otp->teacher, $data['device_uuid']);
-
-        $otp->update(['used_at' => now(), 'code' => null]);
-
-        // updateOrCreate : ce device_uuid (généré une fois côté app et
-        // persisté sur le téléphone) peut déjà exister en base si cet
-        // appareil a été révoqué puis se ré-active avec un nouvel OTP — sans
-        // ça, l'unicité de device_uuid fait planter l'activation avec une
-        // erreur SQL brute au lieu de la réactiver proprement.
-        $device = Device::updateOrCreate(
-            ['device_uuid' => $data['device_uuid']],
-            [
-                'teacher_id' => $otp->teacher_id,
-                'device_type' => $data['device_type'] ?? 'mobile',
-                'activated_at' => now(),
-                'otp_id' => $otp->id,
-                'revoked_at' => null,
-            ]
-        );
-        $otp->teacher->tokens()->where('name', $data['device_uuid'])->delete();
-
-        $token = $otp->teacher->createToken($data['device_uuid'])->plainTextToken;
-
-        return response()->json([
-            'token' => $token,
-            'device' => $device,
-        ], 201);
     }
 
     /** Un enseignant ne peut conserver qu'un seul téléphone actif à la fois. */
