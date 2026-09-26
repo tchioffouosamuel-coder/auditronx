@@ -8,7 +8,6 @@ use App\Models\Otp;
 use App\Models\TeacherNotification;
 use App\Services\PushNotificationService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 
 /**
  * Traitement, côté administration, des demandes d'activation créées par les
@@ -26,7 +25,7 @@ class DeviceActivationRequestController extends Controller
     /** GET /api/devices/activation-requests?statut=en_attente|toutes */
     public function index(Request $request)
     {
-        $query = DeviceActivationRequest::with('enseignant')->orderByDesc('requested_at');
+        $query = DeviceActivationRequest::with(['enseignant', 'otp'])->orderByDesc('requested_at');
 
         if ($request->query('statut', 'en_attente') === 'en_attente') {
             $query->whereNull('fulfilled_at')->whereNull('rejected_at');
@@ -34,11 +33,9 @@ class DeviceActivationRequestController extends Controller
 
         $requests = $query->paginate(30);
 
-        // Le code en clair n'est jamais persisté (cf. Otp::code_hash) : relu
-        // depuis le cache posé à la demande, pour un affichage de secours côté
-        // backoffice si la notification push n'a pas été reçue/activée.
         $requests->getCollection()->transform(function (DeviceActivationRequest $r) {
-            $r->code = $r->otp_id ? Cache::get("otp-plain:{$r->otp_id}") : null;
+            $r->code = $r->otp?->isValid() ? $r->otp->code : null;
+            $r->unsetRelation('otp');
 
             return $r;
         });
@@ -51,7 +48,8 @@ class DeviceActivationRequestController extends Controller
     {
         abort_if($activationRequest->fulfilled_at || $activationRequest->rejected_at, 409, 'Demande déjà traitée.');
 
-        $code = $activationRequest->otp_id ? Cache::get("otp-plain:{$activationRequest->otp_id}") : null;
+        $otp = $activationRequest->otp;
+        $code = $otp?->isValid() ? $otp->code : null;
         abort_unless($code, 410, "Code expiré, l'enseignant doit refaire une demande.");
 
         // sendToTeacher() (via Device.fcm_token) ne peut pas servir ici :
@@ -70,11 +68,10 @@ class DeviceActivationRequestController extends Controller
         TeacherNotification::create([
             'enseignant_id' => $activationRequest->enseignant_id,
             'type' => 'otp_delivery',
-            'message' => "Code d'activation envoyé : {$code}",
+            'message' => "Un code d'activation a été envoyé par notification push.",
         ]);
 
         $activationRequest->update(['fulfilled_at' => now()]);
-        Cache::forget("otp-plain:{$activationRequest->otp_id}");
 
         return response()->json($activationRequest->fresh());
     }
@@ -85,8 +82,7 @@ class DeviceActivationRequestController extends Controller
         abort_if($activationRequest->fulfilled_at || $activationRequest->rejected_at, 409, 'Demande déjà traitée.');
 
         if ($activationRequest->otp_id) {
-            Otp::whereKey($activationRequest->otp_id)->update(['used_at' => now()]);
-            Cache::forget("otp-plain:{$activationRequest->otp_id}");
+            Otp::whereKey($activationRequest->otp_id)->update(['used_at' => now(), 'code' => null]);
         }
 
         $activationRequest->update(['rejected_at' => now()]);

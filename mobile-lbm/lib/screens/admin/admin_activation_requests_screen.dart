@@ -19,10 +19,12 @@ class AdminActivationRequestsScreen extends StatefulWidget {
   const AdminActivationRequestsScreen({super.key});
 
   @override
-  State<AdminActivationRequestsScreen> createState() => _AdminActivationRequestsScreenState();
+  State<AdminActivationRequestsScreen> createState() =>
+      _AdminActivationRequestsScreenState();
 }
 
-class _AdminActivationRequestsScreenState extends State<AdminActivationRequestsScreen> {
+class _AdminActivationRequestsScreenState
+    extends State<AdminActivationRequestsScreen> {
   late Future<List<dynamic>> _future;
   String? _error;
 
@@ -35,7 +37,12 @@ class _AdminActivationRequestsScreenState extends State<AdminActivationRequestsS
   Future<List<dynamic>> _load() async {
     final data = await OfflineCache.instance.readThrough(
       _cacheKey,
-      () => AdminApiClient.instance.get('/devices/activation-requests', query: {'statut': 'en_attente'}),
+      () async => {
+        'data': await AdminApiClient.instance.getAllPages(
+          '/devices/activation-requests',
+          query: {'statut': 'en_attente'},
+        ),
+      },
     );
     return (data as Map<String, dynamic>)['data'] as List<dynamic>;
   }
@@ -50,7 +57,8 @@ class _AdminActivationRequestsScreenState extends State<AdminActivationRequestsS
   /// file d'attente hors-ligne, l'admin ne doit pas la revoir comme "en
   /// attente" après avoir déjà tranché.
   Future<void> _removeFromCache(int requestId) async {
-    final requests = List<dynamic>.from(await _future)..removeWhere((r) => r['id'] == requestId);
+    final requests = List<dynamic>.from(await _future)
+      ..removeWhere((r) => r['id'] == requestId);
     await OfflineCache.instance.overwrite(_cacheKey, {'data': requests});
     setState(() => _future = Future.value(requests));
   }
@@ -60,7 +68,10 @@ class _AdminActivationRequestsScreenState extends State<AdminActivationRequestsS
     await _removeFromCache(request['id'] as int);
 
     try {
-      await AdminApiClient.instance.post('/devices/activation-requests/${request['id']}/approve', {});
+      await AdminApiClient.instance.post(
+        '/devices/activation-requests/${request['id']}/approve',
+        {},
+      );
     } on ApiException catch (e) {
       if (e.statusCode != 0) {
         setState(() => _error = e.message);
@@ -81,10 +92,18 @@ class _AdminActivationRequestsScreenState extends State<AdminActivationRequestsS
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Refuser la demande ?'),
-        content: Text("${request['enseignant']?['nom']} ne recevra pas de code d'activation."),
+        content: Text(
+          "${request['enseignant']?['nom']} ne recevra pas de code d'activation.",
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Refuser')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Refuser'),
+          ),
         ],
       ),
     );
@@ -93,7 +112,10 @@ class _AdminActivationRequestsScreenState extends State<AdminActivationRequestsS
     await _removeFromCache(request['id'] as int);
 
     try {
-      await AdminApiClient.instance.post('/devices/activation-requests/${request['id']}/reject', {});
+      await AdminApiClient.instance.post(
+        '/devices/activation-requests/${request['id']}/reject',
+        {},
+      );
     } on ApiException catch (e) {
       if (e.statusCode != 0) rethrow;
       await PendingActionsQueue.instance.enqueue(
@@ -126,7 +148,11 @@ class _AdminActivationRequestsScreenState extends State<AdminActivationRequestsS
                 Text(_error!, style: const TextStyle(color: Colors.red)),
                 const SizedBox(height: 12),
               ],
-              if (requests.isEmpty) const Padding(padding: EdgeInsets.all(8), child: Text('Aucune demande en attente.')),
+              if (requests.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: Text('Aucune demande en attente.'),
+                ),
               ...requests.map((r) {
                 final request = r as Map<String, dynamic>;
                 return Card(
@@ -136,24 +162,41 @@ class _AdminActivationRequestsScreenState extends State<AdminActivationRequestsS
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(request['enseignant']?['nom'] ?? '—', style: const TextStyle(fontWeight: FontWeight.w700)),
-                        Text(request['enseignant']?['tel'] ?? '', style: const TextStyle(color: AuditronColors.ink500)),
+                        Text(
+                          request['enseignant']?['nom'] ?? '—',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        Text(
+                          request['enseignant']?['tel'] ?? '',
+                          style: const TextStyle(color: AuditronColors.ink500),
+                        ),
                         if (request['code'] != null) ...[
                           const SizedBox(height: 8),
                           Text(
                             request['code'],
-                            style: const TextStyle(fontFamily: 'monospace', fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 4),
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 4,
+                            ),
                           ),
                         ],
                         const SizedBox(height: 12),
                         Row(
                           children: [
                             Expanded(
-                              child: FilledButton(onPressed: () => _approve(request), child: const Text('Valider')),
+                              child: FilledButton(
+                                onPressed: () => _approve(request),
+                                child: const Text('Valider'),
+                              ),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
-                              child: OutlinedButton(onPressed: () => _reject(request), child: const Text('Refuser')),
+                              child: OutlinedButton(
+                                onPressed: () => _reject(request),
+                                child: const Text('Refuser'),
+                              ),
                             ),
                           ],
                         ),

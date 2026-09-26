@@ -20,10 +20,12 @@ class AdminActivationRequestsScreen extends StatefulWidget {
   const AdminActivationRequestsScreen({super.key});
 
   @override
-  State<AdminActivationRequestsScreen> createState() => _AdminActivationRequestsScreenState();
+  State<AdminActivationRequestsScreen> createState() =>
+      _AdminActivationRequestsScreenState();
 }
 
-class _AdminActivationRequestsScreenState extends State<AdminActivationRequestsScreen> {
+class _AdminActivationRequestsScreenState
+    extends State<AdminActivationRequestsScreen> {
   late Future<List<dynamic>> _future;
   String? _error;
 
@@ -42,7 +44,12 @@ class _AdminActivationRequestsScreenState extends State<AdminActivationRequestsS
   Future<List<dynamic>> _load() async {
     final data = await OfflineCache.instance.readThrough(
       _cacheKeyFor(_statut),
-      () => AdminApiClient.instance.get('/devices/activation-requests', query: {'statut': _statut}),
+      () async => {
+        'data': await AdminApiClient.instance.getAllPages(
+          '/devices/activation-requests',
+          query: {'statut': _statut},
+        ),
+      },
     );
     return (data as Map<String, dynamic>)['data'] as List<dynamic>;
   }
@@ -66,8 +73,11 @@ class _AdminActivationRequestsScreenState extends State<AdminActivationRequestsS
   /// file d'attente hors-ligne, l'admin ne doit pas la revoir comme "en
   /// attente" après avoir déjà tranché.
   Future<void> _removeFromCache(int requestId) async {
-    final requests = List<dynamic>.from(await _future)..removeWhere((r) => r['id'] == requestId);
-    await OfflineCache.instance.overwrite(_cacheKeyFor(_statut), {'data': requests});
+    final requests = List<dynamic>.from(await _future)
+      ..removeWhere((r) => r['id'] == requestId);
+    await OfflineCache.instance.overwrite(_cacheKeyFor(_statut), {
+      'data': requests,
+    });
     setState(() => _future = Future.value(requests));
   }
 
@@ -76,7 +86,10 @@ class _AdminActivationRequestsScreenState extends State<AdminActivationRequestsS
     await _removeFromCache(request['id'] as int);
 
     try {
-      await AdminApiClient.instance.post('/devices/activation-requests/${request['id']}/approve', {});
+      await AdminApiClient.instance.post(
+        '/devices/activation-requests/${request['id']}/approve',
+        {},
+      );
     } on ApiException catch (e) {
       if (e.statusCode != 0) {
         setState(() => _error = e.message);
@@ -97,10 +110,18 @@ class _AdminActivationRequestsScreenState extends State<AdminActivationRequestsS
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Refuser la demande ?'),
-        content: Text("${request['enseignant']?['nom']} ne recevra pas de code d'activation."),
+        content: Text(
+          "${request['enseignant']?['nom']} ne recevra pas de code d'activation.",
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Annuler')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Refuser')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Refuser'),
+          ),
         ],
       ),
     );
@@ -109,7 +130,10 @@ class _AdminActivationRequestsScreenState extends State<AdminActivationRequestsS
     await _removeFromCache(request['id'] as int);
 
     try {
-      await AdminApiClient.instance.post('/devices/activation-requests/${request['id']}/reject', {});
+      await AdminApiClient.instance.post(
+        '/devices/activation-requests/${request['id']}/reject',
+        {},
+      );
     } on ApiException catch (e) {
       if (e.statusCode != 0) rethrow;
       await PendingActionsQueue.instance.enqueue(
@@ -160,13 +184,18 @@ class _AdminActivationRequestsScreenState extends State<AdminActivationRequestsS
                     if (requests.isEmpty)
                       Padding(
                         padding: const EdgeInsets.all(8),
-                        child: Text(isPending ? 'Aucune demande en attente.' : 'Aucune demande récente.'),
+                        child: Text(
+                          isPending
+                              ? 'Aucune demande en attente.'
+                              : 'Aucune demande récente.',
+                        ),
                       ),
                     ...requests.map((r) {
                       final request = r as Map<String, dynamic>;
                       final fulfilledAt = request['fulfilled_at'] as String?;
                       final rejectedAt = request['rejected_at'] as String?;
-                      final resolved = fulfilledAt != null || rejectedAt != null;
+                      final resolved =
+                          fulfilledAt != null || rejectedAt != null;
                       return Card(
                         margin: const EdgeInsets.only(bottom: 8),
                         child: Padding(
@@ -177,27 +206,51 @@ class _AdminActivationRequestsScreenState extends State<AdminActivationRequestsS
                               Row(
                                 children: [
                                   Expanded(
-                                    child: Text(request['enseignant']?['nom'] ?? '—', style: const TextStyle(fontWeight: FontWeight.w700)),
+                                    child: Text(
+                                      request['enseignant']?['nom'] ?? '—',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
                                   ),
                                   if (!isPending && resolved)
                                     Chip(
-                                      label: Text(fulfilledAt != null ? 'Validée' : 'Refusée'),
-                                      backgroundColor: fulfilledAt != null ? Colors.green.shade100 : Colors.red.shade100,
+                                      label: Text(
+                                        fulfilledAt != null
+                                            ? 'Validée'
+                                            : 'Refusée',
+                                      ),
+                                      backgroundColor: fulfilledAt != null
+                                          ? Colors.green.shade100
+                                          : Colors.red.shade100,
                                       visualDensity: VisualDensity.compact,
                                     ),
                                 ],
                               ),
-                              Text(request['enseignant']?['tel'] ?? '', style: const TextStyle(color: AuditronColors.ink500)),
+                              Text(
+                                request['enseignant']?['tel'] ?? '',
+                                style: const TextStyle(
+                                  color: AuditronColors.ink500,
+                                ),
+                              ),
                               const SizedBox(height: 4),
                               Text(
                                 'Demandée le ${formatDateTime(request['requested_at'] as String?)}',
-                                style: const TextStyle(color: AuditronColors.ink500, fontSize: 12),
+                                style: const TextStyle(
+                                  color: AuditronColors.ink500,
+                                  fontSize: 12,
+                                ),
                               ),
                               if (request['code'] != null) ...[
                                 const SizedBox(height: 8),
                                 Text(
                                   request['code'],
-                                  style: const TextStyle(fontFamily: 'monospace', fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 4),
+                                  style: const TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 4,
+                                  ),
                                 ),
                               ],
                               if (!resolved) ...[
@@ -205,11 +258,17 @@ class _AdminActivationRequestsScreenState extends State<AdminActivationRequestsS
                                 Row(
                                   children: [
                                     Expanded(
-                                      child: FilledButton(onPressed: () => _approve(request), child: const Text('Valider')),
+                                      child: FilledButton(
+                                        onPressed: () => _approve(request),
+                                        child: const Text('Valider'),
+                                      ),
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
-                                      child: OutlinedButton(onPressed: () => _reject(request), child: const Text('Refuser')),
+                                      child: OutlinedButton(
+                                        onPressed: () => _reject(request),
+                                        child: const Text('Refuser'),
+                                      ),
                                     ),
                                   ],
                                 ),

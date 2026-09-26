@@ -55,12 +55,26 @@ function JournalTab() {
 
   return (
     <div>
-      <input
-        type="date"
-        value={date}
-        onChange={(e) => setDate(e.target.value)}
-        className="mb-3 rounded-md border border-ink-100 px-3 py-1.5 text-sm"
-      />
+      <div className="mb-3 flex items-center gap-3">
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="rounded-md border border-ink-100 px-3 py-1.5 text-sm"
+        />
+        <button
+          type="button"
+          onClick={() =>
+            downloadFile(
+              `/assiduite/journal/pdf?date=${date}`,
+              `journal-presences-${date}.pdf`,
+            )
+          }
+          className="rounded-md bg-brand-700 px-3 py-1.5 text-sm text-white hover:bg-brand-800"
+        >
+          Exporter le journal en PDF
+        </button>
+      </div>
       <DataTable
         loading={loading}
         rows={presences}

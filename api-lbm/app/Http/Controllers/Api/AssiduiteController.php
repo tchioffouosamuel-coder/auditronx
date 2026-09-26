@@ -7,6 +7,7 @@ use App\Http\Controllers\Traits\AccessibleEnseignants;
 use App\Models\Enseignant;
 use App\Models\Presence;
 use Carbon\Carbon;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 
 /** Assiduité & rapports (§4.2) — statistiques par section, journal, personnel inactif. */
@@ -57,17 +58,32 @@ class AssiduiteController extends Controller
     {
         $date = Carbon::parse($request->query('date', now()));
 
+        return response()->json($this->presencesDuJour($request, $date));
+    }
+
+    /** GET /api/assiduite/journal/pdf?date=&section= — exporte le journal visible en PDF. */
+    public function journalPdf(Request $request)
+    {
+        $date = Carbon::parse($request->query('date', now()));
+        $pdf = Pdf::loadView('pdf.journal-presences', [
+            'date' => $date,
+            'presences' => $this->presencesDuJour($request, $date),
+        ]);
+
+        return $pdf->download("journal-presences-{$date->toDateString()}.pdf");
+    }
+
+    private function presencesDuJour(Request $request, Carbon $date)
+    {
         $enseignants = $this->enseignantsAccessibles($request->user())
             ->when($request->query('section'), fn($q, $v) => $q->whereRaw('LOWER(section) = LOWER(?)', [$v]))
             ->pluck('id');
 
-        $presences = Presence::with('enseignant')
+        return Presence::with('enseignant')
             ->whereDate('date', $date->toDateString())
             ->whereIn('enseignant_id', $enseignants)
             ->orderBy('heure_arrivee')
             ->get();
-
-        return response()->json($presences);
     }
 
     /** GET /api/assiduite/personnel-inactif?jours=N — enseignants sans pointage depuis N jours. */

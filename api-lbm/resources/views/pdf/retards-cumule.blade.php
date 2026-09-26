@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Bilan retards</title>
+    <title>Bilan mensuel d'assiduité et de ponctualité</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -79,6 +79,11 @@
             background: #d4edda;
             font-weight: bold
         }
+
+        .assiduite-col {
+            background: #e2e3e5;
+            font-weight: bold
+        }
     </style>
 </head>
 
@@ -96,8 +101,8 @@
                 Fatherland<br>G.T.H.S MEIGANGA</td>
         </tr>
     </table>
-    <h1>Bilan cumulé des retards, anticipations et
-        absences<br>{{ \Carbon\Carbon::createFromFormat('m', $mois)->locale('fr')->translatedFormat('F') }}
+    <h1>Bilan mensuel d'assiduité et de
+        ponctualité<br>{{ \Carbon\Carbon::createFromFormat('m', $mois)->locale('fr')->translatedFormat('F') }}
         {{ $annee }}</h1>
     @if (count($data) === 0)
         <div style="text-align:center;padding:20px;border:1px solid #000;margin:20px 0"><strong>Aucune donnée
@@ -105,7 +110,8 @@
     @else
         <div class="summary"><strong>RÉSUMÉ GLOBAL:</strong> {{ count($data) }} enseignant(s) concerné(s) | Total
             périodes (présence): {{ number_format(array_sum(array_column($data, 'periodes_presence')), 1) }} | Total
-            périodes (absence): {{ number_format(array_sum(array_column($data, 'periodes_absence')), 1) }} | <strong>TOTAL
+            périodes (absence): {{ number_format(array_sum(array_column($data, 'periodes_absence')), 1) }} |
+            <strong>TOTAL
                 GÉNÉRAL: {{ number_format(array_sum(array_column($data, 'periodes_totales')), 1) }} périodes</strong>
         </div>
         <table>
@@ -120,6 +126,8 @@
                     <th colspan="2" class="anticip-col">ANTICIPATIONS</th>
                     <th colspan="2" class="absence-col">ABSENCES</th>
                     <th rowspan="2" class="total-col">TOTAL<br>Périodes</th>
+                    <th rowspan="2" class="total-col">TOTAL<br>Périodes</th>
+                    <th rowspan="2" class="assiduite-col">Taux<br>d'assiduité</th>
                 </tr>
                 <tr>
                     <th class="retard-col">Jours</th>
@@ -141,13 +149,16 @@
                         <td class="text-left">{{ $ens['specialite'] ?? '-' }}</td>
                         <td class="retard-col">{{ $ens['nb_jours_retard'] }}</td>
                         <td class="retard-col">{{ $ens['total_retard_minutes'] }}</td>
-                        <td class="retard-col bold">{{ number_format(max(0, ($ens['total_retard_minutes'] - 10) / 40), 1) }}
+                        <td class="retard-col bold">
+                            {{ number_format(max(0, ($ens['total_retard_minutes'] - 10) / 40), 1) }}
                         </td>
                         <td class="anticip-col">{{ $ens['nb_jours_anticipation'] }}</td>
                         <td class="anticip-col">{{ $ens['total_anticipation_minutes'] }}</td>
                         <td class="absence-col">{{ $ens['nb_jours_absence'] }}</td>
                         <td class="absence-col bold">{{ $ens['periodes_absence'] }}</td>
                         <td class="total-col">{{ $ens['periodes_totales'] }}</td>
+                        <td class="total-col">{{ $ens['periodes_totales'] }}</td>
+                        <td class="assiduite-col">{{ number_format($ens['taux_assiduite'], 1) }}%</td>
                     </tr>
                 @endforeach
             </tbody>
@@ -164,7 +175,11 @@
                     <td class="absence-col">{{ array_sum(array_column($data, 'nb_jours_absence')) }}</td>
                     <td class="absence-col">{{ number_format(array_sum(array_column($data, 'periodes_absence')), 1) }}
                     </td>
-                    <td class="total-col">{{ number_format(array_sum(array_column($data, 'periodes_totales')), 1) }}</td>
+                    <td class="total-col">{{ number_format(array_sum(array_column($data, 'periodes_totales')), 1) }}
+                    </td>
+                    <td class="total-col">{{ number_format(array_sum(array_column($data, 'periodes_totales')), 1) }}
+                    </td>
+                    <td class="assiduite-col"></td>
                 </tr>
             </tfoot>
         </table>
@@ -173,8 +188,8 @@
             &nbsp; <span style="background:#cfe2ff;padding:2px 4px;border:1px solid #000">ANTICIPATIONS</span> = Départ
             anticipé &nbsp; <span style="background:#f8d7da;padding:2px 4px;border:1px solid #000">ABSENCES</span> =
             Absence complète &nbsp; <strong>Pér.</strong> = Périodes de 40 min à rattraper</div>
-        <p style="font-size:7px"><strong>NOTE:</strong> Classement par ordre décroissant du total de périodes à
-            rattraper. Les jours signalés ne sont pas comptabilisés.</p>
+        <p style="font-size:7px"><strong>NOTE:</strong> Classement par ordre alphabétique des noms. Les jours signalés
+            sont considérés comme valides pour le taux d'assiduité.</p>
     @endif
     <div style="margin-top:10px;text-align:right;font-size:8px">Fait à Meiganga, le
         {{ \Carbon\Carbon::now()->locale('fr')->translatedFormat('d F Y') }}<br><br><br><br><strong>Le

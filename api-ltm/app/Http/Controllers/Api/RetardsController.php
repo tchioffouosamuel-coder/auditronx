@@ -43,9 +43,11 @@ class RetardsController extends Controller
     public function bilanCumule(Request $request, RetardCalculator $retards)
     {
         [$debut, $fin, $enseignants] = $this->periodeEtEnseignants($request);
+        $enseignants = $enseignants->reject(fn(Enseignant $enseignant) => mb_strtolower(trim((string) $enseignant->section)) === 'administration');
 
         $data = $enseignants->map(fn(Enseignant $enseignant) => $this->ligneBilanCumule($enseignant, $debut, $fin, $retards))
-            ->sortByDesc('periodes_totales')->values()->all();
+            ->sortBy(fn(array $ligne) => mb_strtolower($ligne['nom']), SORT_NATURAL)
+            ->values()->all();
 
         $pdf = Pdf::loadView('pdf.retards-cumule', [
             'data' => $data,
@@ -159,11 +161,14 @@ class RetardsController extends Controller
         $presences = $enseignant->presences()->whereBetween('date', [$debut->toDateString(), $fin->toDateString()])->get()->keyBy(fn($presence) => $presence->date->toDateString());
         $signalements = $enseignant->signalements()->whereDate('date', '<=', $fin->toDateString())->get();
         $result = ['nom' => $enseignant->nom, 'tel' => $enseignant->tel, 'matricule' => $enseignant->matricule, 'specialite' => $enseignant->section, 'nb_jours_retard' => 0, 'total_retard_minutes' => 0, 'nb_jours_anticipation' => 0, 'total_anticipation_minutes' => 0, 'nb_jours_absence' => 0, 'periodes_absence' => 0, 'periodes_presence' => 0, 'periodes_totales' => 0];
+        $joursAttendus = $joursValides = 0;
         for ($date = $debut->copy(); $date->lte($fin) && !$date->isFuture(); $date->addDay()) {
             $cours = $emplois->where('jour', $date->isoWeekday())->values();
             if ($cours->isEmpty()) continue;
             $presence = $presences->get($date->toDateString());
             $signale = $signalements->first(fn($item) => $date->between($item->date, $item->date->copy()->addDays(max(0, $item->duree_jours - 1)))) !== null;
+            $joursAttendus++;
+            if ($signale || $presence?->heure_arrivee || $presence?->heure_depart) $joursValides++;
             $minutesPrevues = $cours->sum(fn($item) => Carbon::parse($item->heure_debut)->diffInMinutes(Carbon::parse($item->heure_fin)));
             $periodes = max(1, (int) ceil($minutesPrevues / 40));
             $dernierCours = $cours->sortBy('heure_fin')->last();
@@ -187,6 +192,7 @@ class RetardsController extends Controller
             }
         }
         $result['periodes_totales'] = $result['periodes_presence'] + $result['periodes_absence'];
+        $result['taux_assiduite'] = $joursAttendus > 0 ? round($joursValides / $joursAttendus * 100, 1) : 0;
         return $result;
     }
 

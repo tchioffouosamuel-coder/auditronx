@@ -9,7 +9,6 @@ use App\Models\Enseignant;
 use App\Models\Otp;
 use App\Services\PushNotificationService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
@@ -103,9 +102,9 @@ class DeviceController extends Controller
      * Génère l'OTP dès la demande (plutôt qu'à la validation admin) et notifie
      * les admins pour approbation (§otp-approval — notification de type
      * "activité suspecte" avec Valider/Refuser). Le code en clair n'est jamais
-     * persisté (même principe que Otp::code_hash) : il est mis en cache le
-     * temps de la validation, lu par DeviceActivationRequestController::approve()
-     * pour être poussé à l'enseignant une fois l'admin d'accord.
+     * "activité suspecte" avec Valider/Refuser). Le code est conservé avec
+     * son expiration pour rester visible dans l'application d'administration
+     * jusqu'à sa validation ou son utilisation.
      */
     private function notifyAdminsOfActivationRequest(DeviceActivationRequest $activationRequest, Enseignant $enseignant): void
     {
@@ -113,11 +112,9 @@ class DeviceController extends Controller
 
         $otp = Otp::create([
             'teacher_id' => $enseignant->id,
-            'code_hash' => Hash::make($code),
+            'code' => $code,
             'expires_at' => now()->addMinutes(15),
         ]);
-
-        Cache::put("otp-plain:{$otp->id}", $code, now()->addMinutes(15));
 
         $activationRequest->update(['otp_id' => $otp->id]);
 
@@ -151,15 +148,15 @@ class DeviceController extends Controller
     public function activate(Request $request)
     {
         $data = $request->validate([
-            'code' => ['required', 'string'],
+            'code' => ['required', 'digits:6'],
             'device_uuid' => ['required', 'string'],
             'device_type' => ['sometimes', 'in:mobile,kiosk_facial'],
         ]);
 
-        $otp = Otp::whereNull('used_at')
+        $otp = Otp::where('code', $data['code'])
+            ->whereNull('used_at')
             ->where('expires_at', '>', now())
-            ->get()
-            ->first(fn(Otp $candidate) => Hash::check($data['code'], $candidate->code_hash));
+            ->first();
 
         if (! $otp) {
             throw ValidationException::withMessages([
@@ -169,7 +166,7 @@ class DeviceController extends Controller
 
         $this->ensureTeacherDeviceAvailable($otp->teacher, $data['device_uuid']);
 
-        $otp->update(['used_at' => now()]);
+        $otp->update(['used_at' => now(), 'code' => null]);
 
         // updateOrCreate : ce device_uuid (généré une fois côté app et
         // persisté sur le téléphone) peut déjà exister en base si cet

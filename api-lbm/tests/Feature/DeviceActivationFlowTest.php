@@ -163,6 +163,7 @@ class DeviceActivationFlowTest extends TestCase
         $requestId = $pending->json('data.0.id');
         $code = $pending->json('data.0.code');
         $this->assertNotEmpty($code);
+        $this->assertDatabaseHas('otps', ['code' => $code]);
 
         $this->postJson("/api/devices/activation-requests/{$requestId}/approve")->assertOk();
 
@@ -229,7 +230,7 @@ class DeviceActivationFlowTest extends TestCase
         $code = '123456';
         $otp = Otp::create([
             'teacher_id' => $enseignant->id,
-            'code_hash' => Hash::make($code),
+            'code' => $code,
             'expires_at' => now()->addMinutes(15),
         ]);
 
@@ -261,7 +262,7 @@ class DeviceActivationFlowTest extends TestCase
         ]);
         $otp = Otp::create([
             'teacher_id' => $enseignant->id,
-            'code_hash' => Hash::make('654321'),
+            'code' => '654321',
             'expires_at' => now()->addMinutes(15),
         ]);
 

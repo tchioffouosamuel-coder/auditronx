@@ -109,6 +109,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Assiduité & rapports (§4.2)
     Route::get('/assiduite/stats', [AssiduiteController::class, 'stats']);
     Route::get('/assiduite/journal', [AssiduiteController::class, 'journal']);
+    Route::get('/assiduite/journal/pdf', [AssiduiteController::class, 'journalPdf']);
     Route::get('/assiduite/personnel-inactif', [AssiduiteController::class, 'personnelInactif']);
     Route::get('/statistiques/export-zip', [StatistiquesController::class, 'exportZip']);
 

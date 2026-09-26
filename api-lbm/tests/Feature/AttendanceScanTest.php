@@ -10,7 +10,6 @@ use App\Models\Presence;
 use App\Models\QrPoint;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class AttendanceScanTest extends TestCase
@@ -22,7 +21,7 @@ class AttendanceScanTest extends TestCase
         $enseignant = Enseignant::factory()->create();
         $otp = Otp::create([
             'teacher_id' => $enseignant->id,
-            'code_hash' => Hash::make('123456'),
+            'code' => '123456',
             'expires_at' => now()->addMinutes(15),
         ]);
 

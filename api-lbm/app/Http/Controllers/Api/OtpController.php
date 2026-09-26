@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Enseignant;
 use App\Models\Otp;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 
 class OtpController extends Controller
 {
@@ -23,13 +22,12 @@ class OtpController extends Controller
 
         $otp = Otp::create([
             'teacher_id' => $enseignant->id,
-            'code_hash' => Hash::make($code),
+            'code' => $code,
             'expires_at' => now()->addMinutes(15),
         ]);
 
         return response()->json([
             'otp_id' => $otp->id,
-            // Le code n'est jamais stocké en clair : il n'est visible qu'ici, à transmettre à l'enseignant.
             'code' => $code,
             'expires_at' => $otp->expires_at,
         ], 201);
