@@ -52,6 +52,8 @@ class PdfExportsTest extends TestCase
                 $this->assertNotFalse($totalPosition);
                 $this->assertNotFalse($ratePosition);
                 $this->assertLessThan($ratePosition, $totalPosition);
+                $this->assertSame(count($viewData['data']) + 2, substr_count($html, 'class="total-col"'));
+                $this->assertSame(1, preg_match('/<th rowspan="2" class="assiduite-col">Taux<br>d.assiduité<\/th>\s*<\/tr>/', $html));
                 $this->assertStringContainsString("Bilan mensuel d'assiduité et de ponctualité", $html);
 
                 return true;

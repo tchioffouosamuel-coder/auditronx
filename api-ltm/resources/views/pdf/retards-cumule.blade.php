@@ -126,7 +126,6 @@
                     <th colspan="2" class="anticip-col">ANTICIPATIONS</th>
                     <th colspan="2" class="absence-col">ABSENCES</th>
                     <th rowspan="2" class="total-col" style="width:7%">TOTAL<br>Périodes</th>
-                    <th rowspan="2" class="total-col" style="width:7%">TOTAL<br>Périodes</th>
                     <th rowspan="2" class="assiduite-col">Taux<br>d'assiduité</th>
                 </tr>
                 <tr>
@@ -157,7 +156,6 @@
                         <td class="absence-col">{{ $ens['nb_jours_absence'] }}</td>
                         <td class="absence-col bold">{{ $ens['periodes_absence'] }}</td>
                         <td class="total-col">{{ $ens['periodes_totales'] }}</td>
-                        <td class="total-col">{{ $ens['periodes_totales'] }}</td>
                         <td class="assiduite-col">{{ number_format($ens['taux_assiduite'], 1) }}%</td>
                     </tr>
                 @endforeach
@@ -174,8 +172,6 @@
                     <td class="anticip-col">{{ array_sum(array_column($data, 'total_anticipation_minutes')) }}</td>
                     <td class="absence-col">{{ array_sum(array_column($data, 'nb_jours_absence')) }}</td>
                     <td class="absence-col">{{ number_format(array_sum(array_column($data, 'periodes_absence')), 1) }}
-                    </td>
-                    <td class="total-col">{{ number_format(array_sum(array_column($data, 'periodes_totales')), 1) }}
                     </td>
                     <td class="total-col">{{ number_format(array_sum(array_column($data, 'periodes_totales')), 1) }}
                     </td>
