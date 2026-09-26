@@ -19,24 +19,20 @@ introuvables `404`.
 
 ## Activation des devices (§4.1 revu, §4.3)
 
-Flux à deux temps : l'enseignant s'identifie d'abord par téléphone + mot de passe.
-Un enseignant `est_admin` est activé immédiatement. Sinon une demande est créée
-pour l'administration, qui génère l'OTP et le remet en personne — l'enseignant
-termine alors l'activation avec ce code.
+L'enseignant saisit son téléphone et son mot de passe. Si les identifiants sont
+valides et que l'appareil respecte les règles d'unicité, il est activé
+immédiatement et reçoit son token de session, quel que soit son rôle.
 
 | Méthode | Route | Auth | Payload | Réponse |
 |---|---|---|---|---|
-| POST | `/devices/request-activation` | non | `{ tel, password, device_uuid, device_type? }` | `201 { activated: true, token, device }` (admin) ou `202 { activated: false, activation_request_id, message }` (sinon) |
-| POST | `/devices/activate` | non | `{ code, device_uuid, device_type? }` | `201 { token, device }` |
+| POST | `/devices/request-activation` | non | `{ tel, password, device_uuid, device_type? }` | `201 { activated: true, token, device }` |
 | POST | `/devices/{device}/revoke` | oui | — | `200 { device }` |
 | POST | `/devices/provision-kiosk` | oui | `{ device_uuid, label? }` | `201 { token, device }` |
 | POST | `/otp/generate` | oui | `{ enseignant_id }` | `201 { otp_id, code, expires_at }` — génération manuelle directe (hors flux de demande) |
-| GET | `/devices/activation-requests?statut=en_attente\|toutes` | oui | — | Liste paginée des demandes, enseignant inclus |
-| POST | `/devices/activation-requests/{id}/generate-otp` | oui | — | `201 { otp_id, code, expires_at }` — marque la demande traitée |
 
-`code` (OTP) n'est jamais stocké en clair ni renvoyé après génération : à transmettre
-à l'enseignant hors bande (en personne, accueil, etc.). Le mot de passe de connexion
-mobile se définit via `POST/PUT /personnel` (`password`, `est_admin`).
+`/otp/generate` reste une opération manuelle d'administration, indépendante de
+l'activation mobile. Le mot de passe de connexion mobile se définit via
+`POST/PUT /personnel` (`password`, `est_admin`).
 
 ## Présence (§4.3, §5.3, §7)
 
@@ -165,7 +161,7 @@ alerte au-delà de 3 absences consécutives (`AbsenceDetectorService`).
 
 | Méthode | Route | Notes |
 |---|---|---|
-| GET | `/devices?device_type=&revoked=` | Vue des activations OTP / devices |
+| GET | `/devices?device_type=&revoked=` | Vue des appareils |
 | GET, POST, PUT, DELETE | `/access-points` | Bornes WiFi autorisées |
 | GET, POST, PUT, DELETE | `/qr-points` | Points QR (code généré serveur) |
 

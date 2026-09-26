@@ -132,148 +132,8 @@ function DevicesTable() {
   );
 }
 
-/**
- * Demandes d'activation : un enseignant non-admin s'est identifié (téléphone +
- * mot de passe) et attend l'approbation de l'administration.
- */
-function ActivationRequestsTable() {
-  const [requests, setRequests] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [statut, setStatut] = useState("en_attente");
-
-  function load() {
-    setLoading(true);
-    setError(null);
-    api
-      .get("/devices/activation-requests", { params: { statut } })
-      .then(({ data }) => setRequests(data.data ?? []))
-      .catch((e) =>
-        setError(
-          e.response?.data?.message ?? "Échec du chargement des demandes.",
-        ),
-      )
-      .finally(() => setLoading(false));
-  }
-
-  useEffect(load, [statut]);
-
-  async function approve(request) {
-    setError(null);
-    try {
-      await api.post(`/devices/activation-requests/${request.id}/approve`);
-      load();
-    } catch (e) {
-      setError(
-        e.response?.data?.message ?? "Échec de la validation de la demande.",
-      );
-    }
-  }
-
-  async function reject(request) {
-    if (
-      !(await confirmAction(
-        `Refuser la demande de ${request.enseignant?.nom} ?`,
-        { confirmText: "Refuser" },
-      ))
-    )
-      return;
-    await api.post(`/devices/activation-requests/${request.id}/reject`);
-    load();
-  }
-
-  return (
-    <>
-      <div className="mb-3 flex gap-2">
-        {[
-          ["en_attente", "En attente"],
-          ["toutes", "Récentes"],
-        ].map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setStatut(key)}
-            className={`rounded-md px-3 py-1 text-sm ${
-              statut === key
-                ? "bg-brand-700 text-white"
-                : "bg-white text-ink-700 border border-ink-100"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      {error && (
-        <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-      <DataTable
-        loading={loading}
-        emptyMessage={
-          statut === "en_attente"
-            ? "Aucune demande en attente."
-            : "Aucune demande récente."
-        }
-        rows={requests}
-        columns={[
-          {
-            key: "enseignant",
-            label: "Enseignant",
-            render: (r) => r.enseignant?.nom,
-            sortValue: (r) => r.enseignant?.nom,
-          },
-          {
-            key: "tel",
-            label: "Téléphone",
-            render: (r) => r.enseignant?.tel,
-            sortValue: (r) => r.enseignant?.tel,
-          },
-          {
-            key: "requested_at",
-            label: "Demandée le",
-            render: (r) => new Date(r.requested_at).toLocaleString("fr-FR"),
-            sortValue: (r) => r.requested_at,
-          },
-          {
-            key: "statut",
-            label: "Statut",
-            sortable: false,
-            render: (r) =>
-              r.fulfilled_at ? (
-                <span className="text-green-600">Validée</span>
-              ) : r.rejected_at ? (
-                <span className="text-red-600">Refusée</span>
-              ) : (
-                <span className="text-ink-500">En attente</span>
-              ),
-          },
-        ]}
-        renderActions={(r) =>
-          !r.fulfilled_at &&
-          !r.rejected_at && (
-            <div className="flex gap-2">
-              <button
-                onClick={() => approve(r)}
-                className="rounded-md bg-brand-700 px-3 py-1 text-white hover:bg-brand-800"
-              >
-                Valider
-              </button>
-              <button
-                onClick={() => reject(r)}
-                className="rounded-md border border-red-200 px-3 py-1 text-red-600 hover:bg-red-50"
-              >
-                Refuser
-              </button>
-            </div>
-          )
-        }
-      />
-    </>
-  );
-}
-
 export default function AppareilsPage() {
-  const [tab, setTab] = useState("activation-requests");
+  const [tab, setTab] = useState("devices");
 
   return (
     <div>
@@ -283,7 +143,6 @@ export default function AppareilsPage() {
 
       <div className="mb-4 flex gap-2">
         {[
-          ["activation-requests", "Demandes d’activation"],
           ["devices", "Devices"],
           ["access-points", "Bornes (BLE)"],
           ["qr-points", "Points QR"],
@@ -302,7 +161,6 @@ export default function AppareilsPage() {
         ))}
       </div>
 
-      {tab === "activation-requests" && <ActivationRequestsTable />}
       {tab === "devices" && <DevicesTable />}
       {tab === "access-points" && (
         <ResourceTable

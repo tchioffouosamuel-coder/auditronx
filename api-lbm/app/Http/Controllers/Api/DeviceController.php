@@ -4,9 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Device;
-use App\Models\DeviceActivationRequest;
 use App\Models\Enseignant;
-use App\Services\PushNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -14,14 +12,9 @@ use Illuminate\Validation\ValidationException;
 
 class DeviceController extends Controller
 {
-    public function __construct(private PushNotificationService $push) {}
-
     /**
-     * POST /api/devices/request-activation — identification par téléphone + mot
-     * de passe (§4.1 revu). Un enseignant admin (`est_admin`) est activé
-     * immédiatement ; sinon une demande d'activation est créée pour validation
-     * par l'administration. Après approbation, l'enseignant termine l'activation
-     * en confirmant ses identifiants et le même appareil.
+    * POST /api/devices/request-activation — identification par téléphone et
+    * mot de passe, puis activation immédiate du téléphone.
      */
     public function requestActivation(Request $request): JsonResponse
     {
@@ -40,122 +33,17 @@ class DeviceController extends Controller
             ]);
         }
 
-        $this->ensureTeacherDeviceAvailable($enseignant, $data['device_uuid']);
-
-        if ($enseignant->est_admin) {
-            $session = $this->createTeacherDeviceSession(
-                $enseignant,
-                $data['device_uuid'],
-                $data['device_type'] ?? 'mobile',
-            );
-
-            return response()->json([
-                'activated' => true,
-                'token' => $session['token'],
-                'device' => $session['device'],
-            ], 201);
-        }
-
-        $activationRequest = DeviceActivationRequest::query()
-            ->where('enseignant_id', $enseignant->id)
-            ->where('device_uuid', $data['device_uuid'])
-            ->latest('requested_at')
-            ->first();
-
-        if (
-            $activationRequest?->fulfilled_at
-            && ! $activationRequest->rejected_at
-            && ! $activationRequest->completed_at
-        ) {
-            $session = $this->createTeacherDeviceSession(
-                $enseignant,
-                $data['device_uuid'],
-                $data['device_type'] ?? 'mobile',
-            );
-            $activationRequest->update(['completed_at' => now()]);
-
-            return response()->json([
-                'activated' => true,
-                'token' => $session['token'],
-                'device' => $session['device'],
-            ], 201);
-        }
-
-        if (
-            ! $activationRequest
-            || $activationRequest->rejected_at
-            || $activationRequest->completed_at
-        ) {
-            $activationRequest = DeviceActivationRequest::create([
-                'enseignant_id' => $enseignant->id,
-                'device_uuid' => $data['device_uuid'],
-                'device_type' => $data['device_type'] ?? 'mobile',
-                'requested_at' => now(),
-            ]);
-            $this->notifyAdminsOfActivationRequest($activationRequest, $enseignant);
-        }
-
-        return response()->json([
-            'activated' => false,
-            'activation_request_id' => $activationRequest->id,
-            'message' => "Demande transmise à l'administration pour validation.",
-        ], 202);
-    }
-
-    public function completeApprovedActivation(Request $request, DeviceActivationRequest $activationRequest): JsonResponse
-    {
-        $data = $request->validate([
-            'tel' => ['required', 'string'],
-            'password' => ['required', 'string'],
-            'device_uuid' => ['required', 'string'],
-            'device_type' => ['sometimes', 'in:mobile'],
-        ]);
-
-        $enseignant = Enseignant::where('tel', $data['tel'])->first();
-        if (! $enseignant || ! $enseignant->password || ! Hash::check($data['password'], $enseignant->password)) {
-            throw ValidationException::withMessages([
-                'tel' => ['Identifiants invalides.'],
-            ]);
-        }
-
-        abort_unless(
-            $activationRequest->enseignant_id === $enseignant->id
-                && $activationRequest->device_uuid === $data['device_uuid'],
-            403,
-            'Cette demande ne correspond pas à cet appareil.',
-        );
-        abort_if($activationRequest->rejected_at, 403, 'La demande d’activation a été refusée.');
-        abort_if($activationRequest->completed_at, 409, 'Cette demande a déjà été utilisée.');
-
-        if (! $activationRequest->fulfilled_at) {
-            return response()->json(['activated' => false], 202);
-        }
-
         $session = $this->createTeacherDeviceSession(
             $enseignant,
             $data['device_uuid'],
             $data['device_type'] ?? 'mobile',
         );
-        $activationRequest->update(['completed_at' => now()]);
 
         return response()->json([
             'activated' => true,
             'token' => $session['token'],
             'device' => $session['device'],
         ], 201);
-    }
-
-    private function notifyAdminsOfActivationRequest(DeviceActivationRequest $activationRequest, Enseignant $enseignant): void
-    {
-        $this->push->sendToAdmins(
-            'Demande d’activation',
-            "{$enseignant->nom} demande l’activation d’un téléphone.",
-            [
-                'type' => 'activation_request',
-                'activation_request_id' => (string) $activationRequest->id,
-                'enseignant_nom' => $enseignant->nom,
-            ]
-        );
     }
 
     /** @return array{device: Device, token: string} */

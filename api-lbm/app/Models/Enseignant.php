@@ -41,11 +41,6 @@ class Enseignant extends Model implements AuthenticatableContract
         'est_admin' => 'boolean',
     ];
 
-    public function activationRequests(): HasMany
-    {
-        return $this->hasMany(DeviceActivationRequest::class);
-    }
-
     public function presences(): HasMany
     {
         return $this->hasMany(Presence::class);

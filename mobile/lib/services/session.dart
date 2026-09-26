@@ -12,7 +12,7 @@ import 'push_notifications.dart';
 /// fois et persisté ; il identifie ce téléphone auprès de l'API à l'activation.
 ///
 /// Une fois l'enseignant activé (token Sanctum stocké de façon sécurisée), il
-/// ne doit plus jamais repasser par le login/OTP — y compris au tout premier
+/// ne doit plus jamais repasser par le login — y compris au tout premier
 /// lancement sans internet (le scan passe par la borne locale, pas par l'API,
 /// §hardware) : la présence du token suffit à rester connecté, `/me` n'est
 /// qu'un rafraîchissement best-effort qui ne doit jamais démonter la session.
@@ -75,50 +75,19 @@ class Session extends ChangeNotifier {
     return uuid;
   }
 
-  /// Étape 1 (§4.1 revu) : identification par téléphone + mot de passe. Un
-  /// enseignant admin est activé immédiatement ; sinon une demande est créée
-  /// pour l'administration, qui remettra un OTP en personne.
-  Future<bool> requestActivation(String tel, String password) async {
+  /// Vérifie les identifiants et active immédiatement le téléphone.
+  Future<void> requestActivation(String tel, String password) async {
     await _storage.write(key: _lastTelKey, value: tel);
     final uuid = await deviceUuid();
-    // Capturé avant toute authentification (§otp-approval) : c'est le seul
-    // moyen pour l'admin de pousser l'OTP par notification à ce téléphone une
-    // fois la demande validée, plutôt que de le remettre en personne.
-    final fcmToken = await PushNotifications.instance.getTokenOnly();
-    final response = await ApiClient.instance
-        .post('/devices/request-activation', {
-          'tel': tel,
-          'password': password,
-          'device_uuid': uuid,
-          'device_type': 'mobile',
-          if (fcmToken != null) 'fcm_token': fcmToken,
-        });
-
-    final activated = response['activated'] as bool;
-    if (activated) {
-      await ApiClient.instance.saveSession(
-        token: response['token'] as String,
-        deviceUuid: uuid,
-      );
-      _activated = true;
-      _me = await ApiClient.instance.get('/me') as Map<String, dynamic>;
-      await _cacheMe(_me!);
-      unawaited(PushNotifications.instance.registerDevice());
-      notifyListeners();
-    }
-
-    return activated;
-  }
-
-  /// Étape 2 : finalise l'activation avec le code OTP remis en personne par
-  /// l'administration.
-  Future<void> activate(String otpCode) async {
-    final uuid = await deviceUuid();
-    final response = await ApiClient.instance.post('/devices/activate', {
-      'code': otpCode,
-      'device_uuid': uuid,
-      'device_type': 'mobile',
-    });
+    final response = await ApiClient.instance.post(
+      '/devices/request-activation',
+      {
+        'tel': tel,
+        'password': password,
+        'device_uuid': uuid,
+        'device_type': 'mobile',
+      },
+    );
 
     await ApiClient.instance.saveSession(
       token: response['token'] as String,

@@ -75,9 +75,8 @@ class Session extends ChangeNotifier {
     return uuid;
   }
 
-  /// Étape 1 : un enseignant admin est activé immédiatement ; sinon une
-  /// demande attend l'approbation admin. Retourne son identifiant en attente.
-  Future<int?> requestActivation(String tel, String password) async {
+  /// Vérifie les identifiants et active immédiatement le téléphone.
+  Future<void> requestActivation(String tel, String password) async {
     await _storage.write(key: _lastTelKey, value: tel);
     final uuid = await deviceUuid();
     final response = await ApiClient.instance.post(
@@ -90,34 +89,7 @@ class Session extends ChangeNotifier {
       },
     );
 
-    if (response['activated'] == true) {
-      await _saveActivatedSession(response, uuid);
-      return null;
-    }
-
-    return (response['activation_request_id'] as num).toInt();
-  }
-
-  Future<bool> completeApprovedActivation(
-    int activationRequestId,
-    String tel,
-    String password,
-  ) async {
-    final uuid = await deviceUuid();
-    final response = await ApiClient.instance.post(
-      '/devices/activation-requests/$activationRequestId/complete',
-      {
-        'tel': tel,
-        'password': password,
-        'device_uuid': uuid,
-        'device_type': 'mobile',
-      },
-    );
-
-    if (response['activated'] != true) return false;
-
     await _saveActivatedSession(response, uuid);
-    return true;
   }
 
   Future<void> _saveActivatedSession(

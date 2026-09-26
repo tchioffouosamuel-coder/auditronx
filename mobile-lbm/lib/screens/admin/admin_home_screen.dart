@@ -4,7 +4,6 @@ import '../../services/admin_session.dart';
 import '../../widgets/sync_status_banner.dart';
 import '../change_password_screen.dart';
 import 'admin_accreditations_screen.dart';
-import 'admin_activation_requests_screen.dart';
 import 'admin_alertes_screen.dart';
 import 'admin_assiduite_screen.dart';
 import 'admin_bornes_screen.dart';
@@ -74,7 +73,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       _AdminMenuEntry(title: 'Fiche de progression', icon: Icons.auto_stories, screen: const AdminFicheProgressionScreen()),
     ]),
     _AdminMenuGroup(title: 'Administration', entries: [
-      _AdminMenuEntry(title: 'Demandes d’activation', icon: Icons.verified, screen: const AdminActivationRequestsScreen()),
       _AdminMenuEntry(title: 'Appareils', icon: Icons.devices, screen: const AdminDevicesScreen()),
       _AdminMenuEntry(title: 'Bornes BLE', icon: Icons.bluetooth, screen: const AdminBornesScreen()),
       _AdminMenuEntry(title: 'Points QR', icon: Icons.qr_code, screen: const AdminQrPointsScreen()),

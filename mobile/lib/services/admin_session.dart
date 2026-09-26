@@ -7,7 +7,7 @@ import 'api_client.dart';
 
 /// Session de l'espace admin (§admin-mobile) — mode secondaire de l'app,
 /// indépendant de [Session] (enseignant/kiosque). Contrairement au flux
-/// enseignant (OTP, jamais de re-login), l'admin s'authentifie comme sur le
+/// enseignant (jamais de re-login), l'admin s'authentifie comme sur le
 /// backoffice web : email + mot de passe (`User`), token Sanctum classique.
 class AdminSession extends ChangeNotifier {
   final _storage = const FlutterSecureStorage();
@@ -28,7 +28,8 @@ class AdminSession extends ChangeNotifier {
     if (_loggedIn) {
       _user = await _loadCachedUser();
       try {
-        _user = await AdminApiClient.instance.get('/me') as Map<String, dynamic>;
+        _user =
+            await AdminApiClient.instance.get('/me') as Map<String, dynamic>;
         await _cacheUser(_user!);
       } on ApiException catch (e) {
         if (e.statusCode == 401) {

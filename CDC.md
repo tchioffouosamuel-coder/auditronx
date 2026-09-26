@@ -154,7 +154,7 @@ via l'API plutôt que rendue en Blade.
 
 | Endpoint | Rôle |
 |---|---|
-| `POST /api/devices/activate` | Active un device par OTP |
+| `POST /api/devices/request-activation` | Vérifie le téléphone et le mot de passe puis active immédiatement le device |
 | `POST /api/otp/generate` | Génère un OTP pour un enseignant (action admin) |
 | `POST /api/attendance/scan` | Reçoit un scan de présence (app), valide le BSSID, horodate côté serveur |
 | `POST /api/attendance/admin-proxy` | Scan par procuration (rôle restreint), motif obligatoire |

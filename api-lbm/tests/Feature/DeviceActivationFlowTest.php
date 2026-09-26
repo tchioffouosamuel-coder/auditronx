@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Device;
-use App\Models\DeviceActivationRequest;
 use App\Models\Enseignant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -11,9 +10,8 @@ use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 /**
- * Flux d'activation revu : identification par tel + mot de passe, accès direct
- * pour un enseignant admin, sinon demande transmise à l'administration qui
- * génère et remet l'OTP en personne.
+ * Activation par téléphone et mot de passe : tous les enseignants reçoivent
+ * immédiatement une session après validation des identifiants.
  */
 class DeviceActivationFlowTest extends TestCase
 {
@@ -67,9 +65,9 @@ class DeviceActivationFlowTest extends TestCase
         $this->assertNull($relay->fresh()->revoked_at);
     }
 
-    public function test_un_enseignant_non_admin_declenche_une_demande_sans_activation_immediate(): void
+    public function test_un_enseignant_non_admin_est_active_immediatement(): void
     {
-        Enseignant::factory()->create([
+        $enseignant = Enseignant::factory()->create([
             'tel' => '699000002',
             'password' => Hash::make('secret123'),
             'est_admin' => false,
@@ -81,15 +79,14 @@ class DeviceActivationFlowTest extends TestCase
             'device_uuid' => 'device-teacher-1',
         ]);
 
-        $response->assertStatus(202);
-        $this->assertFalse($response->json('activated'));
-        $this->assertArrayNotHasKey('token', $response->json());
-
-        $this->assertDatabaseHas('device_activation_requests', [
+        $response->assertCreated()->assertJson(['activated' => true]);
+        $this->assertNotEmpty($response->json('token'));
+        $this->assertDatabaseHas('devices', [
+            'teacher_id' => $enseignant->id,
             'device_uuid' => 'device-teacher-1',
-            'fulfilled_at' => null,
         ]);
-        $this->assertDatabaseCount('devices', 0);
+        $this->assertDatabaseCount('device_activation_requests', 0);
+        $this->assertDatabaseCount('otps', 0);
     }
 
     public function test_identifiants_invalides_sont_rejetes(): void
@@ -139,98 +136,9 @@ class DeviceActivationFlowTest extends TestCase
         $this->assertDatabaseCount('device_activation_requests', 0);
     }
 
-    public function test_ladministration_valide_la_demande_et_le_flux_dactivation_se_termine(): void
-    {
-        $enseignant = Enseignant::factory()->create([
-            'tel' => '699000005',
-            'password' => Hash::make('secret123'),
-        ]);
-
-        $this->postJson('/api/devices/request-activation', [
-            'tel' => '699000005',
-            'password' => 'secret123',
-            'device_uuid' => 'device-teacher-2',
-        ])->assertStatus(202);
-
-        $admin = User::factory()->create();
-        $this->withToken($admin->createToken('backoffice')->plainTextToken);
-
-        $pending = $this->getJson('/api/devices/activation-requests')->assertOk();
-        $this->assertCount(1, $pending->json('data'));
-        $requestId = $pending->json('data.0.id');
-        $this->assertArrayNotHasKey('code', $pending->json('data.0'));
-        $this->assertDatabaseCount('otps', 0);
-
-        $activationRequest = DeviceActivationRequest::findOrFail($requestId);
-        $this->postJson("/api/devices/activation-requests/{$requestId}/complete", [
-            'tel' => '699000005',
-            'password' => 'secret123',
-            'device_uuid' => 'device-teacher-2',
-        ])->assertStatus(202)->assertJson(['activated' => false]);
-        $this->assertDatabaseCount('devices', 0);
-
-        $this->postJson("/api/devices/activation-requests/{$requestId}/approve")->assertOk();
-
-        $this->assertNotNull($activationRequest->fresh()->fulfilled_at);
-
-        // La liste "en attente" ne doit plus contenir cette demande.
-        $this->getJson('/api/devices/activation-requests')->assertOk()->assertJsonCount(0, 'data');
-
-        $activation = $this->postJson("/api/devices/activation-requests/{$requestId}/complete", [
-            'tel' => '699000005',
-            'password' => 'secret123',
-            'device_uuid' => 'device-teacher-2',
-        ]);
-
-        $activation->assertCreated()->assertJson(['activated' => true]);
-        $this->assertNotEmpty($activation->json('token'));
-        $this->assertNotNull($activationRequest->fresh()->completed_at);
-        $this->assertDatabaseHas('devices', [
-            'teacher_id' => $enseignant->id,
-            'device_uuid' => 'device-teacher-2',
-        ]);
-
-        $this->postJson("/api/devices/activation-requests/{$requestId}/complete", [
-            'tel' => '699000005',
-            'password' => 'secret123',
-            'device_uuid' => 'device-teacher-2',
-        ])->assertConflict();
-
-        $nextRequest = $this->postJson('/api/devices/request-activation', [
-            'tel' => '699000005',
-            'password' => 'secret123',
-            'device_uuid' => 'device-teacher-2',
-        ])->assertStatus(202);
-        $this->assertNotSame($requestId, $nextRequest->json('activation_request_id'));
-    }
-
-    public function test_ladministration_peut_refuser_une_demande_dactivation(): void
-    {
-        Enseignant::factory()->create([
-            'tel' => '699000009',
-            'password' => Hash::make('secret123'),
-        ]);
-
-        $this->postJson('/api/devices/request-activation', [
-            'tel' => '699000009',
-            'password' => 'secret123',
-            'device_uuid' => 'device-teacher-3',
-        ])->assertStatus(202);
-
-        $admin = User::factory()->create();
-        $this->withToken($admin->createToken('backoffice')->plainTextToken);
-
-        $requestId = $this->getJson('/api/devices/activation-requests')->json('data.0.id');
-
-        $this->postJson("/api/devices/activation-requests/{$requestId}/reject")->assertOk();
-
-        $this->assertNotNull(DeviceActivationRequest::find($requestId)->rejected_at);
-        $this->getJson('/api/devices/activation-requests')->assertOk()->assertJsonCount(0, 'data');
-    }
-
     /**
-     * Régression : un device révoqué (device_uuid conservé sur le téléphone)
-     * doit être réactivé en place après approbation.
+     * Régression : un appareil révoqué doit être réactivé en place avec ses
+     * mêmes identifiants, sans passer par une approbation ou un OTP.
      */
     public function test_reactivation_dun_device_revoke_avec_le_meme_uuid_ne_plante_pas(): void
     {
@@ -245,15 +153,7 @@ class DeviceActivationFlowTest extends TestCase
             'revoked_at' => now(),
         ]);
 
-        $activationRequest = DeviceActivationRequest::create([
-            'enseignant_id' => $enseignant->id,
-            'device_uuid' => 'device-recycled',
-            'device_type' => 'mobile',
-            'requested_at' => now(),
-            'fulfilled_at' => now(),
-        ]);
-
-        $response = $this->postJson("/api/devices/activation-requests/{$activationRequest->id}/complete", [
+        $response = $this->postJson('/api/devices/request-activation', [
             'tel' => '699000006',
             'password' => 'secret123',
             'device_uuid' => 'device-recycled',

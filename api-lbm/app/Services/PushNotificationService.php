@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\Device;
-use App\Models\User;
 use Illuminate\Support\Facades\Log;
 use Kreait\Firebase\Messaging\CloudMessage;
 use Kreait\Firebase\Messaging\Notification as FcmNotification;
@@ -29,23 +28,6 @@ class PushNotificationService
         }
     }
 
-    /**
-     * Notification de demande d'activation envoyée à tous les admins
-     * connectés au backoffice. Message *data-only* (sans bloc `notification`) :
-     * ça laisse le service worker web construire lui-même la notification avec
-     * les actions Valider/Refuser plutôt que de subir l'affichage par défaut du
-     * navigateur, qui ne supporte pas de boutons d'action sur un message FCM
-     * "notification" classique.
-     */
-    public function sendToAdmins(string $title, string $body, array $data = []): void
-    {
-        $tokens = User::whereNotNull('fcm_token')->pluck('fcm_token');
-
-        foreach ($tokens as $token) {
-            $this->sendDataOnly($token, $title, $body, $data);
-        }
-    }
-
     private function send(string $fcmToken, string $title, string $body, array $data): void
     {
         try {
@@ -59,15 +41,4 @@ class PushNotificationService
         }
     }
 
-    private function sendDataOnly(string $fcmToken, string $title, string $body, array $data): void
-    {
-        try {
-            $message = CloudMessage::new()->withToken($fcmToken)
-                ->withData(array_map(strval(...), [...$data, 'title' => $title, 'body' => $body]));
-
-            Firebase::messaging()->send($message);
-        } catch (\Throwable $e) {
-            Log::warning('push.send: échec envoi FCM (admin)', ['error' => $e->getMessage()]);
-        }
-    }
 }

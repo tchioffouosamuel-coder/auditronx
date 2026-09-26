@@ -10,7 +10,6 @@ use App\Http\Controllers\Api\CahierTexteController;
 use App\Http\Controllers\Api\ClasseController;
 use App\Http\Controllers\Api\CoursEnseignantController;
 use App\Http\Controllers\Api\DashboardController;
-use App\Http\Controllers\Api\DeviceActivationRequestController;
 use App\Http\Controllers\Api\DeviceController;
 use App\Http\Controllers\Api\DisciplineController;
 use App\Http\Controllers\Api\EmploiDuTempsController;
@@ -37,7 +36,6 @@ Route::post('/login', [AuthController::class, 'login']);
 // Identification (tel + mot de passe) et activation d'un device — §4.1 revu,
 // accessibles sans authentification préalable.
 Route::post('/devices/request-activation', [DeviceController::class, 'requestActivation']);
-Route::post('/devices/activation-requests/{activationRequest}/complete', [DeviceController::class, 'completeApprovedActivation']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', fn(Request $request) => $request->user());
@@ -123,13 +121,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Administration des appareils (§4.2)
     Route::get('/devices', [DeviceController::class, 'index']);
-    // Demandes d'activation : exposent les OTP en clair, réservées aux
-    // administrateurs (jamais à un token enseignant).
-    Route::middleware('backoffice')->group(function () {
-        Route::get('/devices/activation-requests', [DeviceActivationRequestController::class, 'index']);
-        Route::post('/devices/activation-requests/{activationRequest}/approve', [DeviceActivationRequestController::class, 'approve']);
-        Route::post('/devices/activation-requests/{activationRequest}/reject', [DeviceActivationRequestController::class, 'reject']);
-    });
     Route::apiResource('access-points', AccessPointController::class)
         ->parameters(['access-points' => 'accessPoint'])
         ->except(['show']);

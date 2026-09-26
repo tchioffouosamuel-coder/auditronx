@@ -21,7 +21,7 @@ class PushNotifications {
   static final PushNotifications instance = PushNotifications._();
 
   /// À appeler une fois le device activé (token Sanctum disponible) — au
-  /// démarrage si déjà activé, ou juste après activation/OTP.
+  /// démarrage si déjà activé, ou juste après activation.
   Future<void> registerDevice() async {
     try {
       final messaging = FirebaseMessaging.instance;
@@ -43,24 +43,11 @@ class PushNotifications {
     }
   }
 
-  /// Token FCM brut, sans appel API — utilisé à la demande d'activation
-  /// (§otp-approval), *avant* toute authentification : à ce stade il n'y a pas
-  /// encore de device Sanctum, donc pas de `POST /devices/fcm-token` possible.
-  /// L'API stocke ce token directement sur la demande pour pouvoir y pousser
-  /// l'OTP une fois l'admin d'accord.
-  Future<String?> getTokenOnly() async {
-    try {
-      await FirebaseMessaging.instance.requestPermission(alert: true, badge: true, sound: true);
-      return await FirebaseMessaging.instance.getToken();
-    } catch (e) {
-      debugPrint('PushNotifications.getTokenOnly: $e');
-      return null;
-    }
-  }
-
   Future<void> _sendTokenToApi(String fcmToken) async {
     try {
-      await ApiClient.instance.post('/devices/fcm-token', {'fcm_token': fcmToken});
+      await ApiClient.instance.post('/devices/fcm-token', {
+        'fcm_token': fcmToken,
+      });
     } catch (e) {
       debugPrint('PushNotifications._sendTokenToApi: $e');
     }

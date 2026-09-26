@@ -51,7 +51,7 @@ class AdminPersonnelScreen extends StatelessWidget {
     ),
     const AdminFieldSpec(
       key: 'est_admin',
-      label: 'Accès direct sans OTP (admin)',
+      label: 'Compte administrateur',
       type: AdminFieldType.checkbox,
     ),
   ];

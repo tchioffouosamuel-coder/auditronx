@@ -50,7 +50,7 @@ class AuditronXApp extends StatelessWidget {
   }
 }
 
-/// Aiguille vers l'espace admin, l'activation OTP ou l'écran principal enseignant
+/// Aiguille vers l'espace admin, l'activation ou l'écran principal enseignant
 /// selon l'état des deux sessions. L'enseignant reste le cas par défaut de
 /// l'app ; l'admin y accède via un lien depuis [ActivationScreen].
 class _RootGate extends StatelessWidget {

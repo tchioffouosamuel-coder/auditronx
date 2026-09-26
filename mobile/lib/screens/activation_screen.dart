@@ -4,11 +4,8 @@ import '../services/api_client.dart';
 import '../services/session.dart';
 import '../theme.dart';
 import 'admin/admin_login_screen.dart';
-import 'otp_entry_screen.dart';
 
-/// Identification (§4.1 revu) : téléphone + mot de passe. Un enseignant admin
-/// est activé immédiatement ; sinon l'écran de saisie de l'OTP (remis en
-/// personne par l'administration) prend le relais.
+/// Identification par téléphone et mot de passe avec activation immédiate.
 class ActivationScreen extends StatefulWidget {
   const ActivationScreen({super.key});
 
@@ -42,8 +39,10 @@ class _ActivationScreenState extends State<ActivationScreen> {
   }
 
   Future<void> _submit() async {
-    if (_telController.text.trim().isEmpty || _passwordController.text.isEmpty)
+    if (_telController.text.trim().isEmpty ||
+        _passwordController.text.isEmpty) {
       return;
+    }
 
     setState(() {
       _submitting = true;
@@ -51,16 +50,10 @@ class _ActivationScreenState extends State<ActivationScreen> {
     });
 
     try {
-      final activated = await context.read<Session>().requestActivation(
+      await context.read<Session>().requestActivation(
         _telController.text.trim(),
         _passwordController.text,
       );
-
-      if (!activated && mounted) {
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const OtpEntryScreen()));
-      }
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } finally {
@@ -166,16 +159,6 @@ class _ActivationScreenState extends State<ActivationScreen> {
                           : const Text('Se connecter'),
                     ),
                     const SizedBox(height: 12),
-                    TextButton(
-                      onPressed: _submitting
-                          ? null
-                          : () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const OtpEntryScreen(),
-                              ),
-                            ),
-                      child: const Text("J'ai déjà reçu mon code d'activation"),
-                    ),
                     TextButton(
                       onPressed: _submitting
                           ? null
