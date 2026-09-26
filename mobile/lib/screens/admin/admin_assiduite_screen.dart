@@ -1,5 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../services/admin_api_client.dart';
 import '../../services/offline/offline_cache.dart';
@@ -211,6 +215,7 @@ class _JournalTab extends StatefulWidget {
 class _JournalTabState extends State<_JournalTab> {
   DateTime _date = DateTime.now();
   late Future<List<dynamic>> _future;
+  bool _downloadingPdf = false;
 
   @override
   void initState() {
@@ -232,6 +237,29 @@ class _JournalTabState extends State<_JournalTab> {
   Future<void> _refresh() async {
     setState(() => _future = _load());
     await _future;
+  }
+
+  Future<void> _downloadJournalPdf() async {
+    setState(() => _downloadingPdf = true);
+    try {
+      final date = _isoDate(_date);
+      final bytes = await AdminApiClient.instance.getBytes(
+        '/assiduite/journal/pdf',
+        query: {'date': date},
+      );
+      final directory = await getTemporaryDirectory();
+      final file = File('${directory.path}/journal-presences-$date.pdf');
+      await file.writeAsBytes(bytes, flush: true);
+      await Share.shareXFiles([XFile(file.path)]);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    } finally {
+      if (mounted) setState(() => _downloadingPdf = false);
+    }
   }
 
   Future<void> _pickDate() async {
@@ -311,10 +339,26 @@ class _JournalTabState extends State<_JournalTab> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: Align(
             alignment: Alignment.centerLeft,
-            child: _DateFilterButton(
-              label: 'Date',
-              value: _date,
-              onTap: _pickDate,
+            child: Row(
+              children: [
+                _DateFilterButton(
+                  label: 'Date',
+                  value: _date,
+                  onTap: _pickDate,
+                ),
+                const Spacer(),
+                IconButton(
+                  tooltip: 'Télécharger le journal en PDF',
+                  onPressed: _downloadingPdf ? null : _downloadJournalPdf,
+                  icon: _downloadingPdf
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.picture_as_pdf_outlined),
+                ),
+              ],
             ),
           ),
         ),

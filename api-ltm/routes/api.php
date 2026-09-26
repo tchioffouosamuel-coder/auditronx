@@ -92,6 +92,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Préfixées `/spreadsheet/...` pour ne pas entrer en collision avec les
     // apiResource `/personnel/{enseignant}` etc. déclarées ci-dessus.
     Route::pattern('spreadsheetEntity', 'personnel|classes|disciplines|emplois|progressions');
+    Route::get('/spreadsheet/personnel/export-pdf', [SpreadsheetController::class, 'exportPersonnelPdf'])->middleware('backoffice');
     Route::get('/spreadsheet/{spreadsheetEntity}/template', [SpreadsheetController::class, 'template']);
     Route::get('/spreadsheet/{spreadsheetEntity}/export', [SpreadsheetController::class, 'export']);
     Route::post('/spreadsheet/{spreadsheetEntity}/import', [SpreadsheetController::class, 'import']);

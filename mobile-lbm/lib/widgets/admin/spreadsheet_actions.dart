@@ -16,7 +16,11 @@ class SpreadsheetActionsBar extends StatefulWidget {
   final String entity;
   final VoidCallback onImported;
 
-  const SpreadsheetActionsBar({super.key, required this.entity, required this.onImported});
+  const SpreadsheetActionsBar({
+    super.key,
+    required this.entity,
+    required this.onImported,
+  });
 
   @override
   State<SpreadsheetActionsBar> createState() => _SpreadsheetActionsBarState();
@@ -28,13 +32,19 @@ class _SpreadsheetActionsBarState extends State<SpreadsheetActionsBar> {
   Future<void> _download(String action, String filename) async {
     setState(() => _busy = true);
     try {
-      final bytes = await AdminApiClient.instance.getBytes('/spreadsheet/${widget.entity}/$action');
+      final bytes = await AdminApiClient.instance.getBytes(
+        '/spreadsheet/${widget.entity}/$action',
+      );
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/$filename');
       await file.writeAsBytes(bytes);
       await Share.shareXFiles([XFile(file.path)]);
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -58,15 +68,25 @@ class _SpreadsheetActionsBarState extends State<SpreadsheetActionsBar> {
         filename: picked.name,
       );
       final importes = response is Map ? response['importes'] : null;
-      final erreurs = response is Map && response['erreurs'] is List ? (response['erreurs'] as List).length : 0;
+      final erreurs = response is Map && response['erreurs'] is List
+          ? (response['erreurs'] as List).length
+          : 0;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$importes importé(s)${erreurs > 0 ? ', $erreurs erreur(s)' : ''}.')),
+          SnackBar(
+            content: Text(
+              '$importes importé(s)${erreurs > 0 ? ', $erreurs erreur(s)' : ''}.',
+            ),
+          ),
         );
       }
       widget.onImported();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -77,7 +97,11 @@ class _SpreadsheetActionsBarState extends State<SpreadsheetActionsBar> {
     if (_busy) {
       return const Padding(
         padding: EdgeInsets.symmetric(horizontal: 8),
-        child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+        child: SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
       );
     }
     return Row(
@@ -86,12 +110,25 @@ class _SpreadsheetActionsBarState extends State<SpreadsheetActionsBar> {
         IconButton(
           tooltip: 'Modèle',
           icon: const Icon(Icons.description_outlined, size: 20),
-          onPressed: () => _download('template', '${widget.entity}-modele.xlsx'),
+          onPressed: () =>
+              _download('template', '${widget.entity}-modele.xlsx'),
         ),
         IconButton(
-          tooltip: 'Exporter',
-          icon: const Icon(Icons.file_download_outlined, size: 20),
-          onPressed: () => _download('export', '${widget.entity}-export.xlsx'),
+          tooltip: widget.entity == 'personnel'
+              ? 'Exporter en PDF'
+              : 'Exporter',
+          icon: Icon(
+            widget.entity == 'personnel'
+                ? Icons.picture_as_pdf_outlined
+                : Icons.file_download_outlined,
+            size: 20,
+          ),
+          onPressed: () => _download(
+            widget.entity == 'personnel' ? 'export-pdf' : 'export',
+            widget.entity == 'personnel'
+                ? 'personnel.pdf'
+                : '${widget.entity}-export.xlsx',
+          ),
         ),
         IconButton(
           tooltip: 'Importer',

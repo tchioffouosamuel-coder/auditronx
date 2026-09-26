@@ -86,6 +86,18 @@ class PdfExportsTest extends TestCase
         $this->assertSame('application/pdf', $response->headers->get('content-type'));
     }
 
+    public function test_l_export_du_personnel_est_un_pdf(): void
+    {
+        $this->actingAsBackoffice();
+        Enseignant::factory()->count(2)->create();
+
+        $response = $this->get('/api/spreadsheet/personnel/export-pdf');
+
+        $response->assertOk();
+        $this->assertSame('application/pdf', $response->headers->get('content-type'));
+        $this->assertStringContainsString('personnel.pdf', $response->headers->get('content-disposition'));
+    }
+
     public function test_lexport_zip_se_telecharge(): void
     {
         $this->actingAsBackoffice();

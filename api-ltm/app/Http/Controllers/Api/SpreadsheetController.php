@@ -11,6 +11,7 @@ use App\Models\EmploiDuTemps;
 use App\Models\Enseignant;
 use App\Models\Programme;
 use App\Models\ProgressionLecon;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
@@ -265,6 +266,15 @@ class SpreadsheetController extends Controller
         $profile = $this->profile($entity);
 
         return Excel::download(new ArrayExport($profile['headings'], ($profile['export'])()), "{$entity}-export.xlsx");
+    }
+
+    /** GET /api/spreadsheet/personnel/export-pdf — export PDF du personnel. */
+    public function exportPersonnelPdf()
+    {
+        $personnel = Enseignant::orderBy('nom')->get();
+
+        return Pdf::loadView('pdf.personnel', compact('personnel'))
+            ->download('personnel.pdf');
     }
 
     /** POST /api/{entity}/import — import XLSX (créé ou met à jour par clé naturelle). */
