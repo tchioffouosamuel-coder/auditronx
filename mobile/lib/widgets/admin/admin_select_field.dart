@@ -14,7 +14,7 @@ class _OptionsCache {
     if (_cache.containsKey(endpoint)) return _cache[endpoint]!;
     final data = await OfflineCache.instance.readThrough(
       'admin_options_$endpoint',
-      () => AdminApiClient.instance.get(endpoint),
+      () => AdminApiClient.instance.getAllPages(endpoint),
     );
     final list = data is Map && data['data'] is List
         ? (data['data'] as List)
@@ -192,6 +192,7 @@ class AdminSearchableSelect extends StatelessWidget {
         isEmpty: selectedLabel == null,
         decoration: InputDecoration(
           labelText: label,
+          floatingLabelBehavior: FloatingLabelBehavior.always,
           errorText: errorText,
           suffixIcon: const Icon(Icons.keyboard_arrow_down),
         ),
