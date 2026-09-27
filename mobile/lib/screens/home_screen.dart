@@ -8,6 +8,7 @@ import 'notifications_screen.dart';
 import 'procuration_screen.dart';
 import 'scan_screen.dart';
 import 'cours_du_jour_screen.dart';
+import 'emploi_du_temps_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -33,6 +34,24 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ChangePasswordScreen(onSubmit: session.updatePassword),
+      ),
+    );
+  }
+
+  void _openSchedule(dynamic rawId) {
+    final enseignantId = rawId is num
+        ? rawId.toInt()
+        : int.tryParse(rawId?.toString() ?? '');
+    if (enseignantId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Impossible de trouver votre profil.')),
+      );
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => EmploiDuTempsScreen(enseignantId: enseignantId),
       ),
     );
   }
@@ -67,6 +86,11 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: Text(titles[_tab]),
         actions: [
+          IconButton(
+            onPressed: () => _openSchedule(session.me?['id']),
+            icon: const Icon(Icons.calendar_month_outlined),
+            tooltip: 'Mon emploi du temps',
+          ),
           IconButton(
             onPressed: _openChangePassword,
             icon: const Icon(Icons.lock_outline),
@@ -125,7 +149,11 @@ class _ScanTab extends StatelessWidget {
         children: [
           Image.asset('assets/logo.png', height: 64),
           const SizedBox(height: 16),
-          Text('Bonjour, $nom', style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            'Bonjour, $nom',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
           const SizedBox(height: 24),
           FilledButton.icon(
             onPressed: onScan,

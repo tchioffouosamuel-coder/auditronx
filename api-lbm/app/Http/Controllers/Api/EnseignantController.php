@@ -25,7 +25,9 @@ class EnseignantController extends Controller
                 $q->where('nom', 'like', "%{$v}%")->orWhere('matricule', 'like', "%{$v}%");
             }));
 
-        return response()->json($query->orderBy('nom')->paginate(25));
+        $perPage = min(max($request->integer('per_page', 25), 1), 500);
+
+        return response()->json($query->orderBy('nom')->paginate($perPage));
     }
 
     public function store(Request $request)

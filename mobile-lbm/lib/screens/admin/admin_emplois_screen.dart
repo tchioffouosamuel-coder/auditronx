@@ -64,7 +64,7 @@ class AdminEmploisScreen extends StatelessWidget {
       label: 'Enseignant',
       type: AdminFieldType.select,
       required: true,
-      optionsEndpoint: '/personnel',
+      optionsEndpoint: '/personnel?per_page=500',
     ),
     const AdminFieldSpec(
       key: 'classe_id',

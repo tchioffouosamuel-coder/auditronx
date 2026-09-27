@@ -28,13 +28,15 @@ class ManagementApiTest extends TestCase
         $this->actingAsBackoffice();
 
         $classe = $this->postJson('/api/classes', [
-            'nom' => 'Terminale D', 'code' => 'TD1',
+            'nom' => 'Terminale D',
+            'code' => 'TD1',
         ])->assertCreated()->json();
 
         $this->getJson("/api/classes/{$classe['id']}")->assertOk()->assertJsonFragment(['code' => 'TD1']);
 
         $discipline = $this->postJson('/api/disciplines', [
-            'nom' => 'Mathématiques', 'code' => 'MATH',
+            'nom' => 'Mathématiques',
+            'code' => 'MATH',
         ])->assertCreated()->json();
 
         $this->getJson("/api/disciplines/{$discipline['id']}")->assertOk()->assertJsonFragment(['code' => 'MATH']);
@@ -93,6 +95,19 @@ class ManagementApiTest extends TestCase
         $response = $this->getJson('/api/personnel')->assertOk();
 
         $this->assertCount(2, $response->json('data'));
+    }
+
+    public function test_la_liste_du_personnel_accepte_une_taille_de_page_personnalisee(): void
+    {
+        $this->actingAsBackoffice();
+
+        Enseignant::factory()->count(30)->create();
+
+        $response = $this->getJson('/api/personnel?per_page=30')->assertOk();
+
+        $this->assertCount(30, $response->json('data'));
+        $this->assertSame(30, $response->json('per_page'));
+        $this->assertSame(1, $response->json('last_page'));
     }
 
     public function test_signalement_groupe_cree_une_entree_par_enseignant(): void
