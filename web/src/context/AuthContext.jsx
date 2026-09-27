@@ -40,13 +40,14 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false));
   }, []);
 
-  async function login(email, password) {
-    const { data } = await api.post("/login", { email, password });
+  async function login(identifier, password) {
+    const { data } = await api.post("/login", { identifier, password });
     if (!data?.token || !data?.user)
       throw new Error("/login a renvoyé une réponse invalide");
     localStorage.setItem("auditron_token", data.token);
     localStorage.setItem("auditron_user", JSON.stringify(data.user));
     setUser(data.user);
+    return data.user;
   }
 
   async function logout() {
@@ -61,11 +62,12 @@ export function AuthProvider({ children }) {
 
   /** Accréditation à périmètre total (groupe '*') — direction/administration. */
   const isAccesTotal =
-    !user?.accreditation || user.accreditation.groupe === "*";
+    !user?.nom && (!user?.accreditation || user.accreditation.groupe === "*");
+  const isEnseignant = Boolean(user?.nom);
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, logout, isAccesTotal }}
+      value={{ user, loading, login, logout, isAccesTotal, isEnseignant }}
     >
       {children}
     </AuthContext.Provider>

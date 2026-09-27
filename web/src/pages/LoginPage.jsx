@@ -1,58 +1,68 @@
-import { useState } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
-import PasswordInput from '../components/PasswordInput'
-import { useAuth } from '../context/AuthContext'
+import { useState } from "react";
+import { Navigate, useNavigate } from "react-router-dom";
+import PasswordInput from "../components/PasswordInput";
+import { useAuth } from "../context/AuthContext";
 
 export default function LoginPage() {
-  const { user, login } = useAuth()
-  const navigate = useNavigate()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState(null)
-  const [submitting, setSubmitting] = useState(false)
+  const { user, login } = useAuth();
+  const navigate = useNavigate();
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  if (user) return <Navigate to="/" replace />
+  if (user) return <Navigate to={user.nom ? "/enseignant" : "/"} replace />;
 
   async function handleSubmit(e) {
-    e.preventDefault()
-    setError(null)
-    setSubmitting(true)
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
     try {
-      await login(email, password)
-      navigate('/')
+      const authenticatedUser = await login(identifier, password);
+      navigate(authenticatedUser.nom ? "/enseignant" : "/");
     } catch {
-      setError('Identifiants invalides.')
+      setError("Identifiants invalides.");
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-900 via-brand-800 to-brand-700 p-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl"
+      >
         <div className="mb-6 flex flex-col items-center text-center">
           <img src="/logo.png" alt="Auditron X" className="mb-3 h-16 w-16" />
           <h1 className="text-xl font-bold text-brand-900">Auditron X</h1>
-          <p className="text-sm text-ink-500">Backoffice — connexion</p>
+          <p className="text-sm text-ink-500">Connexion à votre espace</p>
         </div>
 
         {error && (
-          <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+          <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </div>
         )}
 
         <label className="mb-3 block text-sm">
-          <span className="mb-1 block font-medium text-ink-700">Email</span>
+          <span className="mb-1 block font-medium text-ink-700">
+            Email ou téléphone
+          </span>
           <input
-            type="email"
+            type="text"
             required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="username"
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
             className="w-full rounded-lg border border-ink-100 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
           />
         </label>
 
         <label className="mb-6 block text-sm">
-          <span className="mb-1 block font-medium text-ink-700">Mot de passe</span>
+          <span className="mb-1 block font-medium text-ink-700">
+            Mot de passe
+          </span>
           <PasswordInput
             required
             value={password}
@@ -66,9 +76,9 @@ export default function LoginPage() {
           disabled={submitting}
           className="w-full rounded-lg bg-brand-700 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-800 disabled:opacity-50"
         >
-          {submitting ? 'Connexion…' : 'Se connecter'}
+          {submitting ? "Connexion…" : "Se connecter"}
         </button>
       </form>
     </div>
-  )
+  );
 }

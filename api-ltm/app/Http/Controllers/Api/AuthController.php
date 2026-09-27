@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Enseignant;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
@@ -15,23 +15,38 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $data = $request->validate([
-            'email' => ['required', 'email'],
+            'identifier' => ['required_without:email', 'nullable', 'string'],
+            'email' => ['required_without:identifier', 'nullable', 'email'],
             'password' => ['required', 'string'],
         ]);
 
-        $user = User::where('email', $data['email'])->first();
+        $identifier = $data['identifier'] ?? $data['email'];
+        $user = User::where('email', $identifier)->first();
 
-        if (! $user || ! Hash::check($data['password'], $user->password)) {
-            throw ValidationException::withMessages([
-                'email' => ['Identifiants invalides.'],
+        if ($user && Hash::check($data['password'], $user->password)) {
+            $token = $user->createToken('backoffice')->plainTextToken;
+
+            return response()->json([
+                'token' => $token,
+                'user' => $user->load('accreditation'),
             ]);
         }
 
-        $token = $user->createToken('backoffice')->plainTextToken;
+        $enseignant = Enseignant::where('tel', $identifier)
+            ->orWhere('email', $identifier)
+            ->first();
+
+        if (! $enseignant || ! $enseignant->password || ! Hash::check($data['password'], $enseignant->password)) {
+            throw ValidationException::withMessages([
+                'identifier' => ['Identifiants invalides.'],
+            ]);
+        }
+
+        $token = $enseignant->createToken('web-teacher')->plainTextToken;
 
         return response()->json([
             'token' => $token,
-            'user' => $user->load('accreditation'),
+            'user' => $enseignant,
         ]);
     }
 
