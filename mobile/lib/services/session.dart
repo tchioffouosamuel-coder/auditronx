@@ -89,8 +89,20 @@ class Session extends ChangeNotifier {
       },
     );
 
+    if (response is! Map<String, dynamic>) {
+      throw ApiException('Réponse invalide du serveur lors de la connexion.', 502);
+    }
+
+    final token = response['token'];
+    if (token is! String || token.isEmpty) {
+      final message = response['activated'] == false
+          ? "Le serveur attend encore une validation. L'API LTM doit être mise à jour pour activer directement les enseignants."
+          : "Le serveur n'a pas renvoyé de session. Vérifiez que l'API LTM est à jour.";
+      throw ApiException(message, 502);
+    }
+
     await ApiClient.instance.saveSession(
-      token: response['token'] as String,
+      token: token,
       deviceUuid: uuid,
     );
     _activated = true;

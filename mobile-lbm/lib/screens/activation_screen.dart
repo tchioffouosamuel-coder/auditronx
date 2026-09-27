@@ -148,8 +148,8 @@ class _ActivationScreenState extends State<ActivationScreen> {
                     ],
                     const SizedBox(height: 20),
                     FilledButton(
-                        onPressed: _submitting ? null : _submit,
-                        child: _submitting
+                      onPressed: _submitting ? null : _submit,
+                      child: _submitting
                           ? const SizedBox(
                               height: 20,
                               width: 20,

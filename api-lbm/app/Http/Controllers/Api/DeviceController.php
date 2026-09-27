@@ -13,8 +13,8 @@ use Illuminate\Validation\ValidationException;
 class DeviceController extends Controller
 {
     /**
-    * POST /api/devices/request-activation — identification par téléphone et
-    * mot de passe, puis activation immédiate du téléphone.
+     * POST /api/devices/request-activation — identification par téléphone et
+     * mot de passe, puis activation immédiate du téléphone.
      */
     public function requestActivation(Request $request): JsonResponse
     {

@@ -40,5 +40,4 @@ class PushNotificationService
             Log::warning('push.send: échec envoi FCM', ['error' => $e->getMessage()]);
         }
     }
-
 }

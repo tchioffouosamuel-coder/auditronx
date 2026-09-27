@@ -27,7 +27,11 @@ class _AdminMenuEntry {
   final IconData icon;
   final Widget screen;
 
-  const _AdminMenuEntry({required this.title, required this.icon, required this.screen});
+  const _AdminMenuEntry({
+    required this.title,
+    required this.icon,
+    required this.screen,
+  });
 }
 
 class _AdminMenuGroup {
@@ -49,37 +53,126 @@ class AdminHomeScreen extends StatefulWidget {
 
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
   static final _groups = [
-    _AdminMenuGroup(title: "Vue d'ensemble", entries: [
-      _AdminMenuEntry(title: 'Tableau de bord', icon: Icons.dashboard, screen: const AdminDashboardScreen()),
-      _AdminMenuEntry(title: 'Scanner', icon: Icons.qr_code_scanner, screen: const AdminScanScreen()),
-    ]),
-    _AdminMenuGroup(title: 'Personnel & structure', entries: [
-      _AdminMenuEntry(title: 'Personnel', icon: Icons.badge, screen: AdminPersonnelScreen()),
-      _AdminMenuEntry(title: 'Classes', icon: Icons.school, screen: const AdminClassesScreen()),
-      _AdminMenuEntry(title: 'Disciplines', icon: Icons.menu_book, screen: const AdminDisciplinesScreen()),
-      _AdminMenuEntry(title: 'Emplois du temps', icon: Icons.schedule, screen: const AdminEmploisScreen()),
-      _AdminMenuEntry(title: 'Accréditations', icon: Icons.verified_user, screen: const AdminAccreditationsScreen()),
-    ]),
-    _AdminMenuGroup(title: 'Présence', entries: [
-      _AdminMenuEntry(title: 'Validation', icon: Icons.fact_check, screen: const AdminValidationScreen()),
-      _AdminMenuEntry(title: 'Retards', icon: Icons.timer_outlined, screen: const AdminRetardsScreen()),
-      _AdminMenuEntry(title: 'Assiduité', icon: Icons.insights, screen: const AdminAssiduiteScreen()),
-      _AdminMenuEntry(title: 'Signalements', icon: Icons.flag, screen: const AdminSignalementsScreen()),
-      _AdminMenuEntry(title: 'Fériés', icon: Icons.event_busy, screen: const AdminFeriesScreen()),
-      _AdminMenuEntry(title: 'Alertes', icon: Icons.warning_amber, screen: const AdminAlertesScreen()),
-    ]),
-    _AdminMenuGroup(title: 'Pédagogie', entries: [
-      _AdminMenuEntry(title: 'Cahier de texte', icon: Icons.import_contacts, screen: const AdminCahierTexteScreen()),
-      _AdminMenuEntry(title: 'Fiche de progression', icon: Icons.auto_stories, screen: const AdminFicheProgressionScreen()),
-    ]),
-    _AdminMenuGroup(title: 'Administration', entries: [
-      _AdminMenuEntry(title: 'Appareils', icon: Icons.devices, screen: const AdminDevicesScreen()),
-      _AdminMenuEntry(title: 'Bornes BLE', icon: Icons.bluetooth, screen: const AdminBornesScreen()),
-      _AdminMenuEntry(title: 'Points QR', icon: Icons.qr_code, screen: const AdminQrPointsScreen()),
-    ]),
+    _AdminMenuGroup(
+      title: "Vue d'ensemble",
+      entries: [
+        _AdminMenuEntry(
+          title: 'Tableau de bord',
+          icon: Icons.dashboard,
+          screen: const AdminDashboardScreen(),
+        ),
+        _AdminMenuEntry(
+          title: 'Scanner',
+          icon: Icons.qr_code_scanner,
+          screen: const AdminScanScreen(),
+        ),
+      ],
+    ),
+    _AdminMenuGroup(
+      title: 'Personnel & structure',
+      entries: [
+        _AdminMenuEntry(
+          title: 'Personnel',
+          icon: Icons.badge,
+          screen: AdminPersonnelScreen(),
+        ),
+        _AdminMenuEntry(
+          title: 'Classes',
+          icon: Icons.school,
+          screen: const AdminClassesScreen(),
+        ),
+        _AdminMenuEntry(
+          title: 'Disciplines',
+          icon: Icons.menu_book,
+          screen: const AdminDisciplinesScreen(),
+        ),
+        _AdminMenuEntry(
+          title: 'Emplois du temps',
+          icon: Icons.schedule,
+          screen: const AdminEmploisScreen(),
+        ),
+        _AdminMenuEntry(
+          title: 'Accréditations',
+          icon: Icons.verified_user,
+          screen: const AdminAccreditationsScreen(),
+        ),
+      ],
+    ),
+    _AdminMenuGroup(
+      title: 'Présence',
+      entries: [
+        _AdminMenuEntry(
+          title: 'Validation',
+          icon: Icons.fact_check,
+          screen: const AdminValidationScreen(),
+        ),
+        _AdminMenuEntry(
+          title: 'Retards',
+          icon: Icons.timer_outlined,
+          screen: const AdminRetardsScreen(),
+        ),
+        _AdminMenuEntry(
+          title: 'Assiduité',
+          icon: Icons.insights,
+          screen: const AdminAssiduiteScreen(),
+        ),
+        _AdminMenuEntry(
+          title: 'Signalements',
+          icon: Icons.flag,
+          screen: const AdminSignalementsScreen(),
+        ),
+        _AdminMenuEntry(
+          title: 'Fériés',
+          icon: Icons.event_busy,
+          screen: const AdminFeriesScreen(),
+        ),
+        _AdminMenuEntry(
+          title: 'Alertes',
+          icon: Icons.warning_amber,
+          screen: const AdminAlertesScreen(),
+        ),
+      ],
+    ),
+    _AdminMenuGroup(
+      title: 'Pédagogie',
+      entries: [
+        _AdminMenuEntry(
+          title: 'Cahier de texte',
+          icon: Icons.import_contacts,
+          screen: const AdminCahierTexteScreen(),
+        ),
+        _AdminMenuEntry(
+          title: 'Fiche de progression',
+          icon: Icons.auto_stories,
+          screen: const AdminFicheProgressionScreen(),
+        ),
+      ],
+    ),
+    _AdminMenuGroup(
+      title: 'Administration',
+      entries: [
+        _AdminMenuEntry(
+          title: 'Appareils',
+          icon: Icons.devices,
+          screen: const AdminDevicesScreen(),
+        ),
+        _AdminMenuEntry(
+          title: 'Bornes BLE',
+          icon: Icons.bluetooth,
+          screen: const AdminBornesScreen(),
+        ),
+        _AdminMenuEntry(
+          title: 'Points QR',
+          icon: Icons.qr_code,
+          screen: const AdminQrPointsScreen(),
+        ),
+      ],
+    ),
   ];
 
-  late final List<_AdminMenuEntry> _flatEntries = [for (final g in _groups) ...g.entries];
+  late final List<_AdminMenuEntry> _flatEntries = [
+    for (final g in _groups) ...g.entries,
+  ];
 
   int _index = 0;
 
@@ -116,11 +209,24 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         appBar: AppBar(
           title: Text(_flatEntries[_index].title),
           actions: [
-            IconButton(onPressed: _openChangePassword, icon: const Icon(Icons.lock_outline), tooltip: 'Modifier le mot de passe'),
-            IconButton(onPressed: _logout, icon: const Icon(Icons.logout), tooltip: 'Déconnexion'),
+            IconButton(
+              onPressed: _openChangePassword,
+              icon: const Icon(Icons.lock_outline),
+              tooltip: 'Modifier le mot de passe',
+            ),
+            IconButton(
+              onPressed: _logout,
+              icon: const Icon(Icons.logout),
+              tooltip: 'Déconnexion',
+            ),
           ],
         ),
-        drawer: _AdminDrawer(groups: _groups, flatEntries: _flatEntries, selectedIndex: _index, onSelect: _select),
+        drawer: _AdminDrawer(
+          groups: _groups,
+          flatEntries: _flatEntries,
+          selectedIndex: _index,
+          onSelect: _select,
+        ),
         body: Column(
           children: [
             const SyncStatusBanner(),
@@ -138,7 +244,12 @@ class _AdminDrawer extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onSelect;
 
-  const _AdminDrawer({required this.groups, required this.flatEntries, required this.selectedIndex, required this.onSelect});
+  const _AdminDrawer({
+    required this.groups,
+    required this.flatEntries,
+    required this.selectedIndex,
+    required this.onSelect,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -148,12 +259,21 @@ class _AdminDrawer extends StatelessWidget {
           padding: EdgeInsets.zero,
           children: [
             const DrawerHeader(
-              child: Align(alignment: Alignment.bottomLeft, child: Text('Auditron X — Admin', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+              child: Align(
+                alignment: Alignment.bottomLeft,
+                child: Text(
+                  'Auditron X — Admin',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
             ),
             for (final group in groups) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: Text(group.title, style: Theme.of(context).textTheme.labelLarge),
+                child: Text(
+                  group.title,
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
               ),
               for (final entry in group.entries)
                 ListTile(
