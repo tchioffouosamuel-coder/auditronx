@@ -16,8 +16,10 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class EmploisWorkbookExport implements Export, WithMultipleSheets
 {
+    public const TYPES_COURS = ['Théorique', 'Pratique'];
+
     public const HEADINGS = [
-        'matricule_enseignant',
+        'nom_enseignant',
         'code_classe',
         'code_discipline',
         'jour',
@@ -29,7 +31,7 @@ class EmploisWorkbookExport implements Export, WithMultipleSheets
 
     public function __construct(
         private readonly array $classes,
-        private readonly array $matriculesEnseignants,
+        private readonly array $nomsEnseignants,
         private readonly array $codesDisciplines,
         private readonly array $rowsByClasse,
     ) {}
@@ -51,7 +53,7 @@ class EmploisWorkbookExport implements Export, WithMultipleSheets
             $sheets[] = new EmploisClasseSheetExport('Emplois', []);
         }
 
-        $sheets[] = new EmploisListsSheetExport($this->matriculesEnseignants, $this->codesDisciplines);
+        $sheets[] = new EmploisListsSheetExport($this->nomsEnseignants, $this->codesDisciplines);
 
         return $sheets;
     }
@@ -102,25 +104,24 @@ class EmploisClasseSheetExport implements Export, FromArray, WithEvents, WithHea
         return [
             AfterSheet::class => function (AfterSheet $event): void {
                 $sheet = $event->sheet->getDelegate();
-                $this->addListValidation($sheet, 'A', '=MatriculesEnseignants', 'Choisir un matricule dans la liste.');
-                $this->addListValidation($sheet, 'C', '=CodesDisciplines', 'Choisir une matière dans la liste.');
-                $this->addListValidation($sheet, 'E', '=HeuresDebut', 'Choisir une heure de début dans la liste.');
-                $this->addListValidation($sheet, 'F', '=HeuresFin', 'Choisir une heure de fin dans la liste.');
+                $this->addListValidation($sheet, 'A', '=NomsEnseignants');
+                $this->addListValidation($sheet, 'C', '=CodesDisciplines');
+                $this->addListValidation($sheet, 'E', '=HeuresDebut');
+                $this->addListValidation($sheet, 'F', '=HeuresFin');
+                $this->addListValidation($sheet, 'H', '=TypesCours');
             },
         ];
     }
 
-    private function addListValidation(Worksheet $sheet, string $column, string $formula, string $prompt): void
+    private function addListValidation(Worksheet $sheet, string $column, string $formula): void
     {
         $validation = new DataValidation;
         $validation->setType(DataValidation::TYPE_LIST);
         $validation->setErrorStyle(DataValidation::STYLE_STOP);
         $validation->setAllowBlank(true);
         $validation->setShowDropDown(false);
-        $validation->setShowInputMessage(true);
+        $validation->setShowInputMessage(false);
         $validation->setShowErrorMessage(true);
-        $validation->setPromptTitle('Valeur prédéfinie');
-        $validation->setPrompt($prompt);
         $validation->setErrorTitle('Valeur non autorisée');
         $validation->setError('Sélectionnez une valeur proposée dans la liste.');
         $validation->setFormula1($formula);
@@ -132,7 +133,7 @@ class EmploisClasseSheetExport implements Export, FromArray, WithEvents, WithHea
 class EmploisListsSheetExport implements Export, FromArray, WithEvents, WithHeadings, WithTitle
 {
     public function __construct(
-        private readonly array $matriculesEnseignants,
+        private readonly array $nomsEnseignants,
         private readonly array $codesDisciplines,
     ) {}
 
@@ -141,18 +142,20 @@ class EmploisListsSheetExport implements Export, FromArray, WithEvents, WithHead
         $rows = [];
         $rowCount = max(
             1,
-            count($this->matriculesEnseignants),
+            count($this->nomsEnseignants),
             count($this->codesDisciplines),
             count(EmploiDuTemps::HEURES_DEBUT),
             count(EmploiDuTemps::HEURES_FIN),
+            count(EmploisWorkbookExport::TYPES_COURS),
         );
 
         for ($index = 0; $index < $rowCount; $index++) {
             $rows[] = [
-                $this->matriculesEnseignants[$index] ?? null,
+                $this->nomsEnseignants[$index] ?? null,
                 $this->codesDisciplines[$index] ?? null,
                 EmploiDuTemps::HEURES_DEBUT[$index] ?? null,
                 EmploiDuTemps::HEURES_FIN[$index] ?? null,
+                EmploisWorkbookExport::TYPES_COURS[$index] ?? null,
             ];
         }
 
@@ -161,7 +164,7 @@ class EmploisListsSheetExport implements Export, FromArray, WithEvents, WithHead
 
     public function headings(): array
     {
-        return ['matricules_enseignants', 'codes_disciplines', 'heures_debut', 'heures_fin'];
+        return ['noms_enseignants', 'codes_disciplines', 'heures_debut', 'heures_fin', 'types_cours'];
     }
 
     public function title(): string
@@ -176,16 +179,18 @@ class EmploisListsSheetExport implements Export, FromArray, WithEvents, WithHead
                 $sheet = $event->sheet->getDelegate();
                 $spreadsheet = $sheet->getParent();
                 $ranges = [
-                    'MatriculesEnseignants' => 'A',
+                    'NomsEnseignants' => 'A',
                     'CodesDisciplines' => 'B',
                     'HeuresDebut' => 'C',
                     'HeuresFin' => 'D',
+                    'TypesCours' => 'E',
                 ];
                 $counts = [
-                    'MatriculesEnseignants' => count($this->matriculesEnseignants),
+                    'NomsEnseignants' => count($this->nomsEnseignants),
                     'CodesDisciplines' => count($this->codesDisciplines),
                     'HeuresDebut' => count(EmploiDuTemps::HEURES_DEBUT),
                     'HeuresFin' => count(EmploiDuTemps::HEURES_FIN),
+                    'TypesCours' => count(EmploisWorkbookExport::TYPES_COURS),
                 ];
 
                 foreach ($ranges as $name => $column) {

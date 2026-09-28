@@ -29,6 +29,8 @@ class SpreadsheetController extends Controller
     /** @return array{headings: array<int, string>, export: callable, import: callable} */
     private function profile(string $entity): array
     {
+        $enseignantsParNom = null;
+
         return match ($entity) {
             'personnel' => [
                 'headings' => ['nom', 'matricule', 'email', 'fonction', 'section', 'grade', 'tel', 'poste'],
@@ -122,10 +124,10 @@ class SpreadsheetController extends Controller
                 },
             ],
             'emplois' => [
-                'headings' => ['matricule_enseignant', 'code_classe', 'code_discipline', 'jour', 'heure_debut', 'heure_fin', 'salle', 'type_cours'],
+                'headings' => ['nom_enseignant', 'code_classe', 'code_discipline', 'jour', 'heure_debut', 'heure_fin', 'salle', 'type_cours'],
                 'export' => fn() => EmploiDuTemps::with(['enseignant', 'classe', 'discipline'])->orderBy('jour')->get()
                     ->map(fn(EmploiDuTemps $e) => [
-                        $e->enseignant?->matricule,
+                        $e->enseignant?->nom,
                         $e->classe?->code,
                         $e->discipline?->code,
                         $e->jour,
@@ -134,15 +136,33 @@ class SpreadsheetController extends Controller
                         $e->salle,
                         $e->type_cours,
                     ])->all(),
-                'import' => function (array $row) {
-                    $enseignant = Enseignant::where('matricule', trim((string) ($row['matricule_enseignant'] ?? '')))->first();
+                'import' => function (array $row) use (&$enseignantsParNom) {
+                    $nomEnseignant = trim((string) ($row['nom_enseignant'] ?? ''));
+                    if ($nomEnseignant !== '') {
+                        if ($enseignantsParNom === null) {
+                            $enseignantsParNom = Enseignant::query()->get(['id', 'nom'])
+                                ->groupBy(fn(Enseignant $enseignant) => $this->normalizeTeacherName((string) $enseignant->nom))
+                                ->map(fn($enseignants) => $enseignants->pluck('id')->all())
+                                ->all();
+                        }
+
+                        $matchingTeacherIds = $enseignantsParNom[$this->normalizeTeacherName($nomEnseignant)] ?? [];
+                        if (count($matchingTeacherIds) > 1) {
+                            return 'nom_enseignant ambigu : plusieurs enseignants portent ce nom';
+                        }
+
+                        $enseignantId = $matchingTeacherIds[0] ?? null;
+                    } else {
+                        $matricule = trim((string) ($row['matricule_enseignant'] ?? ''));
+                        $enseignantId = $matricule === '' ? null : Enseignant::where('matricule', $matricule)->value('id');
+                    }
                     $classe = Classe::where('code', trim((string) ($row['code_classe'] ?? '')))->first();
                     $discipline = Discipline::where('code', trim((string) ($row['code_discipline'] ?? '')))->first();
                     $jour = $row['jour'] ?? null;
                     $heureDebut = $this->normalizeTime($row['heure_debut'] ?? null);
                     $heureFin = $this->normalizeTime($row['heure_fin'] ?? null);
 
-                    if (! $enseignant || ! $classe || ! $discipline) {
+                    if (! $enseignantId || ! $classe || ! $discipline) {
                         return 'enseignant/classe/discipline introuvable';
                     }
 
@@ -160,7 +180,7 @@ class SpreadsheetController extends Controller
 
                     EmploiDuTemps::updateOrCreate(
                         [
-                            'enseignant_id' => $enseignant->id,
+                            'enseignant_id' => $enseignantId,
                             'classe_id' => $classe->id,
                             'jour' => (int) $jour,
                             'heure_debut' => $heureDebut,
@@ -265,6 +285,13 @@ class SpreadsheetController extends Controller
         return sprintf('%02d:%02d', (int) $matches[1], (int) $matches[2]);
     }
 
+    private function normalizeTeacherName(string $name): string
+    {
+        $normalizedName = preg_replace('/\s+/u', ' ', trim($name)) ?? trim($name);
+
+        return mb_strtolower($normalizedName, 'UTF-8');
+    }
+
     private function emploisWorkbook(bool $template): EmploisWorkbookExport
     {
         $classes = Classe::orderBy('nom')->get();
@@ -276,7 +303,7 @@ class SpreadsheetController extends Controller
                 ->get()
                 ->each(function (EmploiDuTemps $emploi) use (&$rowsByClasse): void {
                     $rowsByClasse[$emploi->classe_id][] = [
-                        $emploi->enseignant?->matricule,
+                        $emploi->enseignant?->nom,
                         $emploi->classe?->code,
                         $emploi->discipline?->code,
                         $emploi->jour,
@@ -293,7 +320,7 @@ class SpreadsheetController extends Controller
                 'id' => $classe->id,
                 'code' => $classe->code,
             ])->all(),
-            Enseignant::orderBy('nom')->pluck('matricule')->all(),
+            Enseignant::orderBy('nom')->pluck('nom')->all(),
             Discipline::orderBy('nom')->pluck('code')->all(),
             $rowsByClasse,
         );
@@ -357,7 +384,7 @@ class SpreadsheetController extends Controller
 
         foreach ($importSheets as $sheetIndex => $rows) {
             foreach ($rows as $index => $row) {
-                if ($entity === 'emplois' && ! array_key_exists('matricule_enseignant', $row)) {
+                if ($entity === 'emplois' && ! array_key_exists('nom_enseignant', $row) && ! array_key_exists('matricule_enseignant', $row)) {
                     continue;
                 }
 

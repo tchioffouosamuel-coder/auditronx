@@ -109,7 +109,7 @@ class SpreadsheetTest extends TestCase
 
         $classeA = Classe::factory()->create(['nom' => 'Terminale A', 'code' => 'TA1']);
         $classeB = Classe::factory()->create(['nom' => 'Terminale B', 'code' => 'TB1']);
-        $enseignant = Enseignant::factory()->create(['matricule' => 'MAT-001']);
+        $enseignant = Enseignant::factory()->create(['nom' => 'Ada Lovelace', 'matricule' => 'MAT-001']);
         $discipline = Discipline::factory()->create(['code' => 'MATH']);
 
         foreach ([$classeA, $classeB] as $index => $classe) {
@@ -126,16 +126,23 @@ class SpreadsheetTest extends TestCase
         $template = $this->get('/api/spreadsheet/emplois/template')->assertOk();
         $templateWorkbook = $this->readWorkbook($this->downloadedFileContents($template));
         $this->assertSame(['TA1', 'TB1', '_listes'], $templateWorkbook->getSheetNames());
-        $this->assertSame('=MatriculesEnseignants', $templateWorkbook->getSheet(0)->getCell('A2')->getDataValidation()->getFormula1());
+        $this->assertSame('=NomsEnseignants', $templateWorkbook->getSheet(0)->getCell('A2')->getDataValidation()->getFormula1());
+        $this->assertSame('Ada Lovelace', $templateWorkbook->getSheetByName('_listes')->getCell('A2')->getValue());
         $this->assertSame('=CodesDisciplines', $templateWorkbook->getSheet(0)->getCell('C2')->getDataValidation()->getFormula1());
         $this->assertSame('=HeuresDebut', $templateWorkbook->getSheet(0)->getCell('E2')->getDataValidation()->getFormula1());
         $this->assertSame('=HeuresFin', $templateWorkbook->getSheet(0)->getCell('F2')->getDataValidation()->getFormula1());
+        $this->assertSame('=TypesCours', $templateWorkbook->getSheet(0)->getCell('H2')->getDataValidation()->getFormula1());
+        $this->assertFalse($templateWorkbook->getSheet(0)->getCell('A2')->getDataValidation()->getShowInputMessage());
+        $this->assertFalse($templateWorkbook->getSheet(0)->getCell('A2')->getDataValidation()->getShowDropDown());
+        $this->assertSame('Théorique', $templateWorkbook->getSheetByName('_listes')->getCell('E2')->getValue());
+        $this->assertSame('Pratique', $templateWorkbook->getSheetByName('_listes')->getCell('E3')->getValue());
         $this->assertSame('veryHidden', $templateWorkbook->getSheetByName('_listes')->getSheetState());
 
         $export = $this->get('/api/spreadsheet/emplois/export')->assertOk();
         $exportBinary = $this->downloadedFileContents($export);
         $exportWorkbook = $this->readWorkbook($exportBinary);
         $this->assertSame(['TA1', 'TB1', '_listes'], $exportWorkbook->getSheetNames());
+        $this->assertSame('Ada Lovelace', $exportWorkbook->getSheet(0)->getCell('A2')->getValue());
         $this->assertSame('list', $exportWorkbook->getSheet(0)->getCell('A2')->getDataValidation()->getType());
 
         $response = $this->post('/api/spreadsheet/emplois/import', [
@@ -144,6 +151,30 @@ class SpreadsheetTest extends TestCase
 
         $response->assertJson(['importes' => 2, 'erreurs' => []]);
         $this->assertSame(2, EmploiDuTemps::count());
+    }
+
+    public function test_import_emplois_refuse_un_nom_enseignant_ambigu(): void
+    {
+        $this->actingAsBackoffice();
+        Enseignant::factory()->create(['nom' => 'Ada Lovelace', 'matricule' => 'MAT-001']);
+        Enseignant::factory()->create(['nom' => 'Ada Lovelace', 'matricule' => 'MAT-002']);
+        Classe::factory()->create(['code' => 'TA1']);
+        Discipline::factory()->create(['code' => 'MATH']);
+        $binary = Excel::raw(
+            new ArrayExport(
+                ['nom_enseignant', 'code_classe', 'code_discipline', 'jour', 'heure_debut', 'heure_fin', 'salle', 'type_cours'],
+                [['ADA   LOVELACE', 'TA1', 'MATH', 1, '07:30', '08:10', null, null]],
+            ),
+            ExcelWriterType::XLSX,
+        );
+
+        $response = $this->post('/api/spreadsheet/emplois/import', [
+            'file' => UploadedFile::fake()->createWithContent('emplois.xlsx', $binary),
+        ])->assertOk();
+
+        $response->assertJsonPath('importes', 0);
+        $response->assertJsonPath('erreurs.0.erreur', 'nom_enseignant ambigu : plusieurs enseignants portent ce nom');
+        $this->assertSame(0, EmploiDuTemps::count());
     }
 
     public function test_import_emplois_refuse_les_matieres_et_horaires_hors_liste(): void
