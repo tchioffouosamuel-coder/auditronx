@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Exports\ArrayExport;
+use App\Exports\EmploisWorkbookExport;
 use App\Http\Controllers\Controller;
 use App\Imports\ArrayImport;
 use App\Models\Classe;
@@ -45,7 +46,7 @@ class SpreadsheetController extends Controller
                     $nom = trim((string) ($row['nom'] ?? ''));
                     $matricule = trim((string) ($row['matricule'] ?? ''));
                     if ($nom === '' || $matricule === '') {
-                        return "nom et matricule requis";
+                        return 'nom et matricule requis';
                     }
 
                     Enseignant::updateOrCreate(
@@ -77,7 +78,7 @@ class SpreadsheetController extends Controller
                     $nom = trim((string) ($row['nom'] ?? ''));
                     $code = trim((string) ($row['code'] ?? ''));
                     if ($nom === '' || $code === '') {
-                        return "nom et code requis";
+                        return 'nom et code requis';
                     }
 
                     Classe::updateOrCreate(
@@ -105,7 +106,7 @@ class SpreadsheetController extends Controller
                     $nom = trim((string) ($row['nom'] ?? ''));
                     $code = trim((string) ($row['code'] ?? ''));
                     if ($nom === '' || $code === '') {
-                        return "nom et code requis";
+                        return 'nom et code requis';
                     }
 
                     Discipline::updateOrCreate(
@@ -138,11 +139,23 @@ class SpreadsheetController extends Controller
                     $classe = Classe::where('code', trim((string) ($row['code_classe'] ?? '')))->first();
                     $discipline = Discipline::where('code', trim((string) ($row['code_discipline'] ?? '')))->first();
                     $jour = $row['jour'] ?? null;
-                    $heureDebut = $this->blankToNull($row['heure_debut'] ?? null);
-                    $heureFin = $this->blankToNull($row['heure_fin'] ?? null);
+                    $heureDebut = $this->normalizeTime($row['heure_debut'] ?? null);
+                    $heureFin = $this->normalizeTime($row['heure_fin'] ?? null);
 
-                    if (! $enseignant || ! $classe || ! $discipline || ! $jour || ! $heureDebut || ! $heureFin) {
-                        return "enseignant/classe/discipline introuvable ou jour/horaires manquants";
+                    if (! $enseignant || ! $classe || ! $discipline) {
+                        return 'enseignant/classe/discipline introuvable';
+                    }
+
+                    if (! is_numeric($jour) || (float) $jour !== (float) (int) $jour || (int) $jour < 1 || (int) $jour > 7) {
+                        return 'jour doit être un nombre de 1 à 7';
+                    }
+
+                    if (! in_array($heureDebut, EmploiDuTemps::HEURES_DEBUT, true)) {
+                        return 'heure_debut doit être choisie dans la liste prédéfinie';
+                    }
+
+                    if (! in_array($heureFin, EmploiDuTemps::HEURES_FIN, true) || $heureFin <= $heureDebut) {
+                        return 'heure_fin doit être choisie dans la liste prédéfinie et être après heure_debut';
                     }
 
                     EmploiDuTemps::updateOrCreate(
@@ -242,6 +255,50 @@ class SpreadsheetController extends Controller
         return $value === '' || $value === null ? null : (string) $value;
     }
 
+    private function normalizeTime(mixed $value): ?string
+    {
+        $value = $this->blankToNull($value);
+        if ($value === null || preg_match('/^(\d{1,2}):(\d{2})(?::\d{2})?$/', $value, $matches) !== 1) {
+            return null;
+        }
+
+        return sprintf('%02d:%02d', (int) $matches[1], (int) $matches[2]);
+    }
+
+    private function emploisWorkbook(bool $template): EmploisWorkbookExport
+    {
+        $classes = Classe::orderBy('nom')->get();
+        $rowsByClasse = [];
+
+        if (! $template) {
+            EmploiDuTemps::with(['enseignant', 'classe', 'discipline'])
+                ->orderBy('classe_id')->orderBy('jour')->orderBy('heure_debut')
+                ->get()
+                ->each(function (EmploiDuTemps $emploi) use (&$rowsByClasse): void {
+                    $rowsByClasse[$emploi->classe_id][] = [
+                        $emploi->enseignant?->matricule,
+                        $emploi->classe?->code,
+                        $emploi->discipline?->code,
+                        $emploi->jour,
+                        substr((string) $emploi->heure_debut, 0, 5),
+                        substr((string) $emploi->heure_fin, 0, 5),
+                        $emploi->salle,
+                        $emploi->type_cours,
+                    ];
+                });
+        }
+
+        return new EmploisWorkbookExport(
+            $classes->map(fn(Classe $classe) => [
+                'id' => $classe->id,
+                'code' => $classe->code,
+            ])->all(),
+            Enseignant::orderBy('nom')->pluck('matricule')->all(),
+            Discipline::orderBy('nom')->pluck('code')->all(),
+            $rowsByClasse,
+        );
+    }
+
     private function integerOrNull(mixed $value): ?int
     {
         return $value === '' || $value === null || ! is_numeric($value) ? null : (int) $value;
@@ -257,6 +314,10 @@ class SpreadsheetController extends Controller
     {
         $profile = $this->profile($entity);
 
+        if ($entity === 'emplois') {
+            return Excel::download($this->emploisWorkbook(template: true), "{$entity}-modele.xlsx");
+        }
+
         return Excel::download(new ArrayExport($profile['headings']), "{$entity}-modele.xlsx");
     }
 
@@ -264,6 +325,10 @@ class SpreadsheetController extends Controller
     public function export(string $entity): BinaryFileResponse
     {
         $profile = $this->profile($entity);
+
+        if ($entity === 'emplois') {
+            return Excel::download($this->emploisWorkbook(template: false), "{$entity}-export.xlsx");
+        }
 
         return Excel::download(new ArrayExport($profile['headings'], ($profile['export'])()), "{$entity}-export.xlsx");
     }
@@ -285,22 +350,32 @@ class SpreadsheetController extends Controller
         $request->validate(['file' => ['required', 'file', 'mimes:xlsx,xls,csv']]);
 
         $sheets = Excel::toArray(new ArrayImport, $request->file('file'));
-        $rows = $sheets[0] ?? [];
+        $importSheets = $entity === 'emplois' ? $sheets : [($sheets[0] ?? [])];
 
         $importes = 0;
         $erreurs = [];
 
-        foreach ($rows as $index => $row) {
-            // Ligne entièrement vide (fin de feuille) : on l'ignore silencieusement.
-            if (count(array_filter($row, fn($v) => $v !== null && $v !== '')) === 0) {
-                continue;
-            }
+        foreach ($importSheets as $sheetIndex => $rows) {
+            foreach ($rows as $index => $row) {
+                if ($entity === 'emplois' && ! array_key_exists('matricule_enseignant', $row)) {
+                    continue;
+                }
 
-            $erreur = ($profile['import'])($row);
-            if ($erreur) {
-                $erreurs[] = ['ligne' => $index + 2, 'erreur' => $erreur];
-            } else {
-                $importes++;
+                // Ligne entièrement vide (fin de feuille) : on l'ignore silencieusement.
+                if (count(array_filter($row, fn($v) => $v !== null && $v !== '')) === 0) {
+                    continue;
+                }
+
+                $erreur = ($profile['import'])($row);
+                if ($erreur) {
+                    $erreurs[] = [
+                        'ligne' => $index + 2,
+                        ...($entity === 'emplois' ? ['feuille' => $sheetIndex + 1] : []),
+                        'erreur' => $erreur,
+                    ];
+                } else {
+                    $importes++;
+                }
             }
         }
 
