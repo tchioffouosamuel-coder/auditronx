@@ -133,7 +133,7 @@ class SpreadsheetTest extends TestCase
         $this->assertSame('=HeuresFin', $templateWorkbook->getSheet(0)->getCell('F2')->getDataValidation()->getFormula1());
         $this->assertSame('=TypesCours', $templateWorkbook->getSheet(0)->getCell('H2')->getDataValidation()->getFormula1());
         $this->assertFalse($templateWorkbook->getSheet(0)->getCell('A2')->getDataValidation()->getShowInputMessage());
-        $this->assertFalse($templateWorkbook->getSheet(0)->getCell('A2')->getDataValidation()->getShowDropDown());
+        $this->assertTrue($templateWorkbook->getSheet(0)->getCell('A2')->getDataValidation()->getShowDropDown());
         $this->assertSame('Théorique', $templateWorkbook->getSheetByName('_listes')->getCell('E2')->getValue());
         $this->assertSame('Pratique', $templateWorkbook->getSheetByName('_listes')->getCell('E3')->getValue());
         $this->assertSame('veryHidden', $templateWorkbook->getSheetByName('_listes')->getSheetState());

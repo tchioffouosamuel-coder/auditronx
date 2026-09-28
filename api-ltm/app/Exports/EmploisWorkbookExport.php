@@ -119,7 +119,7 @@ class EmploisClasseSheetExport implements Export, FromArray, WithEvents, WithHea
         $validation->setType(DataValidation::TYPE_LIST);
         $validation->setErrorStyle(DataValidation::STYLE_STOP);
         $validation->setAllowBlank(true);
-        $validation->setShowDropDown(false);
+        $validation->setShowDropDown(true);
         $validation->setShowInputMessage(false);
         $validation->setShowErrorMessage(true);
         $validation->setErrorTitle('Valeur non autorisée');
