@@ -50,8 +50,9 @@ return [
     |
     */
 
-    // §7 — tokens Sanctum avec expiration (durée en minutes, configurable via .env).
-    'expiration' => env('SANCTUM_EXPIRATION_MINUTES', 60 * 24 * 30),
+    // §7 — tokens Sanctum sans expiration par défaut : un appareil activé reste connecté
+    // jusqu'à révocation explicite (désactivation/réactivation). Durée en minutes via .env si besoin.
+    'expiration' => env('SANCTUM_EXPIRATION_MINUTES'),
 
     /*
     |--------------------------------------------------------------------------
