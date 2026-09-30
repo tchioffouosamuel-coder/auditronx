@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Device;
 use Illuminate\Support\Facades\Log;
+use Kreait\Firebase\Exception\Messaging\NotFound;
 use Kreait\Firebase\Messaging\CloudMessage;
 use Kreait\Firebase\Messaging\Notification as FcmNotification;
 use Kreait\Laravel\Firebase\Facades\Firebase;
@@ -36,6 +37,10 @@ class PushNotificationService
                 ->withData(array_map(strval(...), $data));
 
             Firebase::messaging()->send($message);
+        } catch (NotFound) {
+            // Token invalide ("NotRegistered" : app désinstallée, token renouvelé) :
+            // il ne redeviendra jamais valide, on l'efface pour ne plus réessayer.
+            Device::where('fcm_token', $fcmToken)->update(['fcm_token' => null]);
         } catch (\Throwable $e) {
             Log::warning('push.send: échec envoi FCM', ['error' => $e->getMessage()]);
         }
