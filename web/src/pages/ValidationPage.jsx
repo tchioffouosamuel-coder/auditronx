@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import DataTable from '../components/DataTable'
 import api from '../lib/api'
+import { todayIso } from '../lib/datetime'
 
 export default function ValidationPage() {
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(todayIso)
   const [cours, setCours] = useState([])
   const [loading, setLoading] = useState(true)
 

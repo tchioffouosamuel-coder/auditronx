@@ -76,6 +76,34 @@ class RelaySyncTest extends TestCase
     }
 
     /**
+     * Régression : la borne envoie `captured_at` en UTC ("...Z") ; l'heure doit
+     * être stockée en GMT+1 (fuseau de l'application), sinon le journal des
+     * présences affiche une heure de retard.
+     */
+    public function test_lheure_utc_de_la_borne_est_stockee_en_gmt_plus_1(): void
+    {
+        $this->actingAsRelay();
+        $enseignant = Enseignant::factory()->create();
+        $token = $enseignant->createToken('mobile')->plainTextToken;
+        $qrPoint = QrPoint::factory()->create();
+        $accessPoint = AccessPoint::factory()->create();
+
+        $this->postJson('/api/relay/sync', [
+            'packets' => [[
+                'local_id' => 'borne-test-tz',
+                'type' => 'scan',
+                'captured_at' => '2026-09-29T23:30:00Z',
+                'teacher_token' => $token,
+                'payload' => ['qr_code' => $qrPoint->code, 'bssid' => $accessPoint->bssid],
+            ]],
+        ])->assertOk()->assertJsonPath('results.0.status', 'ok');
+
+        $presence = Presence::where('enseignant_id', $enseignant->id)->firstOrFail();
+        $this->assertSame('2026-09-30', $presence->date->toDateString());
+        $this->assertSame('00:30', $presence->heure_arrivee->format('H:i'));
+    }
+
+    /**
      * Régression : `symlink()`/`exec()` sont désactivés sur l'hébergement de
      * production, donc `storage:link` (et le disque `public`) ne peuvent
      * jamais servir les photos — elles doivent être écrites directement dans

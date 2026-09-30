@@ -85,7 +85,9 @@ class RelaySyncController extends Controller
         $localId = $packet['local_id'];
 
         try {
-            $capturedAt = Carbon::parse($packet['captured_at']);
+            // La borne/l'app envoient l'heure en UTC ("...Z") : on la ramène au fuseau
+            // de l'application (GMT+1), sinon l'heure UTC serait stockée telle quelle.
+            $capturedAt = Carbon::parse($packet['captured_at'])->setTimezone(config('app.timezone'));
             $payload = $packet['payload'];
             $photoBase64 = $payload['photo_base64'] ?? null;
 

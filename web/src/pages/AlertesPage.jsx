@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import DataTable from '../components/DataTable'
 import api from '../lib/api'
+import { formatDateTime } from '../lib/datetime'
 
 export default function AlertesPage() {
   const [alertes, setAlertes] = useState([])
@@ -25,7 +26,7 @@ export default function AlertesPage() {
           {
             key: 'sent_at',
             label: 'Envoyée le',
-            render: (a) => new Date(a.sent_at).toLocaleString('fr-FR'),
+            render: (a) => formatDateTime(a.sent_at, {}),
             sortValue: (a) => a.sent_at,
           },
           { key: 'canal', label: 'Canal' },

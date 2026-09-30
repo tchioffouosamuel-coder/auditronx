@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import api from "../lib/api";
+import { formatDateTime, todayIso } from "../lib/datetime";
 
 const TABS = [
   ["scan", "Scanner", "qr_code_scanner"],
@@ -30,18 +31,6 @@ function apiError(error) {
   return (
     error.response?.data?.message ?? error.message ?? "Une erreur est survenue."
   );
-}
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function formatDateTime(value) {
-  if (!value) return "—";
-  return new Date(value).toLocaleString("fr-FR", {
-    dateStyle: "short",
-    timeStyle: "short",
-  });
 }
 
 function formatTime(value) {

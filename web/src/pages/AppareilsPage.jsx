@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import DataTable from "../components/DataTable";
 import ResourceTable from "../components/ResourceTable";
 import api from "../lib/api";
+import { formatDateTime } from "../lib/datetime";
 import { printQrCode } from "../lib/printQrCode";
 import swal, { confirmAction } from "../lib/swal";
 
@@ -90,7 +91,7 @@ function DevicesTable() {
           label: "Activé le",
           render: (d) =>
             d.activated_at
-              ? new Date(d.activated_at).toLocaleString("fr-FR")
+              ? formatDateTime(d.activated_at, {})
               : "—",
           sortValue: (d) => d.activated_at ?? "",
         },

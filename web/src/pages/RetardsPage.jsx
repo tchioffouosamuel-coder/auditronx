@@ -2,20 +2,11 @@ import { useEffect, useState } from 'react'
 import DataTable from '../components/DataTable'
 import api from '../lib/api'
 import { downloadFile } from '../lib/download'
-
-function startOfMonth() {
-  const d = new Date()
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10)
-}
-
-function endOfMonth() {
-  const d = new Date()
-  return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10)
-}
+import { endOfMonthIso, startOfMonthIso } from '../lib/datetime'
 
 export default function RetardsPage() {
-  const [debut, setDebut] = useState(startOfMonth())
-  const [fin, setFin] = useState(endOfMonth())
+  const [debut, setDebut] = useState(startOfMonthIso)
+  const [fin, setFin] = useState(endOfMonthIso)
   const [tolerance, setTolerance] = useState(10)
   const [lignes, setLignes] = useState([])
   const [loading, setLoading] = useState(true)

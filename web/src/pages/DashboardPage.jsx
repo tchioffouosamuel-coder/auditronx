@@ -9,6 +9,7 @@ import {
   YAxis,
 } from "recharts";
 import api from "../lib/api";
+import { todayIso } from "../lib/datetime";
 
 function KpiCard({ label, value, tone = "neutral" }) {
   const tones = {
@@ -97,7 +98,7 @@ function PeopleList({ title, people = [], tone = "neutral" }) {
 
 export default function DashboardPage() {
   const [data, setData] = useState(null);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayIso);
 
   useEffect(() => {
     api

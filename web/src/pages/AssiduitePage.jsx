@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import DataTable from "../components/DataTable";
 import Modal from "../components/Modal";
 import api from "../lib/api";
+import { formatTime, todayIso } from "../lib/datetime";
 import { downloadFile } from "../lib/download";
 
 function StatsTab() {
@@ -40,7 +41,7 @@ function StatsTab() {
 }
 
 function JournalTab() {
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayIso);
   const [presences, setPresences] = useState([]);
   const [loading, setLoading] = useState(true);
   const [photoPreview, setPhotoPreview] = useState(null);
@@ -90,7 +91,7 @@ function JournalTab() {
             label: "Arrivée",
             render: (p) =>
               p.heure_arrivee
-                ? new Date(p.heure_arrivee).toLocaleTimeString("fr-FR")
+                ? formatTime(p.heure_arrivee)
                 : "—",
             sortValue: (p) => p.heure_arrivee ?? "",
           },
@@ -99,7 +100,7 @@ function JournalTab() {
             label: "Départ",
             render: (p) =>
               p.heure_depart
-                ? new Date(p.heure_depart).toLocaleTimeString("fr-FR")
+                ? formatTime(p.heure_depart)
                 : "—",
             sortValue: (p) => p.heure_depart ?? "",
           },
