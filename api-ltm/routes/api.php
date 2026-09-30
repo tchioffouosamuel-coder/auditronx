@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\ClasseController;
 use App\Http\Controllers\Api\CoursEnseignantController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DeviceController;
+use App\Http\Controllers\Api\DeviceLogController;
 use App\Http\Controllers\Api\DisciplineController;
 use App\Http\Controllers\Api\EmploiDuTempsController;
 use App\Http\Controllers\Api\EnseignantController;
@@ -55,6 +56,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Passerelle offline ESP1/ESP2 (§hardware) : lots de pointages relayés en différé.
     Route::post('/relay/sync', [RelaySyncController::class, 'sync']);
+    // Moniteur série à distance de la borne (§hardware, diagnostic).
+    Route::post('/relay/logs', [DeviceLogController::class, 'store']);
 
     // Historique personnel & notifications (§4.1 — app mobile)
     Route::get('/mes-presences', [MyPresenceController::class, 'index']);
@@ -121,6 +124,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Administration des appareils (§4.2)
     Route::get('/devices', [DeviceController::class, 'index']);
+    Route::get('/devices/{device}/logs', [DeviceLogController::class, 'index'])->middleware('backoffice');
+    Route::delete('/devices/{device}/logs', [DeviceLogController::class, 'destroy'])->middleware('backoffice');
     Route::apiResource('access-points', AccessPointController::class)
         ->parameters(['access-points' => 'accessPoint'])
         ->except(['show']);

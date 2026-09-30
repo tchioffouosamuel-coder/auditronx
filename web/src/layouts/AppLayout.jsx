@@ -37,7 +37,10 @@ const NAV_SECTIONS = [
   },
   {
     title: 'Administration',
-    links: [{ to: '/appareils', label: 'Appareils & points d’accès' }],
+    links: [
+      { to: '/appareils', label: 'Appareils & points d’accès' },
+      { to: '/moniteur-bornes', label: 'Moniteur des bornes' },
+    ],
   },
 ]
 

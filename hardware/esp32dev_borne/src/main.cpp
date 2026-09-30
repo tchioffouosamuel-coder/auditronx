@@ -25,12 +25,14 @@
 #include <ArduinoJson.h>
 #include <time.h>
 #include <vector>
+#include <deque>
 #include <algorithm>
 #include <mbedtls/base64.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
 #include <NimBLEDevice.h>
+#include <esp_system.h>
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
 
@@ -84,6 +86,112 @@ struct MutexGuard
     SemaphoreHandle_t _sem;
 };
 
+// ---------------------------------------------------------------------------
+// Moniteur série à distance : tout ce qui passe par g_log est écrit sur le
+// port série ET gardé ligne par ligne dans un tampon RAM borné, poussé vers
+// l'API par flushRemoteLogs() (tâche de synchro) pour consultation dans le
+// backoffice. Utiliser g_log à la place de Serial pour tout message utile au
+// diagnostic ; Serial direct pour ce qui ne doit rester que local.
+// ---------------------------------------------------------------------------
+
+struct LogLine
+{
+    uint32_t seq;
+    uint32_t uptime_ms;
+    String message;
+};
+
+class RemoteLogger : public Print
+{
+public:
+    void begin()
+    {
+        _mutex = xSemaphoreCreateMutex();
+    }
+
+    size_t write(uint8_t c) override
+    {
+        return write(&c, 1);
+    }
+
+    size_t write(const uint8_t *buf, size_t size) override
+    {
+        Serial.write(buf, size);
+        if (!REMOTE_LOG_ENABLED)
+            return size;
+
+        MutexGuard guard(_mutex);
+        for (size_t i = 0; i < size; i++)
+        {
+            const uint8_t c = buf[i];
+            if (c == '\n')
+            {
+                commitLine();
+            }
+            else if (c != '\r' && acceptByte(c))
+            {
+                _current += static_cast<char>(c);
+            }
+        }
+        return size;
+    }
+
+    /** Copie jusqu'à `max` lignes les plus anciennes, sans les retirer du tampon. */
+    void snapshot(std::vector<LogLine> &out, size_t max)
+    {
+        MutexGuard guard(_mutex);
+        for (size_t i = 0; i < _lines.size() && out.size() < max; i++)
+            out.push_back(_lines[i]);
+    }
+
+    /** Retire les lignes confirmées par l'API (seq <= lastSeq). Les lignes
+     * imprimées pendant l'envoi, ou celles déjà écrasées faute de place, ne
+     * sont pas touchées. */
+    void ack(uint32_t lastSeq)
+    {
+        MutexGuard guard(_mutex);
+        while (!_lines.empty() && _lines.front().seq <= lastSeq)
+            _lines.pop_front();
+    }
+
+private:
+    /** Tronque à LOG_LINE_MAX_LEN sans jamais couper un caractère UTF-8 en
+     * deux (accents des messages) : une séquence invalide ferait rejeter tout
+     * le lot par le décodeur JSON de l'API. */
+    bool acceptByte(uint8_t c)
+    {
+        if (_overflow)
+            return false;
+        const bool continuation = (c & 0xC0) == 0x80;
+        if (_current.length() < LOG_LINE_MAX_LEN - 4 || (continuation && _current.length() < LOG_LINE_MAX_LEN))
+            return true;
+        _overflow = true;
+        return false;
+    }
+
+    void commitLine()
+    {
+        if (_current.length() > 0)
+        {
+            if (_lines.size() >= LOG_BUFFER_MAX_LINES)
+                _lines.pop_front();
+            if (_overflow)
+                _current += "…";
+            _lines.push_back({++_seq, (uint32_t)millis(), _current});
+        }
+        _current = "";
+        _overflow = false;
+    }
+
+    SemaphoreHandle_t _mutex = nullptr;
+    std::deque<LogLine> _lines;
+    String _current;
+    bool _overflow = false;
+    uint32_t _seq = 0;
+};
+
+static RemoteLogger g_log;
+
 static size_t queueLength()
 {
     MutexGuard guard(g_fsMutex);
@@ -110,7 +218,7 @@ static void appendToQueue(const String &json)
     File f = g_queueFs->open(QUEUE_FILE, "a", true);
     if (!f)
     {
-        Serial.println("[queue] échec ouverture flash en écriture");
+        g_log.println("[queue] échec ouverture flash en écriture");
         return;
     }
     f.println(json);
@@ -211,7 +319,7 @@ static void removeFromQueue(const std::vector<String> &idsToRemove)
 static void setupStorage()
 {
     if (!LittleFS.begin(true))
-        Serial.println("[fs] échec montage LittleFS");
+        g_log.println("[fs] échec montage LittleFS");
 
     g_queueFs = &LittleFS;
     pinMode(SD_CS_GPIO, OUTPUT);
@@ -219,9 +327,9 @@ static void setupStorage()
     SPI.begin(SD_SCK_GPIO, SD_MISO_GPIO, SD_MOSI_GPIO, SD_CS_GPIO);
     if (!SD.begin(SD_CS_GPIO, SPI, SD_SPI_FREQUENCY_HZ, "/sdcard", 5, false))
     {
-        Serial.printf("[sd] échec initialisation SPI (CS=%u, SCK=%u, MISO=%u, MOSI=%u) ; vérifiez câblage, 3.3 V et FAT32\n",
+        g_log.printf("[sd] échec initialisation SPI (CS=%u, SCK=%u, MISO=%u, MOSI=%u) ; vérifiez câblage, 3.3 V et FAT32\n",
                       SD_CS_GPIO, SD_SCK_GPIO, SD_MISO_GPIO, SD_MOSI_GPIO);
-        Serial.println("[sd] file LittleFS active");
+        g_log.println("[sd] file LittleFS active");
         return;
     }
 
@@ -238,7 +346,7 @@ static void setupStorage()
             destination.close();
             source.close();
             LittleFS.remove(QUEUE_FILE);
-            Serial.println("[sd] ancienne file LittleFS transférée");
+            g_log.println("[sd] ancienne file LittleFS transférée");
         }
         else
         {
@@ -246,19 +354,40 @@ static void setupStorage()
                 source.close();
             if (destination)
                 destination.close();
-            Serial.println("[sd] échec transfert de la file LittleFS");
+            g_log.println("[sd] échec transfert de la file LittleFS");
         }
     }
 
     g_queueFs = &SD;
     g_sd_ready = true;
-    Serial.printf("[sd] carte détectée, file SD active (%llu Mo libres)\n",
+    g_log.printf("[sd] carte détectée, file SD active (%llu Mo libres)\n",
                   (unsigned long long)((SD.totalBytes() - SD.usedBytes()) / (1024 * 1024)));
 }
 
 // ---------------------------------------------------------------------------
 // Moteur de pull périodique vers l'API
 // ---------------------------------------------------------------------------
+
+/**
+ * Client TLS statique et réutilisé d'un cycle à l'autre (évite l'overhead de
+ * reconstruire l'objet WiFiClientSecure à chaque appel ; les buffers mbedTLS
+ * eux-mêmes sont (dé)alloués par connect()/stop(), pas par le cycle de vie de
+ * cet objet — setBufferSizes() n'existe pas sur cette version du core
+ * arduino-esp32 (basée esp-idf 5, buffers fixes). Partagé par syncWithApi()
+ * et flushRemoteLogs(), appelées l'une après l'autre depuis syncTask : jamais
+ * deux connexions TLS simultanées sur cet ESP32 sans PSRAM.
+ */
+static WiFiClientSecure &apiClient()
+{
+    static WiFiClientSecure secureClient;
+    static bool secureClientReady = false;
+    if (!secureClientReady)
+    {
+        secureClient.setInsecure(); // pas de CA pinnée, cf. comportement HTTPClient par défaut jusqu'ici
+        secureClientReady = true;
+    }
+    return secureClient;
+}
 
 static void syncWithApi()
 {
@@ -284,26 +413,13 @@ static void syncWithApi()
     batch.shrink_to_fit();
     if (payload.length() <= 12)
     {
-        Serial.println("[sync] corps JSON vide, on retentera au prochain cycle");
+        g_log.println("[sync] corps JSON vide, on retentera au prochain cycle");
         return;
-    }
-
-    // Client TLS statique et réutilisé d'un cycle à l'autre (évite l'overhead
-    // de reconstruire l'objet WiFiClientSecure à chaque appel ; les buffers
-    // mbedTLS eux-mêmes sont (dé)alloués par connect()/stop(), pas par le
-    // cycle de vie de cet objet — setBufferSizes() n'existe pas sur cette
-    // version du core arduino-esp32 (basée esp-idf 5, buffers fixes).
-    static WiFiClientSecure secureClient;
-    static bool secureClientReady = false;
-    if (!secureClientReady)
-    {
-        secureClient.setInsecure(); // pas de CA pinnée, cf. comportement HTTPClient par défaut jusqu'ici
-        secureClientReady = true;
     }
 
     HTTPClient http;
     String url = String(API_BASE_URL) + API_RELAY_SYNC_PATH;
-    http.begin(secureClient, url);
+    http.begin(apiClient(), url);
     http.addHeader("Content-Type", "application/json");
     http.addHeader("Authorization", String("Bearer ") + RELAY_API_TOKEN);
     http.setTimeout(20000);
@@ -312,7 +428,7 @@ static void syncWithApi()
     if (status != 200)
     {
         String errorBody = http.getString();
-        Serial.printf("[sync] échec HTTP %d: %s, on retentera au prochain cycle\n", status, errorBody.c_str());
+        g_log.printf("[sync] échec HTTP %d: %s, on retentera au prochain cycle\n", status, errorBody.c_str());
         http.end();
         return; // rien n'est retiré de la file : nouvelle tentative plus tard
     }
@@ -323,7 +439,7 @@ static void syncWithApi()
     StaticJsonDocument<4096> resp;
     if (deserializeJson(resp, respBody) != DeserializationError::Ok)
     {
-        Serial.println("[sync] réponse API illisible, on retentera au prochain cycle");
+        g_log.println("[sync] réponse API illisible, on retentera au prochain cycle");
         return;
     }
 
@@ -341,22 +457,95 @@ static void syncWithApi()
     }
 
     removeFromQueue(toRemove);
-    Serial.printf("[sync] %u paquet(s) envoyés, %u confirmé(s)/rejeté(s)\n", (unsigned)batchCount, (unsigned)toRemove.size());
+    g_log.printf("[sync] %u paquet(s) envoyés, %u confirmé(s)/rejeté(s)\n", (unsigned)batchCount, (unsigned)toRemove.size());
+}
+
+/**
+ * Pousse vers l'API les lignes du moniteur série en attente (voir
+ * RemoteLogger). Les échecs ne sont imprimés que sur Serial : les passer par
+ * g_log alimenterait le tampon avec ses propres erreurs d'envoi.
+ */
+static void flushRemoteLogs()
+{
+    if (!REMOTE_LOG_ENABLED || WiFi.status() != WL_CONNECTED)
+        return;
+
+    std::vector<LogLine> batch;
+    g_log.snapshot(batch, LOG_BATCH_MAX_LINES);
+    if (batch.empty())
+        return;
+
+    // Capacité calculée sur le contenu réel plutôt que sur le pire cas
+    // (LOG_BATCH_MAX_LINES x LOG_LINE_MAX_LEN) : le tas est déjà sollicité
+    // par la poignée de main TLS qui suit.
+    size_t capacity = JSON_OBJECT_SIZE(2) + JSON_ARRAY_SIZE(batch.size()) + batch.size() * JSON_OBJECT_SIZE(2) + 64;
+    for (const auto &line : batch)
+        capacity += line.message.length() + 1;
+
+    DynamicJsonDocument doc(capacity);
+    doc["uptime_ms"] = (uint32_t)millis();
+    JsonArray lines = doc.createNestedArray("lines");
+    for (const auto &line : batch)
+    {
+        JsonObject o = lines.createNestedObject();
+        o["uptime_ms"] = line.uptime_ms;
+        o["message"] = line.message;
+    }
+    const uint32_t lastSeq = batch.back().seq;
+    batch.clear();
+
+    String body;
+    serializeJson(doc, body);
+    doc.clear();
+
+    HTTPClient http;
+    http.begin(apiClient(), String(API_BASE_URL) + API_RELAY_LOGS_PATH);
+    http.addHeader("Content-Type", "application/json");
+    http.addHeader("Accept", "application/json");
+    http.addHeader("Authorization", String("Bearer ") + RELAY_API_TOKEN);
+    http.setTimeout(10000);
+    const int status = http.POST(body);
+    http.end();
+
+    if (status >= 200 && status < 300)
+    {
+        g_log.ack(lastSeq);
+    }
+    else if (status >= 400 && status < 500 && status != 429)
+    {
+        // Lot refusé tel quel (validation, token révoqué...) : il ne passera
+        // jamais, on le jette plutôt que de bloquer les lignes suivantes.
+        Serial.printf("[log] lot refusé par l'API (HTTP %d), ignoré\n", status);
+        g_log.ack(lastSeq);
+    }
+    else
+    {
+        Serial.printf("[log] échec envoi (HTTP %d), nouvelle tentative plus tard\n", status);
+    }
 }
 
 /**
  * Tâche dédiée (pile 16 Ko) pour la synchro périodique : la poignée de main
  * TLS de mbedTLS (HTTPS vers l'API) a besoin de plus de pile que celle de la
  * tâche loop() par défaut — l'y exécuter directement provoquait un
- * débordement de pile sur esp32_borne/, même cause ici.
+ * débordement de pile sur esp32_borne/, même cause ici. Rythmée par
+ * LOG_FLUSH_INTERVAL_MS (moniteur à distance quasi temps réel), la synchro
+ * des scans gardant sa propre cadence SYNC_INTERVAL_MS.
  */
 static void syncTask(void *)
 {
+    uint32_t lastSync = millis();
     for (;;)
     {
-        vTaskDelay(pdMS_TO_TICKS(SYNC_INTERVAL_MS));
-        if (WiFi.status() == WL_CONNECTED)
+        vTaskDelay(pdMS_TO_TICKS(REMOTE_LOG_ENABLED ? LOG_FLUSH_INTERVAL_MS : SYNC_INTERVAL_MS));
+        if (WiFi.status() != WL_CONNECTED)
+            continue;
+        if (millis() - lastSync >= SYNC_INTERVAL_MS)
+        {
+            lastSync = millis();
             syncWithApi();
+        }
+        flushRemoteLogs();
     }
 }
 
@@ -383,7 +572,7 @@ static String encodePhotoBase64(const std::vector<uint8_t> &raw)
     int rc = mbedtls_base64_encode(buf.data(), buf.size(), &written, raw.data(), raw.size());
     if (rc != 0)
     {
-        Serial.println("[ble] échec encodage base64 du selfie");
+        g_log.println("[ble] échec encodage base64 du selfie");
         return "";
     }
 
@@ -474,7 +663,7 @@ static String processScan(const String &rawJson, const String &photoBase64)
         if (out.overflowed())
         {
             out["payload"].remove("photo_base64");
-            Serial.println("[ble] paquet JSON saturé, photo_base64 non enregistrée");
+            g_log.println("[ble] paquet JSON saturé, photo_base64 non enregistrée");
         }
         else
         {
@@ -628,7 +817,7 @@ static void processPendingBleScan()
 
     beepBuzzer();
     String photoBase64 = encodePhotoBase64(photoBytes);
-    Serial.printf("[ble] scan reçu: json=%uo photo=%uo (base64=%uo)\n",
+    g_log.printf("[ble] scan reçu: json=%uo photo=%uo (base64=%uo)\n",
                   (unsigned)rawJson.length(), (unsigned)photoBytes.size(), (unsigned)photoBase64.length());
     String response = processScan(rawJson, photoBase64);
     if (g_bleResultChar)
@@ -687,8 +876,7 @@ static void setupBle()
     advertising->setScanResponseData(scanResponseData);
     advertising->start();
 
-    Serial.print("[ble] serveur démarré, adresse=");
-    Serial.println(NimBLEDevice::getAddress().toString().c_str());
+    g_log.printf("[ble] serveur démarré, adresse=%s\n", NimBLEDevice::getAddress().toString().c_str());
 }
 
 // ---------------------------------------------------------------------------
@@ -726,21 +914,20 @@ static void connectWifiIfNeeded()
         return;
     lastAttempt = millis();
 
-    Serial.println("[wifi] tentative de connexion au modem...");
+    g_log.println("[wifi] tentative de connexion au modem...");
     WiFi.begin(STA_SSID, STA_PASSWORD);
 }
 
 static void onWifiConnected()
 {
-    Serial.print("[wifi] connecté au modem, IP=");
-    Serial.println(WiFi.localIP());
+    g_log.printf("[wifi] connecté au modem, IP=%s\n", WiFi.localIP().toString().c_str());
 
     configTime(0, 0, NTP_SERVER);
     struct tm timeinfo;
     if (getLocalTime(&timeinfo, 5000))
     {
         g_time_ready = true;
-        Serial.println("[time] NTP synchronisé");
+        g_log.println("[time] NTP synchronisé");
     }
 }
 
@@ -757,6 +944,7 @@ void setup()
     WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
 
     Serial.begin(115200);
+    g_log.begin();
 
     pinMode(BUZZER_GPIO, OUTPUT);
     digitalWrite(BUZZER_GPIO, LOW);
@@ -764,8 +952,13 @@ void setup()
     g_fsMutex = xSemaphoreCreateMutex();
     g_pendingScanMutex = xSemaphoreCreateMutex();
 
+    // Cause du dernier redémarrage : permet de repérer depuis le backoffice
+    // un brownout (voir ci-dessus) ou un crash (panic/watchdog) sans câble USB.
+    g_log.printf("[boot] démarrage, cause du reset=%d (1=mise sous tension, 4=panic, 5-7=watchdog, 9=brownout)\n",
+                 (int)esp_reset_reason());
+
     setupStorage();
-    Serial.printf("[queue] %u paquet(s) en attente au démarrage\n", (unsigned)queueLength());
+    g_log.printf("[queue] %u paquet(s) en attente au démarrage\n", (unsigned)queueLength());
 
     // Laisse le régulateur 3.3V se stabiliser après la séquence de boot
     // (lecture flash + montage LittleFS) avant la première activité radio :
@@ -788,7 +981,7 @@ void setup()
     setupBle();
 
     delay(1500);
-    Serial.println("[wifi] tentative de connexion au modem...");
+    g_log.println("[wifi] tentative de connexion au modem...");
     WiFi.begin(STA_SSID, STA_PASSWORD);
 
     // Cœur 1 (APP_CPU), comme loopTask par défaut sur Arduino-ESP32 — la pile
@@ -817,7 +1010,9 @@ void loop()
     // Réaffiche l'adresse BLE dès le premier tour de loop() puis toutes les 3s
     // (à saisir dans le backoffice, Appareils & points d'accès > Bornes WiFi,
     // champ BSSID) : le port série "hoquette" parfois juste après le boot et
-    // fait rater l'unique ligne imprimée au démarrage.
+    // fait rater l'unique ligne imprimée au démarrage. Serial direct : déjà
+    // remontée une fois au backoffice par setupBle(), inutile d'y noyer le
+    // moniteur à distance sous une ligne identique toutes les 3 s.
     static uint32_t lastBleAddrPrint = 0;
     static bool bleAddrPrintedOnce = false;
     if (!bleAddrPrintedOnce || millis() - lastBleAddrPrint > 3000)

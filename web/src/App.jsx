@@ -14,6 +14,7 @@ import EmploisPage from "./pages/EmploisPage";
 import FeriesPage from "./pages/FeriesPage";
 import FicheProgressionPage from "./pages/FicheProgressionPage";
 import LoginPage from "./pages/LoginPage";
+import MoniteurBornesPage from "./pages/MoniteurBornesPage";
 import PersonnelPage from "./pages/PersonnelPage";
 import RetardsPage from "./pages/RetardsPage";
 import SignalementsPage from "./pages/SignalementsPage";
@@ -60,6 +61,7 @@ export default function App() {
               element={<FicheProgressionPage />}
             />
             <Route path="/appareils" element={<AppareilsPage />} />
+            <Route path="/moniteur-bornes" element={<MoniteurBornesPage />} />
           </Route>
         </Routes>
       </AuthProvider>

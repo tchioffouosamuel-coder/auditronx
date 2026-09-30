@@ -97,4 +97,16 @@ inline constexpr size_t SYNC_BODY_JSON_CAPACITY = SYNC_BATCH_SIZE * PACKET_JSON_
 // Cadence de vérification de la connectivité / tentative de synchro.
 inline constexpr uint32_t SYNC_INTERVAL_MS = 15000;
 
+// ---- Moniteur série à distance (backoffice > Moniteur des bornes) ----
+// Chaque ligne imprimée sur le port série est aussi gardée dans un tampon RAM
+// et poussée vers POST /api/relay/logs. Sans internet, les lignes les plus
+// anciennes sont écrasées au-delà de LOG_BUFFER_MAX_LINES : diagnostic
+// uniquement, rien de critique n'y transite (contrairement à la file de scans).
+inline constexpr bool REMOTE_LOG_ENABLED = true;
+inline constexpr char API_RELAY_LOGS_PATH[] = "/api/relay/logs";
+inline constexpr uint32_t LOG_FLUSH_INTERVAL_MS = 5000;
+inline constexpr size_t LOG_BUFFER_MAX_LINES = 80;
+inline constexpr size_t LOG_LINE_MAX_LEN = 240;
+inline constexpr size_t LOG_BATCH_MAX_LINES = 30;
+
 inline constexpr char NTP_SERVER[] = "pool.ntp.org";
