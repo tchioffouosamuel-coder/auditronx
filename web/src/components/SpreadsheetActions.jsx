@@ -7,6 +7,11 @@ import api from '../lib/api'
  * côté API). Les téléchargements passent par axios (pas un simple <a href>)
  * car l'API est authentifiée par Bearer token, jamais par cookie de session.
  */
+// Regroupe les erreurs par feuille puis par ligne pour faciliter la correction du fichier.
+function sortErreurs(erreurs) {
+  return [...erreurs].sort((a, b) => (a.feuille ?? 0) - (b.feuille ?? 0) || a.ligne - b.ligne)
+}
+
 export default function SpreadsheetActions({ entity, label, onImported }) {
   const fileInputRef = useRef(null)
   const [busy, setBusy] = useState(false)
@@ -93,13 +98,30 @@ export default function SpreadsheetActions({ entity, label, onImported }) {
             <div className="rounded-md bg-brand-50 px-3 py-2 text-brand-800">
               {result.importes} ligne(s) importée(s).
               {result.erreurs?.length > 0 && (
-                <ul className="mt-1 list-disc pl-5 text-red-700">
-                  {result.erreurs.map((e, i) => (
-                    <li key={i}>
-                      Ligne {e.ligne} : {e.erreur}
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <p className="mt-2 font-medium text-red-700">
+                    {result.erreurs.length} ligne(s) en échec :
+                  </p>
+                  <ul className="mt-1 space-y-2">
+                    {sortErreurs(result.erreurs).map((e, i) => (
+                      <li key={i} className="rounded-md border border-red-100 bg-white px-3 py-2">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-ink-500">
+                          {e.feuille != null && `Feuille ${e.feuille_nom ?? e.feuille} · `}Ligne {e.ligne}
+                        </div>
+                        <div className="text-red-700">{e.erreur}</div>
+                        {e.valeurs && Object.keys(e.valeurs).length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {Object.entries(e.valeurs).map(([col, val]) => (
+                              <span key={col} className="rounded bg-ink-50 px-1.5 py-0.5 text-xs text-ink-700">
+                                <span className="text-ink-500">{col} :</span> {String(val)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </>
               )}
             </div>
           )}

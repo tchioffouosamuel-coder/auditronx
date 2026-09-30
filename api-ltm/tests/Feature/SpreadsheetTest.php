@@ -173,7 +173,8 @@ class SpreadsheetTest extends TestCase
         ])->assertOk();
 
         $response->assertJsonPath('importes', 0);
-        $response->assertJsonPath('erreurs.0.erreur', 'nom_enseignant ambigu : plusieurs enseignants portent ce nom');
+        $response->assertJsonPath('erreurs.0.erreur', 'nom_enseignant « ADA   LOVELACE » ambigu : plusieurs enseignants portent ce nom (matricules : MAT-001, MAT-002) — renommez-les ou utilisez la colonne matricule_enseignant');
+        $response->assertJsonPath('erreurs.0.valeurs.code_classe', 'TA1');
         $this->assertSame(0, EmploiDuTemps::count());
     }
 
@@ -199,8 +200,9 @@ class SpreadsheetTest extends TestCase
         ])->assertOk();
 
         $response->assertJsonPath('importes', 0);
-        $response->assertJsonPath('erreurs.0.erreur', 'heure_debut doit être choisie dans la liste prédéfinie');
-        $response->assertJsonPath('erreurs.1.erreur', 'enseignant/classe/discipline introuvable');
+        $response->assertJsonPath('erreurs.0.erreur', 'heure_debut doit être choisie dans la liste prédéfinie (valeur reçue : « 08:00 »)');
+        $response->assertJsonPath('erreurs.1.erreur', 'discipline « UNKNOWN » introuvable');
+        $response->assertJsonPath('erreurs.1.feuille_nom', 'Worksheet');
         $this->assertSame(0, EmploiDuTemps::count());
     }
 

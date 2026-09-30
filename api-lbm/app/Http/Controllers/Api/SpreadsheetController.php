@@ -16,6 +16,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
@@ -138,44 +139,61 @@ class SpreadsheetController extends Controller
                     ])->all(),
                 'import' => function (array $row) use (&$enseignantsParNom) {
                     $nomEnseignant = trim((string) ($row['nom_enseignant'] ?? ''));
+                    $matricule = trim((string) ($row['matricule_enseignant'] ?? ''));
                     if ($nomEnseignant !== '') {
                         if ($enseignantsParNom === null) {
-                            $enseignantsParNom = Enseignant::query()->get(['id', 'nom'])
+                            $enseignantsParNom = Enseignant::query()->get(['id', 'nom', 'matricule'])
                                 ->groupBy(fn(Enseignant $enseignant) => $this->normalizeTeacherName((string) $enseignant->nom))
-                                ->map(fn($enseignants) => $enseignants->pluck('id')->all())
                                 ->all();
                         }
 
-                        $matchingTeacherIds = $enseignantsParNom[$this->normalizeTeacherName($nomEnseignant)] ?? [];
-                        if (count($matchingTeacherIds) > 1) {
-                            return 'nom_enseignant ambigu : plusieurs enseignants portent ce nom';
+                        $matchingTeachers = $enseignantsParNom[$this->normalizeTeacherName($nomEnseignant)] ?? collect();
+                        if ($matchingTeachers->count() > 1) {
+                            return "nom_enseignant « {$nomEnseignant} » ambigu : plusieurs enseignants portent ce nom (matricules : "
+                                . $matchingTeachers->pluck('matricule')->filter()->implode(', ')
+                                . ') — renommez-les ou utilisez la colonne matricule_enseignant';
                         }
 
-                        $enseignantId = $matchingTeacherIds[0] ?? null;
+                        $enseignantId = $matchingTeachers->first()?->id;
                     } else {
-                        $matricule = trim((string) ($row['matricule_enseignant'] ?? ''));
                         $enseignantId = $matricule === '' ? null : Enseignant::where('matricule', $matricule)->value('id');
                     }
-                    $classe = Classe::where('code', trim((string) ($row['code_classe'] ?? '')))->first();
-                    $discipline = Discipline::where('code', trim((string) ($row['code_discipline'] ?? '')))->first();
+                    $codeClasse = trim((string) ($row['code_classe'] ?? ''));
+                    $codeDiscipline = trim((string) ($row['code_discipline'] ?? ''));
+                    $classe = $codeClasse === '' ? null : Classe::where('code', $codeClasse)->first();
+                    $discipline = $codeDiscipline === '' ? null : Discipline::where('code', $codeDiscipline)->first();
                     $jour = $row['jour'] ?? null;
                     $heureDebut = $this->normalizeTime($row['heure_debut'] ?? null);
                     $heureFin = $this->normalizeTime($row['heure_fin'] ?? null);
 
-                    if (! $enseignantId || ! $classe || ! $discipline) {
-                        return 'enseignant/classe/discipline introuvable';
+                    $problemes = [];
+                    if (! $enseignantId) {
+                        $problemes[] = match (true) {
+                            $nomEnseignant !== '' => "enseignant « {$nomEnseignant} » introuvable dans le personnel",
+                            $matricule !== '' => "enseignant de matricule « {$matricule} » introuvable dans le personnel",
+                            default => 'nom_enseignant manquant',
+                        };
+                    }
+                    if (! $classe) {
+                        $problemes[] = $codeClasse === '' ? 'code_classe manquant' : "classe « {$codeClasse} » introuvable";
+                    }
+                    if (! $discipline) {
+                        $problemes[] = $codeDiscipline === '' ? 'code_discipline manquant' : "discipline « {$codeDiscipline} » introuvable";
+                    }
+                    if ($problemes !== []) {
+                        return implode(' ; ', $problemes);
                     }
 
                     if (! is_numeric($jour) || (float) $jour !== (float) (int) $jour || (int) $jour < 1 || (int) $jour > 7) {
-                        return 'jour doit être un nombre de 1 à 7';
+                        return 'jour doit être un nombre de 1 à 7 (valeur reçue : « ' . $this->displayValue($jour) . ' »)';
                     }
 
                     if (! in_array($heureDebut, EmploiDuTemps::HEURES_DEBUT, true)) {
-                        return 'heure_debut doit être choisie dans la liste prédéfinie';
+                        return 'heure_debut doit être choisie dans la liste prédéfinie (valeur reçue : « ' . $this->displayValue($row['heure_debut'] ?? null) . ' »)';
                     }
 
                     if (! in_array($heureFin, EmploiDuTemps::HEURES_FIN, true) || $heureFin <= $heureDebut) {
-                        return 'heure_fin doit être choisie dans la liste prédéfinie et être après heure_debut';
+                        return 'heure_fin doit être choisie dans la liste prédéfinie et être après heure_debut (valeur reçue : « ' . $this->displayValue($row['heure_fin'] ?? null) . ' »)';
                     }
 
                     EmploiDuTemps::updateOrCreate(
@@ -285,6 +303,28 @@ class SpreadsheetController extends Controller
         return sprintf('%02d:%02d', (int) $matches[1], (int) $matches[2]);
     }
 
+    private function displayValue(mixed $value): string
+    {
+        return $value === null || $value === '' ? 'vide' : (string) $value;
+    }
+
+    /**
+     * Noms des feuilles du classeur, pour situer les erreurs d'import
+     * multi-feuilles. Tableau vide si le format ne les expose pas.
+     *
+     * @return array<int, string>
+     */
+    private function worksheetNames(string $path): array
+    {
+        try {
+            $reader = IOFactory::createReaderForFile($path);
+
+            return method_exists($reader, 'listWorksheetNames') ? $reader->listWorksheetNames($path) : [];
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
     private function normalizeTeacherName(string $name): string
     {
         $normalizedName = preg_replace('/\s+/u', ' ', trim($name)) ?? trim($name);
@@ -378,6 +418,7 @@ class SpreadsheetController extends Controller
 
         $sheets = Excel::toArray(new ArrayImport, $request->file('file'));
         $importSheets = $entity === 'emplois' ? $sheets : [($sheets[0] ?? [])];
+        $sheetNames = $entity === 'emplois' ? $this->worksheetNames($request->file('file')->getRealPath()) : [];
 
         $importes = 0;
         $erreurs = [];
@@ -397,8 +438,13 @@ class SpreadsheetController extends Controller
                 if ($erreur) {
                     $erreurs[] = [
                         'ligne' => $index + 2,
-                        ...($entity === 'emplois' ? ['feuille' => $sheetIndex + 1] : []),
+                        ...($entity === 'emplois' ? [
+                            'feuille' => $sheetIndex + 1,
+                            'feuille_nom' => $sheetNames[$sheetIndex] ?? null,
+                        ] : []),
                         'erreur' => $erreur,
+                        // Contenu brut de la ligne, pour que l'utilisateur la retrouve sans ouvrir le fichier.
+                        'valeurs' => array_filter($row, fn($v) => $v !== null && $v !== ''),
                     ];
                 } else {
                     $importes++;
