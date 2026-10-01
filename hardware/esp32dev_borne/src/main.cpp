@@ -33,15 +33,61 @@
 #include <freertos/semphr.h>
 #include <NimBLEDevice.h>
 #include <esp_system.h>
+#include <Update.h>
+#include <Preferences.h>
+#include <mbedtls/md.h>
+#include <esp_ota_ops.h>
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
 
 #include "config.h"
 
+// Versions majeures attendues : les suivantes ont changé d'API (signatures des
+// callbacks BLE, documents JSON) et ne compilent pas avec ce code.
+#if ARDUINOJSON_VERSION_MAJOR != 6
+#error "Installez ArduinoJson 6.21.x (Benoit Blanchon) — la version 7 n'est pas compatible."
+#endif
+#if !__has_include(<NimBLESecurity.h>)
+#error "Installez NimBLE-Arduino 1.4.3 (h2zero) — la version 2.x n'est pas compatible."
+#endif
+
+// Types utilisés dans des signatures de fonctions, déclarés avant toute
+// fonction : l'IDE Arduino (version fichier unique test.cpp) insère ses
+// prototypes automatiques avant la première fonction du fichier.
+struct QueuedPacket
+{
+    String local_id;
+    String raw_json;
+};
+
+struct LogLine
+{
+    uint32_t seq;
+    uint32_t uptime_ms;
+    String message;
+};
+
+struct OtaManifest
+{
+    String version;
+    String url;
+    String sha256; // hex, 64 caractères
+    size_t sizeBytes;
+};
+
+enum class OtaResult
+{
+    SUCCESS,
+    NETWORK_ERROR, // transitoire : nouvel essai au prochain cycle
+    CORRUPT,       // SHA256 incorrect / image refusée : version mise de côté
+};
+
 static WebServer server(80);
 static uint32_t g_local_id_counter = 0;
 static bool g_time_ready = false;
 static String g_ble_address;
+// Un scan BLE complet attend d'être traité par loop() (voir ScanCharCallbacks).
+static volatile bool g_pendingScan = false;
 
 static void beepBuzzer()
 {
@@ -93,13 +139,6 @@ struct MutexGuard
 // backoffice. Utiliser g_log à la place de Serial pour tout message utile au
 // diagnostic ; Serial direct pour ce qui ne doit rester que local.
 // ---------------------------------------------------------------------------
-
-struct LogLine
-{
-    uint32_t seq;
-    uint32_t uptime_ms;
-    String message;
-};
 
 class RemoteLogger : public Print
 {
@@ -224,12 +263,6 @@ static void appendToQueue(const String &json)
     f.println(json);
     f.close();
 }
-
-struct QueuedPacket
-{
-    String local_id;
-    String raw_json;
-};
 
 static bool readQueueBatch(std::vector<QueuedPacket> &out)
 {
@@ -524,17 +557,246 @@ static void flushRemoteLogs()
     }
 }
 
+// ---------------------------------------------------------------------------
+// Mises à jour OTA — même principe que campuspass_hardware (OtaManager) :
+// manifest -> téléchargement en flux -> SHA256 vérifié avant d'activer le
+// nouveau slot -> redémarrage. Différences : manifest et binaire servis par
+// l'API authentifiée (le binaire contient RELAY_API_TOKEN, il ne peut pas
+// être public), et vérification périodique faute de canal push (MQTT).
+// ---------------------------------------------------------------------------
+
+static bool g_otaAppValidated = false;
+
+/** Valide le slot courant (annule le rollback automatique du bootloader,
+ * s'il est activé) dès que ce firmware a prouvé qu'il joint l'API : un
+ * firmware OTA incapable de se connecter ne serait jamais validé. */
+static void markOtaAppValidOnce()
+{
+    if (g_otaAppValidated)
+        return;
+    g_otaAppValidated = true;
+    if (esp_ota_mark_app_valid_cancel_rollback() == ESP_OK)
+        g_log.println("[ota] slot courant validé");
+}
+
+static bool sha256Matches(const uint8_t digest[32], const String &expectedHex)
+{
+    if (expectedHex.length() != 64)
+        return false;
+    char computed[65];
+    for (int i = 0; i < 32; i++)
+        sprintf(computed + i * 2, "%02x", digest[i]);
+    computed[64] = '\0';
+    return expectedHex.equalsIgnoreCase(String(computed));
+}
+
+/** true + manifest rempli si une version active existe ; false sinon (204,
+ * erreur réseau, réponse invalide). */
+static bool fetchOtaManifest(OtaManifest &out)
+{
+    HTTPClient http;
+    http.setConnectTimeout(OTA_CONNECT_TIMEOUT_MS);
+    http.setTimeout(10000);
+    http.begin(apiClient(), String(API_BASE_URL) + API_RELAY_FIRMWARE_MANIFEST_PATH);
+    http.addHeader("Accept", "application/json");
+    http.addHeader("Authorization", String("Bearer ") + RELAY_API_TOKEN);
+    http.addHeader("X-Firmware-Version", FIRMWARE_VERSION);
+
+    const int code = http.GET();
+    if (code == 200 || code == 204)
+        markOtaAppValidOnce();
+    if (code != 200)
+    {
+        if (code != 204)
+            g_log.printf("[ota] manifest HTTP %d\n", code);
+        http.end();
+        return false;
+    }
+
+    StaticJsonDocument<768> doc;
+    const DeserializationError err = deserializeJson(doc, http.getString());
+    http.end();
+    if (err)
+    {
+        g_log.println("[ota] manifest JSON invalide");
+        return false;
+    }
+
+    out.version = doc["version"].as<String>();
+    out.url = doc["url"].as<String>();
+    out.sha256 = doc["sha256"].as<String>();
+    out.sizeBytes = doc["size_bytes"] | (size_t)0;
+    if (out.version.isEmpty() || out.url.isEmpty() || out.sha256.length() != 64 || out.sizeBytes == 0)
+    {
+        g_log.println("[ota] manifest incomplet");
+        return false;
+    }
+    return true;
+}
+
+static OtaResult downloadAndFlash(const OtaManifest &m)
+{
+    HTTPClient http;
+    http.setConnectTimeout(OTA_CONNECT_TIMEOUT_MS);
+    http.setTimeout(OTA_STALL_TIMEOUT_MS);
+    http.begin(apiClient(), m.url);
+    http.addHeader("Authorization", String("Bearer ") + RELAY_API_TOKEN);
+
+    const int code = http.GET();
+    if (code != 200)
+    {
+        g_log.printf("[ota] téléchargement HTTP %d\n", code);
+        http.end();
+        return OtaResult::NETWORK_ERROR;
+    }
+
+    if (!Update.begin(m.sizeBytes, U_FLASH))
+    {
+        g_log.printf("[ota] Update.begin() refusé : %s\n", Update.errorString());
+        http.end();
+        // Image trop grande pour le slot : la retenter ne changera rien.
+        return OtaResult::CORRUPT;
+    }
+
+    mbedtls_md_context_t ctx;
+    mbedtls_md_init(&ctx);
+    mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), 0);
+    mbedtls_md_starts(&ctx);
+
+    WiFiClient *stream = http.getStreamPtr();
+    static uint8_t buf[2048]; // hors pile : syncTask est déjà chargée par TLS
+    size_t written = 0;
+    size_t nextLogAt = m.sizeBytes / 10;
+    bool failed = false;
+    stream->setTimeout(1000);
+    uint32_t lastDataMs = millis();
+
+    while (written < m.sizeBytes)
+    {
+        const size_t n = stream->readBytes(buf, std::min(m.sizeBytes - written, sizeof(buf)));
+        if (n == 0)
+        {
+            if (!http.connected() || millis() - lastDataMs > OTA_STALL_TIMEOUT_MS)
+            {
+                g_log.printf("[ota] flux interrompu (%u/%u octets)\n", (unsigned)written, (unsigned)m.sizeBytes);
+                failed = true;
+                break;
+            }
+            continue;
+        }
+        lastDataMs = millis();
+
+        if (Update.write(buf, n) != n)
+        {
+            g_log.printf("[ota] Update.write() : %s\n", Update.errorString());
+            failed = true;
+            break;
+        }
+        mbedtls_md_update(&ctx, buf, n);
+        written += n;
+
+        if (written >= nextLogAt)
+        {
+            g_log.printf("[ota] %u%%\n", (unsigned)(100ULL * written / m.sizeBytes));
+            nextLogAt += m.sizeBytes / 10;
+        }
+    }
+    http.end();
+
+    uint8_t digest[32];
+    mbedtls_md_finish(&ctx, digest);
+    mbedtls_md_free(&ctx);
+
+    if (failed)
+    {
+        Update.abort();
+        return OtaResult::NETWORK_ERROR;
+    }
+    if (!sha256Matches(digest, m.sha256))
+    {
+        g_log.println("[ota] SHA256 incorrect, mise à jour annulée");
+        Update.abort();
+        return OtaResult::CORRUPT;
+    }
+    if (!Update.end(true))
+    {
+        g_log.printf("[ota] Update.end() : %s\n", Update.errorString());
+        return OtaResult::CORRUPT;
+    }
+    return OtaResult::SUCCESS;
+}
+
+/** Pas de mise à jour pendant qu'un téléphone est connecté ou qu'un scan
+ * attend d'être traité : le redémarrage couperait le pointage en cours. */
+static bool otaSafeToRun()
+{
+    NimBLEServer *bleServer = NimBLEDevice::getServer();
+    return !g_pendingScan && (!bleServer || bleServer->getConnectedCount() == 0);
+}
+
+/** Vérifie le manifest et applique la mise à jour si besoin. Ne retourne pas
+ * en cas de succès (redémarrage). Appelée depuis syncTask (pile 16 Ko). */
+static void checkForUpdate()
+{
+    OtaManifest manifest;
+    if (!fetchOtaManifest(manifest) || manifest.version == FIRMWARE_VERSION)
+        return;
+
+    Preferences prefs;
+    prefs.begin("ota", false);
+    const String badVersion = prefs.getString("bad_version", "");
+    prefs.end();
+    if (manifest.version == badVersion)
+        return; // déjà en échec (fichier corrompu) : on attend une autre version
+
+    g_log.printf("[ota] mise à jour %s -> %s (%u octets)\n", FIRMWARE_VERSION, manifest.version.c_str(), (unsigned)manifest.sizeBytes);
+
+    // Borne invisible pendant le téléchargement : un téléphone qui s'y
+    // connecterait verrait son pointage coupé par le redémarrage final.
+    NimBLEDevice::getAdvertising()->stop();
+    const OtaResult result = downloadAndFlash(manifest);
+
+    if (result == OtaResult::SUCCESS)
+    {
+        prefs.begin("ota", false);
+        prefs.remove("bad_version");
+        prefs.end();
+        g_log.println("[ota] flash OK, redémarrage");
+        flushRemoteLogs(); // dernières lignes visibles au backoffice avant le reboot
+        delay(500);
+        ESP.restart();
+    }
+
+    if (result == OtaResult::CORRUPT)
+    {
+        prefs.begin("ota", false);
+        prefs.putString("bad_version", manifest.version);
+        prefs.end();
+        g_log.printf("[ota] version %s mise de côté\n", manifest.version.c_str());
+    }
+    else
+    {
+        g_log.println("[ota] erreur réseau, nouvel essai au prochain cycle");
+    }
+    NimBLEDevice::getAdvertising()->start();
+}
+
 /**
  * Tâche dédiée (pile 16 Ko) pour la synchro périodique : la poignée de main
  * TLS de mbedTLS (HTTPS vers l'API) a besoin de plus de pile que celle de la
  * tâche loop() par défaut — l'y exécuter directement provoquait un
  * débordement de pile sur esp32_borne/, même cause ici. Rythmée par
  * LOG_FLUSH_INTERVAL_MS (moniteur à distance quasi temps réel), la synchro
- * des scans gardant sa propre cadence SYNC_INTERVAL_MS.
+ * des scans gardant sa propre cadence SYNC_INTERVAL_MS, et la vérification
+ * OTA la sienne (OTA_CHECK_INTERVAL_MS, plus une dès la première connexion).
+ * Les trois s'enchaînent dans cette seule tâche : jamais deux connexions TLS
+ * simultanées.
  */
 static void syncTask(void *)
 {
     uint32_t lastSync = millis();
+    uint32_t lastOtaCheck = 0;
+    bool otaCheckedOnce = false;
     for (;;)
     {
         vTaskDelay(pdMS_TO_TICKS(REMOTE_LOG_ENABLED ? LOG_FLUSH_INTERVAL_MS : SYNC_INTERVAL_MS));
@@ -546,6 +808,12 @@ static void syncTask(void *)
             syncWithApi();
         }
         flushRemoteLogs();
+        if ((!otaCheckedOnce || millis() - lastOtaCheck >= OTA_CHECK_INTERVAL_MS) && otaSafeToRun())
+        {
+            otaCheckedOnce = true;
+            lastOtaCheck = millis();
+            checkForUpdate();
+        }
     }
 }
 
@@ -702,7 +970,7 @@ static NimBLECharacteristic *g_bleResultChar = nullptr;
 // lieu dans loop(), sur la tâche principale.
 static SemaphoreHandle_t g_pendingScanMutex = nullptr;
 static String g_pendingScanJson;
-static volatile bool g_pendingScan = false;
+// g_pendingScan : déclaré en tête de fichier (lu aussi par otaSafeToRun()).
 
 // Buffer d'accumulation des chunks photo (BLE_TAG_PHOTO_CHUNK) reçus AVANT le
 // tag final (BLE_TAG_SCAN_FINAL) — voir ScanCharCallbacks. Transféré vers
@@ -954,8 +1222,8 @@ void setup()
 
     // Cause du dernier redémarrage : permet de repérer depuis le backoffice
     // un brownout (voir ci-dessus) ou un crash (panic/watchdog) sans câble USB.
-    g_log.printf("[boot] démarrage, cause du reset=%d (1=mise sous tension, 4=panic, 5-7=watchdog, 9=brownout)\n",
-                 (int)esp_reset_reason());
+    g_log.printf("[boot] firmware %s, cause du reset=%d (1=mise sous tension, 4=panic, 5-7=watchdog, 9=brownout)\n",
+                 FIRMWARE_VERSION, (int)esp_reset_reason());
 
     setupStorage();
     g_log.printf("[queue] %u paquet(s) en attente au démarrage\n", (unsigned)queueLength());

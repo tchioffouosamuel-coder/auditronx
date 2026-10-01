@@ -14,11 +14,12 @@ class Device extends Model implements AuthenticatableContract
 {
     use Authenticatable, HasApiTokens, HasFactory;
 
-    protected $fillable = ['teacher_id', 'device_uuid', 'device_type', 'activated_at', 'otp_id', 'revoked_at', 'fcm_token'];
+    protected $fillable = ['teacher_id', 'device_uuid', 'device_type', 'activated_at', 'otp_id', 'revoked_at', 'fcm_token', 'firmware_version', 'firmware_checked_at'];
 
     protected $casts = [
         'activated_at' => 'datetime',
         'revoked_at' => 'datetime',
+        'firmware_checked_at' => 'datetime',
     ];
 
     public function teacher(): BelongsTo

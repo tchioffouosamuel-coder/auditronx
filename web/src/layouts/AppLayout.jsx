@@ -40,6 +40,7 @@ const NAV_SECTIONS = [
     links: [
       { to: '/appareils', label: 'Appareils & points d’accès' },
       { to: '/moniteur-bornes', label: 'Moniteur des bornes' },
+      { to: '/firmwares', label: 'Mises à jour firmware' },
     ],
   },
 ]

@@ -110,3 +110,19 @@ inline constexpr size_t LOG_LINE_MAX_LEN = 240;
 inline constexpr size_t LOG_BATCH_MAX_LINES = 30;
 
 inline constexpr char NTP_SERVER[] = "pool.ntp.org";
+
+// ---- Mises à jour OTA (backoffice > Mises à jour firmware) ----
+// Version de CE binaire, au format x.y.z. À incrémenter avant chaque build
+// destiné à l'OTA et à saisir à l'identique dans le backoffice lors de
+// l'upload : la borne flashe dès que la version active côté serveur diffère
+// de celle-ci (activer une version plus ancienne fait donc un rollback).
+inline constexpr char FIRMWARE_VERSION[] = "1.0.0";
+inline constexpr char API_RELAY_FIRMWARE_MANIFEST_PATH[] = "/api/relay/firmware/manifest";
+// Cadence de vérification du manifest (en plus d'une vérification dès la
+// première connexion WiFi). Pas de canal push ici, contrairement au MQTT de
+// campuspass : c'est le délai max entre l'activation et la mise à jour.
+inline constexpr uint32_t OTA_CHECK_INTERVAL_MS = 10UL * 60UL * 1000UL;
+inline constexpr uint32_t OTA_CONNECT_TIMEOUT_MS = 6000;
+// Timeout d'INACTIVITÉ du téléchargement (le chrono repart à chaque paquet
+// reçu), pas un timeout global : un lien lent mais vivant va au bout.
+inline constexpr uint32_t OTA_STALL_TIMEOUT_MS = 15000;

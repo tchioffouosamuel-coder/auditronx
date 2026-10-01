@@ -13,6 +13,7 @@ import DisciplinesPage from "./pages/DisciplinesPage";
 import EmploisPage from "./pages/EmploisPage";
 import FeriesPage from "./pages/FeriesPage";
 import FicheProgressionPage from "./pages/FicheProgressionPage";
+import FirmwaresPage from "./pages/FirmwaresPage";
 import LoginPage from "./pages/LoginPage";
 import MoniteurBornesPage from "./pages/MoniteurBornesPage";
 import PersonnelPage from "./pages/PersonnelPage";
@@ -62,6 +63,7 @@ export default function App() {
             />
             <Route path="/appareils" element={<AppareilsPage />} />
             <Route path="/moniteur-bornes" element={<MoniteurBornesPage />} />
+            <Route path="/firmwares" element={<FirmwaresPage />} />
           </Route>
         </Routes>
       </AuthProvider>

@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\EmploiDuTempsController;
 use App\Http\Controllers\Api\EnseignantController;
 use App\Http\Controllers\Api\FerieController;
 use App\Http\Controllers\Api\FicheProgressionController;
+use App\Http\Controllers\Api\FirmwareController;
 use App\Http\Controllers\Api\MyPresenceController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OtpController;
@@ -129,6 +130,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/devices/{device}/logs', [DeviceLogController::class, 'destroy'])->middleware('backoffice');
     // Import manuel du queue.jsonl d'une borne qui ne parvient pas à synchroniser.
     Route::post('/relay/import', [RelayImportController::class, 'import'])->middleware('backoffice');
+
+    // Mises à jour OTA des bornes : gestion (backoffice) + manifest/téléchargement (borne).
+    Route::middleware('backoffice')->group(function () {
+        Route::get('/firmwares', [FirmwareController::class, 'index']);
+        Route::post('/firmwares', [FirmwareController::class, 'store']);
+        Route::post('/firmwares/{firmware}/activate', [FirmwareController::class, 'activate']);
+        Route::post('/firmwares/{firmware}/deactivate', [FirmwareController::class, 'deactivate']);
+        Route::delete('/firmwares/{firmware}', [FirmwareController::class, 'destroy']);
+    });
+    Route::get('/relay/firmware/manifest', [FirmwareController::class, 'manifest']);
+    Route::get('/relay/firmware/{firmware}/download', [FirmwareController::class, 'download']);
     Route::apiResource('access-points', AccessPointController::class)
         ->parameters(['access-points' => 'accessPoint'])
         ->except(['show']);
