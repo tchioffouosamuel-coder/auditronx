@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "../lib/api";
-import { formatDateTime } from "../lib/datetime";
+import { formatDateTime, TIME_ZONE } from "../lib/datetime";
 import DataTable from "./DataTable";
 
 const STATUS = {
@@ -14,6 +14,65 @@ const STATUS = {
 
 const TYPE_LABEL = { scan: "Scan", admin_proxy: "Procuration" };
 
+const timeFormat = new Intl.DateTimeFormat("fr-FR", { timeZone: TIME_ZONE, hour: "2-digit", minute: "2-digit" });
+
+/** Recherche d'un enseignant (GET /personnel?q=) pour attribuer un token introuvable. */
+function TeacherPicker({ value, onChange }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+
+  useEffect(() => {
+    if (query.trim().length < 2) return;
+    const id = setTimeout(() => {
+      api
+        .get("/personnel", { params: { q: query.trim() } })
+        .then(({ data }) => setResults((data.data ?? []).slice(0, 8)))
+        .catch(() => setResults([]));
+    }, 300);
+    return () => clearTimeout(id);
+  }, [query]);
+
+  if (value) {
+    return (
+      <span className="flex items-center gap-2 text-sm">
+        <span className="font-medium text-ink-900">{value.nom}</span>
+        <button onClick={() => onChange(null)} className="text-ink-500 hover:text-red-600" title="Retirer l'attribution">
+          ✕
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <input
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Nom ou matricule…"
+        className="w-64 rounded-md border border-ink-100 px-3 py-1 text-sm"
+      />
+      {query.trim().length >= 2 && results.length > 0 && (
+        <div className="absolute z-20 mt-1 w-64 rounded-md border border-ink-100 bg-white shadow-lg">
+          {results.map((e) => (
+            <button
+              key={e.id}
+              onClick={() => {
+                onChange({ id: e.id, nom: e.nom });
+                setQuery("");
+                setResults([]);
+              }}
+              className="block w-full px-3 py-1.5 text-left text-sm hover:bg-ink-50"
+            >
+              {e.nom} <span className="text-xs text-ink-500">{e.matricule}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Import manuel du fichier `queue.jsonl` d'une borne (carte micro-SD) qui ne
  * parvient pas à synchroniser : analyse d'abord (aucun enregistrement), puis
@@ -25,14 +84,20 @@ export default function RelayQueueImport() {
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // n° de token introuvable => { id, nom } de l'enseignant attribué par l'admin.
+  const [assignments, setAssignments] = useState({});
 
-  async function send(dryRun) {
+  async function send(dryRun, currentAssignments = assignments) {
     setBusy(true);
     setError(null);
     try {
       const form = new FormData();
       form.append("file", file);
       form.append("dry_run", dryRun ? "1" : "0");
+      form.append(
+        "assignments",
+        JSON.stringify(Object.fromEntries(Object.entries(currentAssignments).map(([tokenId, e]) => [tokenId, e.id]))),
+      );
       const { data } = await api.post("/relay/import", form, {
         headers: { "Content-Type": "multipart/form-data" },
       });
@@ -52,7 +117,29 @@ export default function RelayQueueImport() {
     setFile(e.target.files?.[0] ?? null);
     setResult(null);
     setError(null);
+    setAssignments({});
   }
+
+  /** Attribution modifiée : nouvelle analyse pour mettre à jour l'aperçu. */
+  function assign(tokenId, enseignant) {
+    const next = { ...assignments };
+    if (enseignant) next[tokenId] = enseignant;
+    else delete next[tokenId];
+    setAssignments(next);
+    send(true, next);
+  }
+
+  // Tokens introuvables (enseignant reconnecté depuis le scan) : regroupés
+  // par token, car un même token = un même téléphone = un même enseignant.
+  const unknownTokens = useMemo(() => {
+    if (!result?.dry_run) return [];
+    const groups = {};
+    for (const l of result.lines) {
+      if (!l.unknown_token || l.token_id === null) continue;
+      (groups[l.token_id] ??= []).push(l);
+    }
+    return Object.entries(groups).map(([tokenId, lines]) => ({ tokenId, lines }));
+  }, [result]);
 
   const pendingCount = result?.dry_run ? (result.summary.pending ?? 0) : 0;
 
@@ -91,6 +178,29 @@ export default function RelayQueueImport() {
         </div>
         {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
       </div>
+
+      {unknownTokens.length > 0 && (
+        <div className="mb-4 rounded-lg border border-gold-300 bg-gold-100/40 p-4">
+          <p className="mb-1 text-sm font-medium text-ink-900">Tokens introuvables : à attribuer manuellement</p>
+          <p className="mb-3 text-sm text-ink-700">
+            Ces enseignants se sont reconnectés à l'application entre leur scan et la synchronisation : leur ancien
+            token a été supprimé. Tous les pointages d'un même token viennent du même téléphone. Indiquez à qui il
+            appartient, après vérification auprès des enseignants concernés : ces présences seront enregistrées en
+            source « manuel », à votre nom.
+          </p>
+          <div className="space-y-2">
+            {unknownTokens.map(({ tokenId, lines }) => (
+              <div key={tokenId} className="flex flex-wrap items-center gap-3 rounded-md bg-white px-3 py-2">
+                <span className="w-28 font-mono text-xs text-ink-700">Token n°{tokenId}</span>
+                <span className="min-w-48 flex-1 text-sm text-ink-700">
+                  {lines.length} pointage(s) : {lines.map((l) => timeFormat.format(new Date(l.captured_at))).join(", ")}
+                </span>
+                <TeacherPicker value={assignments[tokenId]} onChange={(e) => assign(tokenId, e)} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {result && (
         <>

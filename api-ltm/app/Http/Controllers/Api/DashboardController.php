@@ -28,16 +28,24 @@ class DashboardController extends Controller
             ->get()
             ->groupBy('enseignant_id');
         $planifies = $enseignants->filter(fn(Enseignant $e) => $emploisDuJour->has($e->id))->values();
+        // Présences de TOUT le personnel accessible, pas seulement de ceux qui
+        // ont cours ce jour : un enseignant venu sans cours planifié (réunion,
+        // permanence, emploi du temps incomplet...) compte parmi les présents.
+        // Absents et retardataires restent calculés sur les seuls planifiés :
+        // sans cours, ni absence ni retard ne sont définis.
         $presencesDuJour = Presence::where('date', $date->toDateString())
-            ->whereIn('enseignant_id', $planifies->pluck('id'))
+            ->whereIn('enseignant_id', $enseignants->pluck('id'))
             ->get()
             ->keyBy('enseignant_id');
+        $presentsSansCours = $enseignants
+            ->filter(fn(Enseignant $e) => ! $emploisDuJour->has($e->id) && $presencesDuJour->get($e->id)?->heure_arrivee)
+            ->sortBy('nom');
 
         $scannes = [];
         $absents = [];
         $retardataires = [];
 
-        foreach ($planifies as $enseignant) {
+        foreach ($planifies->concat($presentsSansCours) as $enseignant) {
             $presence = $presencesDuJour->get($enseignant->id);
             $cours = $emploisDuJour->get($enseignant->id, collect());
             $detail = [
@@ -52,11 +60,15 @@ class DashboardController extends Controller
                     'heure_debut' => substr((string) $emploi->heure_debut, 0, 5),
                     'heure_fin' => substr((string) $emploi->heure_fin, 0, 5),
                 ])->values()->all(),
+                'hors_emploi_du_temps' => $cours->isEmpty(),
             ];
             $premierCours = $cours->sortBy('heure_debut')->first();
-            $heureLimiteAbsence = Carbon::parse($date->toDateString() . ' ' . $premierCours->heure_debut)->addMinutes(5);
-            $absenceEligible = $date->isBefore(Carbon::today())
-                || ($date->isSameDay(Carbon::today()) && now()->greaterThanOrEqualTo($heureLimiteAbsence));
+            $absenceEligible = $premierCours && (
+                $date->isBefore(Carbon::today())
+                || ($date->isSameDay(Carbon::today()) && now()->greaterThanOrEqualTo(
+                    Carbon::parse($date->toDateString() . ' ' . $premierCours->heure_debut)->addMinutes(5)
+                ))
+            );
 
             if ($presence?->heure_arrivee) {
                 $minutesRetard = $retards->minutesDeRetard($enseignant, $presence) ?? 0;

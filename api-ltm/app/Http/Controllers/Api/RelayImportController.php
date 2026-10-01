@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Enseignant;
+use App\Models\User;
 use App\Services\RelayPacketProcessor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -39,8 +41,11 @@ class RelayImportController extends Controller
             // SD de 2000 paquets (MAX_QUEUE_SIZE_SD côté firmware).
             'file' => ['required', 'file', 'max:51200'],
             'dry_run' => ['sometimes', 'boolean'],
+            // JSON {"<n° de token>": <enseignant_id>} — voir assignmentFor().
+            'assignments' => ['sometimes', 'nullable', 'json'],
         ]);
         $dryRun = $request->boolean('dry_run');
+        $this->assignments = $this->loadAssignments($request);
 
         // Chaque paquet peut stocker une photo : quelques centaines de lignes
         // dépassent vite le max_execution_time par défaut (30 s).
@@ -71,9 +76,38 @@ class RelayImportController extends Controller
         ]);
     }
 
+    /** @var array<int, array{enseignant: Enseignant, by: User}> n° de token => attribution */
+    private array $assignments = [];
+
+    /**
+     * Attributions manuelles des scans dont le token a disparu (enseignant
+     * reconnecté entre le scan et la synchro : DeviceController supprime
+     * alors l'ancien token). Les paquets d'un même token viennent forcément
+     * du même téléphone, donc du même enseignant : l'admin attribue un token
+     * entier, pas ligne par ligne.
+     */
+    private function loadAssignments(Request $request): array
+    {
+        $raw = json_decode((string) $request->input('assignments', ''), true);
+        if (! is_array($raw)) {
+            return [];
+        }
+
+        $enseignants = Enseignant::whereIn('id', array_filter(array_map('intval', $raw)))->get()->keyBy('id');
+        $assignments = [];
+        foreach ($raw as $tokenId => $enseignantId) {
+            $enseignant = $enseignants->get((int) $enseignantId);
+            if (ctype_digit((string) $tokenId) && $enseignant) {
+                $assignments[(int) $tokenId] = ['enseignant' => $enseignant, 'by' => $request->user()];
+            }
+        }
+
+        return $assignments;
+    }
+
     private function handleLine(int $lineNumber, string $raw, array &$seenLocalIds, bool $dryRun): array
     {
-        $row = ['line' => $lineNumber, 'local_id' => null, 'type' => null, 'captured_at' => null, 'enseignant' => null, 'has_photo' => false];
+        $row = ['line' => $lineNumber, 'local_id' => null, 'type' => null, 'captured_at' => null, 'enseignant' => null, 'has_photo' => false, 'token_id' => null, 'unknown_token' => false, 'assigned' => false];
 
         $packet = json_decode($raw, true);
         if (! is_array($packet)) {
@@ -98,10 +132,23 @@ class RelayImportController extends Controller
         }
         $seenLocalIds[$packet['local_id']] = $lineNumber;
 
-        try {
-            $enseignant = $this->processor->targetTeacher($packet);
-        } catch (ValidationException $e) {
-            return $row + ['status' => 'rejected', 'message' => $e->getMessage()];
+        $row['token_id'] = $this->processor->tokenId($packet);
+        $assignment = null;
+
+        if ($this->processor->hasUnknownToken($packet)) {
+            $row['unknown_token'] = true;
+            $assignment = $this->assignments[$row['token_id']] ?? null;
+            if (! $assignment) {
+                return $row + ['status' => 'rejected', 'message' => 'Token enseignant invalide.'];
+            }
+            $row['assigned'] = true;
+            $enseignant = $assignment['enseignant'];
+        } else {
+            try {
+                $enseignant = $this->processor->targetTeacher($packet);
+            } catch (ValidationException $e) {
+                return $row + ['status' => 'rejected', 'message' => $e->getMessage()];
+            }
         }
         $row['enseignant'] = $enseignant->nom;
 
@@ -110,10 +157,10 @@ class RelayImportController extends Controller
         }
 
         if ($dryRun) {
-            return $row + ['status' => 'pending', 'message' => null];
+            return $row + ['status' => 'pending', 'message' => $row['assigned'] ? 'Attribué manuellement.' : null];
         }
 
-        $result = $this->processor->process($packet);
+        $result = $this->processor->process($packet, $assignment);
 
         return $row + ['status' => $result['status'], 'message' => $result['message'] ?? null];
     }

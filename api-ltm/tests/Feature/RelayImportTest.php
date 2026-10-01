@@ -82,6 +82,47 @@ class RelayImportTest extends TestCase
         $this->assertSame('12:00', $presence->fresh()->heure_depart->format('H:i'));
     }
 
+    public function test_un_token_disparu_peut_etre_attribue_manuellement_a_un_enseignant(): void
+    {
+        [$ancien, $packet] = $this->scanPacket();
+        $tokenId = (int) strstr($packet['teacher_token'], '|', true);
+        // Reconnexion de l'enseignant entre le scan et la synchro : l'ancien token disparaît.
+        $ancien->tokens()->delete();
+        $admin = User::factory()->create();
+        $this->actingAs($admin);
+
+        $this->post('/api/relay/import', ['file' => $this->queueFile([$packet]), 'dry_run' => 1])
+            ->assertJsonPath('lines.0.status', 'rejected')
+            ->assertJsonPath('lines.0.unknown_token', true)
+            ->assertJsonPath('lines.0.token_id', $tokenId);
+
+        $this->post('/api/relay/import', [
+            'file' => $this->queueFile([$packet]),
+            'assignments' => json_encode([$tokenId => $ancien->id]),
+        ])->assertOk()->assertJsonPath('lines.0.status', 'ok')->assertJsonPath('lines.0.assigned', true);
+
+        $presence = Presence::where('enseignant_id', $ancien->id)->firstOrFail();
+        $this->assertSame('manuel', $presence->source);
+        $this->assertSame($admin->id, $presence->recorded_by);
+        $this->assertStringContainsString("token n°{$tokenId}", $presence->reason);
+    }
+
+    public function test_une_attribution_ne_remplace_jamais_un_token_valide(): void
+    {
+        [$enseignant, $packet] = $this->scanPacket();
+        $autre = Enseignant::factory()->create();
+        $tokenId = (int) strstr($packet['teacher_token'], '|', true);
+        $this->actingAs(User::factory()->create());
+
+        $this->post('/api/relay/import', [
+            'file' => $this->queueFile([$packet]),
+            'assignments' => json_encode([$tokenId => $autre->id]),
+        ])->assertOk()->assertJsonPath('lines.0.status', 'ok')->assertJsonPath('lines.0.assigned', false);
+
+        $this->assertTrue(Presence::where('enseignant_id', $enseignant->id)->exists());
+        $this->assertFalse(Presence::where('enseignant_id', $autre->id)->exists());
+    }
+
     public function test_un_enseignant_ne_peut_pas_importer(): void
     {
         $enseignant = Enseignant::factory()->create();

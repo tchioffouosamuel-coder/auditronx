@@ -68,12 +68,16 @@ function PeopleList({ title, people = [], tone = "neutral" }) {
                     {person.matricule || "—"}
                   </td>
                   <td className="px-2 py-3 text-ink-500">
-                    {(person.cours || [])
-                      .map(
-                        (course) =>
-                          `${course.classe || "—"} ${course.heure_debut || ""}-${course.heure_fin || ""}`,
-                      )
-                      .join(" · ") || "—"}
+                    {person.hors_emploi_du_temps ? (
+                      <span className="italic text-ink-300">Pas de cours ce jour</span>
+                    ) : (
+                      (person.cours || [])
+                        .map(
+                          (course) =>
+                            `${course.classe || "—"} ${course.heure_debut || ""}-${course.heure_fin || ""}`,
+                        )
+                        .join(" · ") || "—"
+                    )}
                   </td>
                   <td className="whitespace-nowrap px-2 py-3 text-ink-500">
                     {person.heure_arrivee || "—"}

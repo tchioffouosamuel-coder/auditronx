@@ -5,3 +5,7 @@
 
 # Éditeurs/IDE
 .vscode/
+
+# Sauvegardes de la flash des bornes (recuperer_file.ps1) : contiennent les
+# tokens des enseignants et les selfies, ne jamais les commiter.
+*/backup/

@@ -49,8 +49,11 @@ class RelayPacketProcessor
     /**
      * Statuts renvoyés : `ok` (enregistré), `rejected` (invalide, inutile de
      * réessayer : la borne peut purger), `retry` (erreur transitoire).
+     *
+     * $assignment (import manuel uniquement, voir assignTeacher()) : scan dont
+     * le token a disparu, attribué à la main par un admin.
      */
-    public function process(array $packet): array
+    public function process(array $packet, ?array $assignment = null): array
     {
         $localId = $packet['local_id'];
 
@@ -59,9 +62,11 @@ class RelayPacketProcessor
             $payload = $packet['payload'];
             $photoBase64 = $payload['photo_base64'] ?? null;
 
-            $acteur = $packet['type'] === 'scan'
-                ? $this->resolveTeacher($packet['teacher_token'])
-                : $this->resolveProxyActor($packet['teacher_token']);
+            $acteur = match (true) {
+                $assignment !== null => $assignment['enseignant'],
+                $packet['type'] === 'scan' => $this->resolveTeacher($packet['teacher_token']),
+                default => $this->resolveProxyActor($packet['teacher_token']),
+            };
 
             $presence = $packet['type'] === 'scan'
                 ? $this->recorder->recordSelfScan(
@@ -70,9 +75,13 @@ class RelayPacketProcessor
                     (string) ($payload['qr_code'] ?? ''),
                     (string) ($payload['bssid'] ?? ''),
                     $capturedAt,
-                    source: 'app_mobile',
+                    source: $assignment ? 'manuel' : 'app_mobile',
                     deviceCaptureAt: $capturedAt,
                     photoBase64: $photoBase64,
+                    extraAttributes: $assignment ? [
+                        'recorded_by' => $assignment['by']->id,
+                        'reason' => "Import file borne : token n°{$this->tokenId($packet)} introuvable, attribué manuellement",
+                    ] : [],
                 )
                 : $this->recordProxyPacket($acteur, $payload, $capturedAt, $photoBase64);
 
@@ -116,6 +125,25 @@ class RelayPacketProcessor
         }
 
         return $cible;
+    }
+
+    /** Partie publique `id` d'un token Sanctum `id|secret` (null si mal formé). */
+    public function tokenId(array $packet): ?int
+    {
+        $id = strstr((string) ($packet['teacher_token'] ?? ''), '|', true);
+
+        return ctype_digit((string) $id) ? (int) $id : null;
+    }
+
+    /**
+     * Vrai si le token du paquet n'existe plus en base (supprimé par une
+     * reconnexion de l'enseignant, une révocation...) : seul cas où un admin
+     * peut attribuer le scan à la main. Un token existant n'est jamais
+     * remplaçable — l'attribution ne peut pas réécrire l'identité d'un scan valide.
+     */
+    public function hasUnknownToken(array $packet): bool
+    {
+        return $packet['type'] === 'scan' && PersonalAccessToken::findToken($packet['teacher_token']) === null;
     }
 
     /**

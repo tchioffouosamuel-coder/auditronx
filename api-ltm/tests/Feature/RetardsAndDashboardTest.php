@@ -106,4 +106,25 @@ class RetardsAndDashboardTest extends TestCase
         $this->assertSame(1, $response->json('absents'));
         $this->assertSame(0, $response->json('retardataires'));
     }
+
+    public function test_le_dashboard_compte_aussi_les_presents_sans_cours_ce_jour(): void
+    {
+        $this->actingAsBackoffice();
+
+        $sansCours = Enseignant::factory()->create(['section' => 'Sciences']);
+        Presence::create([
+            'enseignant_id' => $sansCours->id,
+            'date' => now()->toDateString(),
+            'heure_arrivee' => now()->toDateString() . ' 08:00:00',
+        ]);
+        // Sans cours ni pointage : ni présent, ni absent.
+        Enseignant::factory()->create(['section' => 'Sciences']);
+
+        $response = $this->getJson('/api/dashboard')->assertOk();
+
+        $this->assertSame(1, $response->json('presents'));
+        $this->assertSame(0, $response->json('absents'));
+        $this->assertSame(0, $response->json('retardataires'));
+        $this->assertTrue($response->json('scannes.0.hors_emploi_du_temps'));
+    }
 }

@@ -39,6 +39,7 @@ class AttendanceRecorder
         string $source = 'app_mobile',
         ?Carbon $deviceCaptureAt = null,
         ?string $photoBase64 = null,
+        array $extraAttributes = [],
     ): Presence {
         $accessPoint = $this->resolveAccessPoint($qrCode, $bssid);
 
@@ -47,6 +48,7 @@ class AttendanceRecorder
             'access_point_id' => $accessPoint->id,
             'device_id' => $deviceId,
             'device_capture_at' => $deviceCaptureAt,
+            ...$extraAttributes,
         ], $photoBase64);
     }
 
