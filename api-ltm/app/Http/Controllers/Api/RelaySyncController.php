@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Device;
 use App\Services\RelayPacketProcessor;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 
 /**
  * Passerelle offline (§hardware) : la borne ESP32-S3 (WIFI_AP_STA + caméra
@@ -51,13 +52,25 @@ class RelaySyncController extends Controller
 
         $data = $request->validate([
             'packets' => ['required', 'array', 'min:1', 'max:100'],
-            ...RelayPacketProcessor::rules('packets.*.'),
         ]);
 
-        $results = array_map(
-            fn(array $packet) => $this->processor->process($packet),
-            $data['packets'],
-        );
+        // Validation paquet par paquet, pas sur tout le lot : un seul paquet
+        // mal formé faisait échouer la requête entière en 422, la borne le
+        // gardait en tête de file et le renvoyait indéfiniment, bloquant tous
+        // les suivants. Un paquet invalide est désormais `rejected` (la borne
+        // le purge par son local_id) et n'empêche plus le traitement des autres.
+        $results = array_map(function ($packet) {
+            $validator = Validator::make(is_array($packet) ? $packet : [], RelayPacketProcessor::rules());
+            if ($validator->fails()) {
+                return [
+                    'local_id' => is_array($packet) && is_string($packet['local_id'] ?? null) ? $packet['local_id'] : null,
+                    'status' => 'rejected',
+                    'message' => $validator->errors()->first(),
+                ];
+            }
+
+            return $this->processor->process($validator->validated());
+        }, $data['packets']);
 
         return response()->json(['results' => $results]);
     }

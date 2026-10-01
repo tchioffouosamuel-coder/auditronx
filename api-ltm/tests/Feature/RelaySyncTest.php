@@ -53,6 +53,39 @@ class RelaySyncTest extends TestCase
      * ce qui aurait fait échouer TOUT scan relayé par la borne avec "QR code
      * non reconnu", même pour un QR/BSSID parfaitement valides.
      */
+    /**
+     * Régression : un paquet vide (ligne "null" écrite par la borne quand son
+     * document JSON n'a pas pu être alloué) faisait échouer TOUT le lot en
+     * 422, et la borne le renvoyait en boucle, bloquant les paquets suivants.
+     */
+    public function test_un_paquet_invalide_est_rejete_sans_bloquer_les_autres(): void
+    {
+        $this->actingAsRelay();
+        $enseignant = Enseignant::factory()->create();
+        $token = $enseignant->createToken('mobile')->plainTextToken;
+        $qrPoint = QrPoint::factory()->create();
+        $accessPoint = AccessPoint::factory()->create();
+
+        $this->postJson('/api/relay/sync', [
+            'packets' => [
+                null,
+                ['local_id' => 'borne-incomplet', 'type' => 'scan'],
+                [
+                    'local_id' => 'borne-valide',
+                    'type' => 'scan',
+                    'captured_at' => now()->toIso8601String(),
+                    'teacher_token' => $token,
+                    'payload' => ['qr_code' => $qrPoint->code, 'bssid' => $accessPoint->bssid],
+                ],
+            ],
+        ])->assertOk()
+            ->assertJsonPath('results.0.status', 'rejected')
+            ->assertJsonPath('results.0.local_id', null)
+            ->assertJsonPath('results.1.status', 'rejected')
+            ->assertJsonPath('results.1.local_id', 'borne-incomplet')
+            ->assertJsonPath('results.2.status', 'ok');
+    }
+
     public function test_un_scan_relaye_valide_est_accepte(): void
     {
         $this->actingAsRelay();

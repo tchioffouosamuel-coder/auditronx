@@ -251,17 +251,36 @@ static size_t queueLength()
     return n;
 }
 
-static void appendToQueue(const String &json)
+/** false si la ligne n'a pas été entièrement écrite (flash/SD pleine ou
+ * absente) : l'appelant ne doit alors PAS confirmer le scan au téléphone. */
+static bool appendToQueue(const String &json)
 {
     MutexGuard guard(g_fsMutex);
     File f = g_queueFs->open(QUEUE_FILE, "a", true);
     if (!f)
     {
         g_log.println("[queue] échec ouverture flash en écriture");
-        return;
+        return false;
     }
-    f.println(json);
+    const size_t written = f.println(json);
     f.close();
+    if (written < json.length())
+    {
+        g_log.printf("[queue] écriture incomplète (%u/%u octets), stockage plein ?\n", (unsigned)written, (unsigned)json.length());
+        return false;
+    }
+    return true;
+}
+
+/** Un paquet exploitable : objet JSON avec un local_id non vide. Une ligne
+ * `null`, un scalaire ou un objet sans local_id (écrit par une version
+ * antérieure à cause d'un DynamicJsonDocument non alloué, voir processScan)
+ * ne passera jamais la validation de l'API et ne peut pas être purgé par son
+ * local_id : il bloquerait la file indéfiniment (422 en boucle). */
+static bool isValidPacket(const JsonDocument &doc)
+{
+    const char *localId = doc["local_id"] | "";
+    return doc.is<JsonObjectConst>() && localId[0] != '\0';
 }
 
 static bool readQueueBatch(std::vector<QueuedPacket> &out)
@@ -270,10 +289,20 @@ static bool readQueueBatch(std::vector<QueuedPacket> &out)
     if (!g_queueFs->exists(QUEUE_FILE))
         return true;
 
+    // Un seul gros bloc pour toute la lecture (pas un par ligne) : moins de
+    // fragmentation du tas, déjà sollicité par TLS et BLE.
+    DynamicJsonDocument doc(PACKET_JSON_CAPACITY);
+    if (doc.capacity() == 0)
+    {
+        g_log.println("[queue] mémoire insuffisante pour lire la file, nouvel essai plus tard");
+        return false;
+    }
+
     File f = g_queueFs->open(QUEUE_FILE, "r");
     if (!f)
         return false;
 
+    unsigned skipped = 0;
     while (f.available() && out.size() < SYNC_BATCH_SIZE)
     {
         String line = f.readStringUntil('\n');
@@ -281,9 +310,11 @@ static bool readQueueBatch(std::vector<QueuedPacket> &out)
         if (line.length() == 0)
             continue;
 
-        DynamicJsonDocument doc(PACKET_JSON_CAPACITY);
-        if (deserializeJson(doc, line) != DeserializationError::Ok)
+        if (deserializeJson(doc, line) != DeserializationError::Ok || !isValidPacket(doc))
+        {
+            skipped++;
             continue;
+        }
 
         QueuedPacket p;
         p.local_id = doc["local_id"].as<String>();
@@ -291,6 +322,8 @@ static bool readQueueBatch(std::vector<QueuedPacket> &out)
         out.push_back(p);
     }
     f.close();
+    if (skipped > 0)
+        g_log.printf("[queue] %u ligne(s) invalide(s) ignorée(s), purgées à la prochaine confirmation\n", skipped);
     return true;
 }
 
@@ -303,11 +336,18 @@ static void removeFromQueue(const std::vector<String> &idsToRemove)
     if (!g_queueFs->exists(QUEUE_FILE))
         return;
 
+    // Pas de mémoire pour analyser la file : on ne réécrit rien plutôt que de
+    // risquer de jeter des paquets valides (nouvel essai au prochain cycle).
+    DynamicJsonDocument doc(PACKET_JSON_CAPACITY);
+    if (doc.capacity() == 0)
+        return;
+
     File in = g_queueFs->open(QUEUE_FILE, "r");
     if (!in)
         return;
 
     String kept;
+    unsigned purged = 0;
     while (in.available())
     {
         String line = in.readStringUntil('\n');
@@ -316,11 +356,19 @@ static void removeFromQueue(const std::vector<String> &idsToRemove)
         if (trimmed.length() == 0)
             continue;
 
-        DynamicJsonDocument doc(PACKET_JSON_CAPACITY);
-        if (deserializeJson(doc, trimmed) != DeserializationError::Ok)
+        const DeserializationError err = deserializeJson(doc, trimmed);
+        if (err == DeserializationError::NoMemory)
         {
+            // Ligne trop grosse pour le document, pas forcément invalide : gardée.
             kept += trimmed;
             kept += '\n';
+            continue;
+        }
+        if (err || !isValidPacket(doc))
+        {
+            // Ligne tronquée (coupure pendant l'écriture) ou paquet vide
+            // (voir isValidPacket) : jamais exploitable, on la purge.
+            purged++;
             continue;
         }
 
@@ -347,6 +395,8 @@ static void removeFromQueue(const std::vector<String> &idsToRemove)
         return;
     out.print(kept);
     out.close();
+    if (purged > 0)
+        g_log.printf("[queue] %u ligne(s) invalide(s) purgée(s) de la file\n", purged);
 }
 
 static void setupStorage()
@@ -913,7 +963,19 @@ static String processScan(const String &rawJson, const String &photoBase64)
     char localId[40];
     makeLocalId(localId, sizeof(localId));
 
+    // ArduinoJson n'échoue pas bruyamment : si le tas (fragmenté par BLE + TLS,
+    // pas de PSRAM ici) n'a pas 20 Ko d'un seul tenant, le document a une
+    // capacité nulle, toutes les écritures ci-dessous sont ignorées et la
+    // sérialisation produit "null". Ce "null" était écrit dans la file et le
+    // téléphone recevait queued=true : scan perdu, et la ligne bloquait toute
+    // la synchro (422 en boucle). On refuse donc explicitement : le téléphone
+    // affiche l'erreur et l'enseignant rescanne.
     DynamicJsonDocument out(PACKET_JSON_CAPACITY);
+    if (out.capacity() == 0)
+    {
+        g_log.printf("[queue] mémoire insuffisante (bloc libre max %u o), scan refusé\n", (unsigned)ESP.getMaxAllocHeap());
+        return "{\"error\":\"borne momentanément saturée, réessayez\"}";
+    }
     out["local_id"] = localId;
     out["type"] = type;
     out["teacher_token"] = in["teacher_token"];
@@ -923,6 +985,11 @@ static String processScan(const String &rawJson, const String &photoBase64)
         out["payload"]["bssid"] = NimBLEDevice::getAddress().toString();
     }
     out["captured_at"] = capturedAt;
+    if (out.overflowed())
+    {
+        g_log.println("[queue] paquet incomplet (document saturé), scan refusé");
+        return "{\"error\":\"borne momentanément saturée, réessayez\"}";
+    }
 
     bool photoCaptured = false;
     if (photoBase64.length() > 0)
@@ -944,8 +1011,12 @@ static String processScan(const String &rawJson, const String &photoBase64)
 
     // Écriture sur flash AVANT toute réponse au téléphone ou tentative
     // réseau : c'est ce qui garantit qu'un scan accepté ne se perd jamais,
-    // même si l'ESP32 redémarre dans la seconde qui suit.
-    appendToQueue(serialized);
+    // même si l'ESP32 redémarre dans la seconde qui suit. Et pas de
+    // queued=true si l'écriture a échoué : le téléphone doit le savoir.
+    if (!serialized.startsWith("{") || !appendToQueue(serialized))
+    {
+        return "{\"error\":\"enregistrement impossible sur la borne, réessayez\"}";
+    }
 
     StaticJsonDocument<160> resp;
     resp["queued"] = true;
