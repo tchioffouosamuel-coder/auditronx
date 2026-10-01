@@ -92,7 +92,16 @@ inline constexpr char RELAY_API_TOKEN[] = "76|nJRGTR5elU6Cg6kqXpYexMnZMKlVMTNrOL
 // aucune connexion réseau. Après un échec (pas d'internet, API injoignable),
 // la tentative suivante attend SYNC_RETRY_INTERVAL_MS.
 inline constexpr uint32_t SYNC_INTERVAL_MS = 3000;
-inline constexpr uint32_t SYNC_RETRY_INTERVAL_MS = 15000;
+inline constexpr uint32_t SYNC_RETRY_INTERVAL_MS = 5000;
+
+// Auto-test de connectivité lancé quand l'API ne répond pas (voir
+// diagnoseConnectivity() dans main.cpp) : au premier échec, puis au plus
+// toutes les NET_DIAG_INTERVAL_MS tant que les échecs durent.
+inline constexpr char NET_DIAG_HTTPS_URL[] = "https://www.google.com/generate_204";
+// Page volumineuse servie SANS TLS (~80 Ko) : teste la réception de trames pleines.
+inline constexpr char NET_DIAG_HTTP_LARGE_URL[] = "http://www.google.com/";
+inline constexpr size_t NET_DIAG_LARGE_BYTES = 20000;
+inline constexpr uint32_t NET_DIAG_INTERVAL_MS = 10UL * 60UL * 1000UL;
 
 // ---- Délais des connexions HTTPS vers l'API ----
 // Courts à dessein : une tentative qui n'aboutit pas doit libérer vite la
@@ -131,7 +140,7 @@ inline constexpr char NTP_SERVER[] = "pool.ntp.org";
 // destiné à l'OTA et à saisir à l'identique dans le backoffice lors de
 // l'upload : la borne flashe dès que la version active côté serveur diffère
 // de celle-ci (activer une version plus ancienne fait donc un rollback).
-inline constexpr char FIRMWARE_VERSION[] = "1.0.5";
+inline constexpr char FIRMWARE_VERSION[] = "1.0.7";
 inline constexpr char API_RELAY_FIRMWARE_MANIFEST_PATH[] = "/api/relay/firmware/manifest";
 // Cadence de vérification du manifest (en plus d'une vérification dès la
 // première connexion WiFi). Pas de canal push ici, contrairement au MQTT de

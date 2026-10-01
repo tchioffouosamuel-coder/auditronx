@@ -135,7 +135,16 @@ inline constexpr char RELAY_API_TOKEN[] = "76|nJRGTR5elU6Cg6kqXpYexMnZMKlVMTNrOL
 // aucune connexion réseau. Après un échec (pas d'internet, API injoignable),
 // la tentative suivante attend SYNC_RETRY_INTERVAL_MS.
 inline constexpr uint32_t SYNC_INTERVAL_MS = 3000;
-inline constexpr uint32_t SYNC_RETRY_INTERVAL_MS = 15000;
+inline constexpr uint32_t SYNC_RETRY_INTERVAL_MS = 5000;
+
+// Auto-test de connectivité lancé quand l'API ne répond pas (voir
+// diagnoseConnectivity() dans main.cpp) : au premier échec, puis au plus
+// toutes les NET_DIAG_INTERVAL_MS tant que les échecs durent.
+inline constexpr char NET_DIAG_HTTPS_URL[] = "https://www.google.com/generate_204";
+// Page volumineuse servie SANS TLS (~80 Ko) : teste la réception de trames pleines.
+inline constexpr char NET_DIAG_HTTP_LARGE_URL[] = "http://www.google.com/";
+inline constexpr size_t NET_DIAG_LARGE_BYTES = 20000;
+inline constexpr uint32_t NET_DIAG_INTERVAL_MS = 10UL * 60UL * 1000UL;
 
 // ---- Délais des connexions HTTPS vers l'API ----
 // Courts à dessein : une tentative qui n'aboutit pas doit libérer vite la
@@ -174,7 +183,7 @@ inline constexpr char NTP_SERVER[] = "pool.ntp.org";
 // destiné à l'OTA et à saisir à l'identique dans le backoffice lors de
 // l'upload : la borne flashe dès que la version active côté serveur diffère
 // de celle-ci (activer une version plus ancienne fait donc un rollback).
-inline constexpr char FIRMWARE_VERSION[] = "1.0.5";
+inline constexpr char FIRMWARE_VERSION[] = "1.0.7";
 inline constexpr char API_RELAY_FIRMWARE_MANIFEST_PATH[] = "/api/relay/firmware/manifest";
 // Cadence de vérification du manifest (en plus d'une vérification dès la
 // première connexion WiFi). Pas de canal push ici, contrairement au MQTT de
@@ -847,7 +856,7 @@ static WiFiClientSecure &apiClient()
 // liaison est mauvaise) morcellent le tas : passé quelques minutes, ces blocs
 // n'étaient plus allouables ("SSL - Memory allocation failed" en boucle).
 // On les réserve donc au démarrage, tas encore propre, et on ne les prête
-// qu'au TLS, le temps d'une requête (TlsMemoryScope).
+// qu'au TLS, le temps d'une requête (TlsSessionScope).
 // ---------------------------------------------------------------------------
 
 static void *g_tlsReserve[sizeof(TLS_RESERVE_BLOCK_SIZES) / sizeof(TLS_RESERVE_BLOCK_SIZES[0])] = {};
@@ -877,13 +886,40 @@ static void releaseTlsMemory()
     }
 }
 
-/** Prête la réserve au TLS pour la durée de vie de l'objet. À déclarer AVANT
- * le HTTPClient de la fonction : détruit après lui, il ne reprend la réserve
- * qu'une fois la connexion fermée et ses tampons rendus. */
-struct TlsMemoryScope
+// Remèdes activés par diagnoseConnectivity() quand la poignée de main TLS
+// n'aboutit pas alors que le réseau fonctionne (voir cette fonction).
+static bool g_pauseBleDuringTls = false;
+static bool otaSafeToRun();
+
+/**
+ * Encadre une connexion TLS. À déclarer AVANT le HTTPClient de la fonction :
+ * détruit après lui, il ne reprend la réserve mémoire qu'une fois la
+ * connexion fermée et ses tampons rendus.
+ *  - prête la réserve mémoire au TLS ;
+ *  - si g_pauseBleDuringTls : suspend la publicité BLE le temps de la
+ *    connexion (WiFi et BLE partagent la même radio), sauf si un téléphone
+ *    est en train de pointer.
+ */
+struct TlsSessionScope
 {
-    TlsMemoryScope() { releaseTlsMemory(); }
-    ~TlsMemoryScope() { reserveTlsMemory(); }
+    bool advertisingPaused = false;
+
+    TlsSessionScope()
+    {
+        releaseTlsMemory();
+        if (g_pauseBleDuringTls && otaSafeToRun())
+        {
+            NimBLEDevice::getAdvertising()->stop();
+            advertisingPaused = true;
+        }
+    }
+
+    ~TlsSessionScope()
+    {
+        if (advertisingPaused)
+            NimBLEDevice::getAdvertising()->start();
+        reserveTlsMemory();
+    }
 };
 
 /**
@@ -931,7 +967,7 @@ static bool syncWithApi()
     String respBody;
     const uint32_t startedAt = millis();
     {
-        TlsMemoryScope tlsMemory;
+        TlsSessionScope tlsSession;
         HTTPClient http;
         http.begin(apiClient(), String(API_BASE_URL) + API_RELAY_SYNC_PATH);
         http.setConnectTimeout(HTTPS_CONNECT_TIMEOUT_MS);
@@ -1024,7 +1060,7 @@ static bool flushRemoteLogs()
     int status;
     const uint32_t startedAt = millis();
     {
-        TlsMemoryScope tlsMemory;
+        TlsSessionScope tlsSession;
         HTTPClient http;
         http.begin(apiClient(), String(API_BASE_URL) + API_RELAY_LOGS_PATH);
         http.setConnectTimeout(HTTPS_CONNECT_TIMEOUT_MS);
@@ -1093,7 +1129,7 @@ static bool sha256Matches(const uint8_t digest[32], const String &expectedHex)
 static bool fetchOtaManifest(OtaManifest &out)
 {
     const uint32_t startedAt = millis();
-    TlsMemoryScope tlsMemory;
+    TlsSessionScope tlsSession;
     HTTPClient http;
     http.setConnectTimeout(OTA_CONNECT_TIMEOUT_MS);
     http.setTimeout(10000);
@@ -1138,7 +1174,7 @@ static bool fetchOtaManifest(OtaManifest &out)
 
 static OtaResult downloadAndFlash(const OtaManifest &m)
 {
-    TlsMemoryScope tlsMemory;
+    TlsSessionScope tlsSession;
     HTTPClient http;
     http.setConnectTimeout(OTA_CONNECT_TIMEOUT_MS);
     http.setTimeout(OTA_STALL_TIMEOUT_MS);
@@ -1285,6 +1321,126 @@ static void checkForUpdate()
     NimBLEDevice::getAdvertising()->start();
 }
 
+/** GET HTTPS vers le site de référence, dans les mêmes conditions que les
+ * appels à l'API. Renvoie le code HTTP (> 0) ou l'erreur HTTPClient (< 0). */
+static int httpsProbe(uint32_t &elapsedMs)
+{
+    const uint32_t startedAt = millis();
+    int code;
+    {
+        TlsSessionScope tlsSession;
+        HTTPClient http;
+        http.begin(apiClient(), NET_DIAG_HTTPS_URL);
+        http.setReuse(false);
+        http.setConnectTimeout(HTTPS_CONNECT_TIMEOUT_MS);
+        http.setTimeout(8000);
+        code = http.GET();
+        http.end();
+    }
+    elapsedMs = millis() - startedAt;
+    return code;
+}
+
+/**
+ * Auto-diagnostic lancé quand l'API ne répond pas, pour savoir OÙ ça bloque
+ * sans matériel de mesure, et y remédier seul quand c'est possible :
+ *  1. HTTP sans TLS vers l'hôte de l'API : le serveur est-il joignable ?
+ *  2. Gros téléchargement HTTP sans TLS : la borne reçoit-elle des trames
+ *     pleines (une poignée de main TLS en exige plusieurs Ko d'affilée, une
+ *     redirection HTTP tient dans un seul petit paquet) ?
+ *  3. HTTPS vers un site de référence : le TLS marche-t-il avec un autre ?
+ *  4. Si non, même test avec la publicité BLE suspendue (WiFi et BLE se
+ *     partagent la radio) — s'il passe, le remède est conservé.
+ *  5. Si non, même test avec une puissance d'émission WiFi réduite (pics de
+ *     courant plus faibles : alimentation USB limite) — idem.
+ */
+static void diagnoseConnectivity()
+{
+    {
+        String url = API_BASE_URL;
+        url.replace("https://", "http://");
+        WiFiClient plainClient;
+        HTTPClient http;
+        const uint32_t startedAt = millis();
+        http.begin(plainClient, url);
+        http.setConnectTimeout(HTTPS_CONNECT_TIMEOUT_MS);
+        http.setTimeout(8000);
+        const int code = http.GET();
+        http.end();
+        g_log.printf("[net] test 1/5, HTTP sans TLS vers l'API : %d en %u ms (code > 0 = serveur joignable)\n",
+                     code, (unsigned)(millis() - startedAt));
+    }
+    {
+        WiFiClient plainClient;
+        HTTPClient http;
+        const uint32_t startedAt = millis();
+        http.begin(plainClient, NET_DIAG_HTTP_LARGE_URL);
+        http.setConnectTimeout(HTTPS_CONNECT_TIMEOUT_MS);
+        http.setTimeout(8000);
+        const int code = http.GET();
+        size_t received = 0;
+        if (code > 0)
+        {
+            WiFiClient *stream = http.getStreamPtr();
+            uint8_t buf[512];
+            uint32_t lastData = millis();
+            while (received < NET_DIAG_LARGE_BYTES && millis() - lastData < 5000)
+            {
+                const int n = stream->available() ? stream->read(buf, sizeof(buf)) : 0;
+                if (n > 0)
+                {
+                    received += n;
+                    lastData = millis();
+                }
+                else if (!stream->connected())
+                {
+                    break;
+                }
+                else
+                {
+                    delay(10);
+                }
+            }
+        }
+        http.end();
+        g_log.printf("[net] test 2/5, gros téléchargement HTTP sans TLS : code %d, %u o reçus sur %u en %u ms\n",
+                     code, (unsigned)received, (unsigned)NET_DIAG_LARGE_BYTES, (unsigned)(millis() - startedAt));
+    }
+
+    uint32_t elapsed = 0;
+    int code = httpsProbe(elapsed);
+    g_log.printf("[net] test 3/5, HTTPS vers %s : %d en %u ms (code > 0 = TLS fonctionnel)\n", NET_DIAG_HTTPS_URL, code, (unsigned)elapsed);
+    if (code > 0)
+    {
+        g_log.println("[net] verdict : le TLS fonctionne vers un autre site, le blocage est propre au serveur de l'API");
+        return;
+    }
+
+    if (!g_pauseBleDuringTls)
+    {
+        g_pauseBleDuringTls = true;
+        code = httpsProbe(elapsed);
+        g_log.printf("[net] test 4/5, HTTPS avec publicité BLE suspendue : %d en %u ms\n", code, (unsigned)elapsed);
+        if (code > 0)
+        {
+            g_log.println("[net] verdict : le BLE perturbait le TLS — publicité BLE désormais suspendue pendant chaque connexion à l'API");
+            return;
+        }
+        g_pauseBleDuringTls = false;
+    }
+
+    WiFi.setTxPower(WIFI_POWER_8_5dBm);
+    code = httpsProbe(elapsed);
+    g_log.printf("[net] test 5/5, HTTPS avec puissance WiFi réduite (8,5 dBm) : %d en %u ms\n", code, (unsigned)elapsed);
+    if (code > 0)
+    {
+        g_log.println("[net] verdict : l'alimentation ne tient pas les pics d'émission — puissance WiFi réduite conservée");
+        return;
+    }
+    WiFi.setTxPower(WIFI_POWER_19_5dBm);
+    g_log.println("[net] verdict : TLS impossible même sans BLE et à puissance réduite (voir les tests 1 et 2)");
+}
+
 /**
  * Tâche dédiée (pile 16 Ko) pour la synchro périodique : la poignée de main
  * TLS de mbedTLS (HTTPS vers l'API) a besoin de plus de pile que celle de la
@@ -1304,6 +1460,7 @@ static void syncTask(void *)
     uint32_t lastLogFlush = millis();
     uint32_t logInterval = LOG_FLUSH_INTERVAL_MS;
     uint32_t lastMemoryLog = millis();
+    uint32_t lastDiagnostic = 0;
     uint32_t lastOtaCheck = 0;
     bool otaCheckedOnce = false;
     for (;;)
@@ -1312,13 +1469,19 @@ static void syncTask(void *)
         if (WiFi.status() != WL_CONNECTED)
             continue;
 
-        // Après un échec, on espace les tentatives : chaque connexion TLS
-        // ratée mobilise la radio et ~45 Ko de tas pour rien, inutile de
-        // recommencer toutes les 3 s quand le modem n'a pas d'internet.
+        // Après un échec, la tentative suivante attend SYNC_RETRY_INTERVAL_MS
+        // (compté à partir de la FIN de la tentative ratée, qui peut elle-même
+        // durer jusqu'à ~30 s de délais de connexion).
         if (millis() - lastSync >= syncInterval)
         {
+            const bool synced = syncWithApi();
+            if (!synced && (lastDiagnostic == 0 || millis() - lastDiagnostic >= NET_DIAG_INTERVAL_MS))
+            {
+                diagnoseConnectivity();
+                lastDiagnostic = millis();
+            }
             lastSync = millis();
-            syncInterval = syncWithApi() ? SYNC_INTERVAL_MS : SYNC_RETRY_INTERVAL_MS;
+            syncInterval = synced ? SYNC_INTERVAL_MS : SYNC_RETRY_INTERVAL_MS;
         }
         if (millis() - lastLogFlush >= logInterval)
         {

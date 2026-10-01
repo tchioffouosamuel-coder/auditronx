@@ -216,6 +216,36 @@ class HoraireAdministratifTest extends TestCase
         $this->get("/api/retards/bilan/{$administratif->id}?debut=2026-09-28&fin=2026-10-04")->assertNoContent();
     }
 
+    /**
+     * Régression : l'export ZIP remplissait chaque bilan avec des zéros en dur
+     * (taux d'assiduité 0 % pour tout le monde, détail vide). Il doit porter
+     * les mêmes chiffres que la fiche individuelle, horaire fixe compris.
+     */
+    public function test_lexport_zip_porte_le_meme_bilan_que_la_fiche_individuelle(): void
+    {
+        $this->actingAsBackoffice();
+        $administratif = $this->administratif();
+        $this->pointer($administratif, self::MERCREDI, '07:30', '15:30');
+
+        $pdf = \Mockery::mock(\Barryvdh\DomPDF\PDF::class);
+        $pdf->shouldReceive('output')->once()->andReturn('%PDF-test');
+        Pdf::shouldReceive('loadView')
+            ->once()
+            ->with('pdf.retards-individuel', \Mockery::on(function (array $data) use ($administratif): bool {
+                $this->assertSame($administratif->id, $data['enseignant']->id);
+                $this->assertSame(5, $data['jours_attendus']);
+                $this->assertSame(1, $data['presences_valides']);
+                $this->assertEqualsWithDelta(20.0, $data['taux_assiduite'], 0.01);
+                $this->assertCount(5, $data['details']);
+
+                return true;
+            }))
+            ->andReturn($pdf);
+
+        $response = $this->get('/api/statistiques/export-zip?debut=2026-09-28&fin=2026-10-04')->assertOk();
+        $this->assertSame('application/zip', $response->headers->get('content-type'));
+    }
+
     public function test_la_detection_dabsences_couvre_les_administratifs_les_jours_ouvres(): void
     {
         $administratif = $this->administratif();
