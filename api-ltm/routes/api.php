@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\OtpController;
 use App\Http\Controllers\Api\PresenceValidationController;
 use App\Http\Controllers\Api\ProgrammeController;
 use App\Http\Controllers\Api\QrPointController;
+use App\Http\Controllers\Api\RelayImportController;
 use App\Http\Controllers\Api\RelaySyncController;
 use App\Http\Controllers\Api\RetardsController;
 use App\Http\Controllers\Api\SignalementController;
@@ -126,6 +127,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/devices', [DeviceController::class, 'index']);
     Route::get('/devices/{device}/logs', [DeviceLogController::class, 'index'])->middleware('backoffice');
     Route::delete('/devices/{device}/logs', [DeviceLogController::class, 'destroy'])->middleware('backoffice');
+    // Import manuel du queue.jsonl d'une borne qui ne parvient pas à synchroniser.
+    Route::post('/relay/import', [RelayImportController::class, 'import'])->middleware('backoffice');
     Route::apiResource('access-points', AccessPointController::class)
         ->parameters(['access-points' => 'accessPoint'])
         ->except(['show']);

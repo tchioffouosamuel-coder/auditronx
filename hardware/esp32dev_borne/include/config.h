@@ -17,8 +17,8 @@ inline constexpr char BLE_CHAR_RESULT_UUID[] = "b3a1a102-2c33-4e6f-9a1e-5f6a2e6c
 // Uniquement en client (WIFI_STA) : le téléphone parle en BLE, pas en WiFi local.
 // inline constexpr char STA_SSID[] = "Galaxy S22 4D30";
 // inline constexpr char STA_PASSWORD[] = "19750000";
-inline constexpr char STA_SSID[] = "AuditronX";
-inline constexpr char STA_PASSWORD[] = "12345678";
+inline constexpr char STA_SSID[] = "Auditron";
+inline constexpr char STA_PASSWORD[] = "1234567890";
 // Limite de sécurité de la file. La carte SD permet de conserver beaucoup
 // plus de scans hors ligne ; LittleFS conserve une limite basse lorsqu'elle
 // sert de secours.

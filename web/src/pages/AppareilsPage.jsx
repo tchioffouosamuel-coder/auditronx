@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import DataTable from "../components/DataTable";
+import RelayQueueImport from "../components/RelayQueueImport";
 import ResourceTable from "../components/ResourceTable";
 import api from "../lib/api";
 import { formatDateTime } from "../lib/datetime";
@@ -147,6 +148,7 @@ export default function AppareilsPage() {
           ["devices", "Devices"],
           ["access-points", "Bornes (BLE)"],
           ["qr-points", "Points QR"],
+          ["import-queue", "Import file borne"],
         ].map(([key, label]) => (
           <button
             key={key}
@@ -163,6 +165,7 @@ export default function AppareilsPage() {
       </div>
 
       {tab === "devices" && <DevicesTable />}
+      {tab === "import-queue" && <RelayQueueImport />}
       {tab === "access-points" && (
         <ResourceTable
           title=""
