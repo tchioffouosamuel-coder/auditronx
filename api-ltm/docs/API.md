@@ -124,6 +124,18 @@ authentifiées :
 Le retard est calculé par rapport au premier cours du jour de l'enseignant
 (`emploi_du_temps`), au-delà du seuil de tolérance configuré.
 
+### Personnel administratif
+
+Le personnel de section `Administration` (insensible à la casse) n'est pas
+évalué selon un emploi du temps mais selon un horaire fixe (`HoraireAttendu`) :
+attendu chaque jour ouvré configuré, retard calculé depuis l'heure de début,
+départ anticipé depuis l'heure de fin. Défaut : lundi–vendredi, 07:30–15:30.
+
+| Méthode | Route | Notes |
+|---|---|---|
+| GET | `/parametres/horaires-administratifs` | `{ jours[], heure_debut, heure_fin }` — `jours` en ISO (1 = lundi) |
+| PUT | `/parametres/horaires-administratifs` | Mêmes champs ; réservé au backoffice |
+
 ## Assiduité & rapports (§4.2)
 
 | Méthode | Route | Notes |

@@ -7,6 +7,7 @@ use App\Http\Controllers\Traits\AccessibleEnseignants;
 use App\Models\Enseignant;
 use App\Models\Presence;
 use App\Models\User;
+use App\Services\HoraireAttendu;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -65,15 +66,14 @@ class EnseignantController extends Controller
         return response()->json($enseignant->load('emploiDuTemps.classe', 'emploiDuTemps.discipline'));
     }
 
-    public function assiduite(Request $request, Enseignant $enseignant)
+    public function assiduite(Request $request, Enseignant $enseignant, HoraireAttendu $horaires)
     {
         abort_unless($this->peutAccederA($request->user(), $enseignant), 403);
         $debut = Carbon::now()->startOfMonth();
         $fin = Carbon::now()->endOfMonth();
-        $emplois = $enseignant->emploiDuTemps()->get();
         $datesAttendues = collect();
         for ($date = $debut->copy(); $date->lte($fin); $date->addDay()) {
-            if ($emplois->contains('jour', $date->isoWeekday())) $datesAttendues->push($date->toDateString());
+            if ($horaires->estAttendu($enseignant, $date)) $datesAttendues->push($date->toDateString());
         }
         $datesPresents = $enseignant->presences()->whereBetween('date', [$debut->toDateString(), $fin->toDateString()])->whereNotNull('heure_arrivee')->pluck('date')->map(fn($date) => Carbon::parse($date)->toDateString());
         $joursAttendus = $datesAttendues->unique()->count();

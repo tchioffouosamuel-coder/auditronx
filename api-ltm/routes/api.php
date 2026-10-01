@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\FirmwareController;
 use App\Http\Controllers\Api\MyPresenceController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OtpController;
+use App\Http\Controllers\Api\ParametreController;
 use App\Http\Controllers\Api\PresenceValidationController;
 use App\Http\Controllers\Api\ProgrammeController;
 use App\Http\Controllers\Api\QrPointController;
@@ -116,6 +117,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/assiduite/journal/pdf', [AssiduiteController::class, 'journalPdf']);
     Route::get('/assiduite/personnel-inactif', [AssiduiteController::class, 'personnelInactif']);
     Route::get('/statistiques/export-zip', [StatistiquesController::class, 'exportZip']);
+
+    // Configuration (§4.2) — horaire fixe du personnel administratif.
+    Route::get('/parametres/horaires-administratifs', [ParametreController::class, 'horairesAdministratifs']);
+    Route::put('/parametres/horaires-administratifs', [ParametreController::class, 'definirHorairesAdministratifs'])->middleware('backoffice');
 
     // Validation des présences (§4.2)
     Route::get('/presences/validation', [PresenceValidationController::class, 'index']);

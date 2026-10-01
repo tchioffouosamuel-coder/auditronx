@@ -11,13 +11,16 @@ use Carbon\Carbon;
 /**
  * Calcule le retard d'un enseignant à partir de son premier cours du jour
  * (emploi du temps) comparé à l'heure d'arrivée pointée, avec un seuil de
- * tolérance configurable (§4.2 — Retards & bilans).
+ * tolérance configurable (§4.2 — Retards & bilans). Le personnel administratif
+ * est comparé au début de sa journée de travail (voir HoraireAttendu).
  */
 class RetardCalculator
 {
     public const CLE_TOLERANCE = 'tolerance_retard_minutes';
 
     public const DEFAUT_TOLERANCE = 10;
+
+    public function __construct(private HoraireAttendu $horaires) {}
 
     public function toleranceMinutes(): int
     {
@@ -39,8 +42,22 @@ class RetardCalculator
     }
 
     /**
+     * Heure à laquelle la personne est attendue ce jour-là : début de journée
+     * fixe pour le personnel administratif, premier cours pour un enseignant.
+     * Null si elle n'est pas attendue.
+     */
+    public function heureDebutAttendue(Enseignant $enseignant, Carbon $date): ?string
+    {
+        if ($this->horaires->estAdministratif($enseignant)) {
+            return $this->horaires->plage($enseignant, $date)['heure_debut'] ?? null;
+        }
+
+        return $this->premierCoursDuJour($enseignant, $date)?->heure_debut;
+    }
+
+    /**
      * Retourne le nombre de minutes de retard (0 si à l'heure ou en avance),
-     * ou null si aucun cours n'est prévu ou si l'enseignant n'a pas pointé.
+     * ou null si la personne n'est pas attendue ce jour-là ou n'a pas pointé.
      */
     public function minutesDeRetard(Enseignant $enseignant, Presence $presence): ?int
     {
@@ -48,13 +65,13 @@ class RetardCalculator
             return null;
         }
 
-        $cours = $this->premierCoursDuJour($enseignant, $presence->date);
+        $heureDebut = $this->heureDebutAttendue($enseignant, $presence->date);
 
-        if (! $cours) {
+        if (! $heureDebut) {
             return null;
         }
 
-        $heureAttendue = Carbon::parse($presence->date->toDateString().' '.$cours->heure_debut)
+        $heureAttendue = Carbon::parse($presence->date->toDateString().' '.$heureDebut)
             ->addMinutes($this->toleranceMinutes());
 
         $retard = $presence->heure_arrivee->diffInMinutes($heureAttendue, false);

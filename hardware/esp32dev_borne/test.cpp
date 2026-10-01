@@ -36,6 +36,7 @@
 #include <Update.h>
 #include <Preferences.h>
 #include <mbedtls/md.h>
+#include <mbedtls/ssl.h>
 #include <esp_ota_ops.h>
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
@@ -122,22 +123,34 @@ inline constexpr char API_RELAY_SYNC_PATH[] = "/api/relay/sync";
 // device relais est identifié individuellement côté API).
 inline constexpr char RELAY_API_TOKEN[] = "76|nJRGTR5elU6Cg6kqXpYexMnZMKlVMTNrOLJAY8wfc653073d";
 
-// Un seul paquet par requête : la négociation TLS consomme déjà beaucoup de
-// RAM sur cet ESP32 sans PSRAM, et chaque paquet peut contenir un selfie.
-inline constexpr size_t SYNC_BATCH_SIZE = 1;
+// Plus de capacité fixe de document JSON par paquet : les documents sont
+// dimensionnés sur le contenu réel et le selfie est écrit dans la file par
+// blocs, sans passer par un document (voir processScan/appendToQueue dans
+// main.cpp). L'ancien bloc fixe de 20 Ko d'un seul tenant n'était plus
+// allouable dès que BLE et TLS avaient morcelé le tas.
 
-// Capacité des documents ArduinoJson dynamiques (RAM) par paquet : JPEG
-// ~160x120 qualité ~20 (quelques Ko) encodé en base64 (x1.37) + payload
-// qr_code/enseignant_id/motif + token + entêtes JSON, avec marge.
-// Capacité suffisante pour un selfie JPEG basse résolution (~160x120, qualité ~20)
-// encodé en base64 + le JSON du scan et ses métadonnées. Le seuil historique de
-// 10 Ko était trop juste et faisait tomber silencieusement photo_base64 quand le
-// paquet dépassait cette capacité, sans que le téléphone le remarque.
-inline constexpr size_t PACKET_JSON_CAPACITY = 20 * 1024;
-inline constexpr size_t SYNC_BODY_JSON_CAPACITY = SYNC_BATCH_SIZE * PACKET_JSON_CAPACITY;
+// Cadence de synchro : un paquet par requête (la négociation TLS consomme
+// déjà l'essentiel de la RAM libre sur cet ESP32 sans PSRAM), toutes les 3 s
+// tant que la file n'est pas vide. File vide : simple lecture de la file,
+// aucune connexion réseau. Après un échec (pas d'internet, API injoignable),
+// la tentative suivante attend SYNC_RETRY_INTERVAL_MS.
+inline constexpr uint32_t SYNC_INTERVAL_MS = 3000;
+inline constexpr uint32_t SYNC_RETRY_INTERVAL_MS = 15000;
 
-// Cadence de vérification de la connectivité / tentative de synchro.
-inline constexpr uint32_t SYNC_INTERVAL_MS = 15000;
+// ---- Délais des connexions HTTPS vers l'API ----
+// Courts à dessein : une tentative qui n'aboutit pas doit libérer vite la
+// tâche de synchro pour réessayer (SYNC_RETRY_INTERVAL_MS), au lieu de la
+// bloquer 120 s (délai de poignée de main par défaut du core).
+inline constexpr int32_t HTTPS_CONNECT_TIMEOUT_MS = 8000;
+inline constexpr unsigned long HTTPS_HANDSHAKE_TIMEOUT_S = 20;
+
+// ---- Mémoire réservée au TLS (voir reserveTlsMemory() dans main.cpp) ----
+// Deux tampons d'enregistrement mbedTLS de ~16,7 Ko + la poignée de main.
+inline constexpr size_t TLS_RESERVE_BLOCK_SIZES[] = {17 * 1024, 17 * 1024, 10 * 1024};
+// Échecs TLS consécutifs "faute de mémoire" avant un redémarrage de secours.
+inline constexpr uint8_t TLS_MEMORY_FAILURES_BEFORE_RESTART = 6;
+// Cadence de la ligne de suivi "[mem] ..." (moniteur série et backoffice).
+inline constexpr uint32_t MEMORY_LOG_INTERVAL_MS = 10UL * 60UL * 1000UL;
 
 // ---- Moniteur série à distance (backoffice > Moniteur des bornes) ----
 // Chaque ligne imprimée sur le port série est aussi gardée dans un tampon RAM
@@ -146,7 +159,10 @@ inline constexpr uint32_t SYNC_INTERVAL_MS = 15000;
 // uniquement, rien de critique n'y transite (contrairement à la file de scans).
 inline constexpr bool REMOTE_LOG_ENABLED = true;
 inline constexpr char API_RELAY_LOGS_PATH[] = "/api/relay/logs";
-inline constexpr uint32_t LOG_FLUSH_INTERVAL_MS = 5000;
+// 10 s : chaque envoi ouvre puis ferme une connexion TLS (plus de keep-alive,
+// pour rendre la mémoire aux scans) — inutile d'en ouvrir une toutes les 5 s.
+inline constexpr uint32_t LOG_FLUSH_INTERVAL_MS = 10000;
+inline constexpr uint32_t LOG_RETRY_INTERVAL_MS = 30000;
 inline constexpr size_t LOG_BUFFER_MAX_LINES = 80;
 inline constexpr size_t LOG_LINE_MAX_LEN = 240;
 inline constexpr size_t LOG_BATCH_MAX_LINES = 30;
@@ -158,7 +174,7 @@ inline constexpr char NTP_SERVER[] = "pool.ntp.org";
 // destiné à l'OTA et à saisir à l'identique dans le backoffice lors de
 // l'upload : la borne flashe dès que la version active côté serveur diffère
 // de celle-ci (activer une version plus ancienne fait donc un rollback).
-inline constexpr char FIRMWARE_VERSION[] = "1.0.1";
+inline constexpr char FIRMWARE_VERSION[] = "1.0.5";
 inline constexpr char API_RELAY_FIRMWARE_MANIFEST_PATH[] = "/api/relay/firmware/manifest";
 // Cadence de vérification du manifest (en plus d'une vérification dès la
 // première connexion WiFi). Pas de canal push ici, contrairement au MQTT de
@@ -182,10 +198,11 @@ inline constexpr uint32_t OTA_STALL_TIMEOUT_MS = 15000;
 // Types utilisés dans des signatures de fonctions, déclarés avant toute
 // fonction : l'IDE Arduino (version fichier unique test.cpp) insère ses
 // prototypes automatiques avant la première fonction du fichier.
-struct QueuedPacket
+/** Position d'une ligne (un paquet) dans le fichier de la file. */
+struct QueueLine
 {
-    String local_id;
-    String raw_json;
+    size_t start;  // offset du premier octet
+    size_t length; // sans le '\n' final
 };
 
 struct LogLine
@@ -373,21 +390,50 @@ static size_t queueLength()
     File f = g_queueFs->open(QUEUE_FILE, "r");
     if (!f)
         return 0;
+    // Comptage par blocs, sans construire une String par ligne : une ligne
+    // avec selfie pèse ~10 Ko, autant d'allocations qui morcellent le tas.
     size_t n = 0;
-    while (f.available())
+    bool lineHasContent = false;
+    uint8_t buf[256];
+    int read;
+    while ((read = f.read(buf, sizeof(buf))) > 0)
     {
-        String line = f.readStringUntil('\n');
-        line.trim();
-        if (line.length() > 0)
-            n++;
+        for (int i = 0; i < read; i++)
+        {
+            if (buf[i] == '\n')
+            {
+                if (lineHasContent)
+                    n++;
+                lineHasContent = false;
+            }
+            else if (buf[i] != '\r' && buf[i] != ' ')
+            {
+                lineHasContent = true;
+            }
+        }
     }
+    if (lineHasContent)
+        n++;
     f.close();
     return n;
 }
 
-/** false si la ligne n'a pas été entièrement écrite (flash/SD pleine ou
- * absente) : l'appelant ne doit alors PAS confirmer le scan au téléphone. */
-static bool appendToQueue(const String &json)
+// Marqueur posé à la place du selfie dans le JSON du paquet (voir
+// processScan) : appendToQueue() le remplace par le base64 de la photo,
+// encodé par blocs directement vers le fichier.
+static const char PHOTO_PLACEHOLDER[] = "@@PHOTO@@";
+
+/**
+ * Ajoute un paquet à la file. Si `photo` n'est pas vide, son base64 est écrit
+ * à l'emplacement de PHOTO_PLACEHOLDER, par blocs de 576 octets (multiple de
+ * 3 : pas de remplissage "=" au milieu) — jamais de copie base64 complète en
+ * RAM, contrairement à l'ancienne version (document JSON de 20 Ko + String
+ * base64 + String sérialisée).
+ *
+ * false si la ligne n'a pas été entièrement écrite (flash/SD pleine ou
+ * absente) : l'appelant ne doit alors PAS confirmer le scan au téléphone.
+ */
+static bool appendToQueue(const String &json, const std::vector<uint8_t> &photo)
 {
     MutexGuard guard(g_fsMutex);
     File f = g_queueFs->open(QUEUE_FILE, "a", true);
@@ -396,11 +442,42 @@ static bool appendToQueue(const String &json)
         g_log.println("[queue] échec ouverture flash en écriture");
         return false;
     }
-    const size_t written = f.println(json);
-    f.close();
-    if (written < json.length())
+
+    size_t expected = 0;
+    size_t written = 0;
+    const int at = photo.empty() ? -1 : json.indexOf(PHOTO_PLACEHOLDER);
+    if (at < 0)
     {
-        g_log.printf("[queue] écriture incomplète (%u/%u octets), stockage plein ?\n", (unsigned)written, (unsigned)json.length());
+        expected += json.length();
+        written += f.print(json);
+    }
+    else
+    {
+        expected += at;
+        written += f.write(reinterpret_cast<const uint8_t *>(json.c_str()), at);
+
+        unsigned char encoded[769]; // 576 octets -> 768 caractères + '\0'
+        for (size_t offset = 0; offset < photo.size(); offset += 576)
+        {
+            const size_t n = std::min<size_t>(576, photo.size() - offset);
+            size_t encodedLen = 0;
+            mbedtls_base64_encode(encoded, sizeof(encoded), &encodedLen, photo.data() + offset, n);
+            expected += encodedLen;
+            written += f.write(encoded, encodedLen);
+        }
+
+        const char *tail = json.c_str() + at + strlen(PHOTO_PLACEHOLDER);
+        expected += strlen(tail);
+        written += f.print(tail);
+    }
+    expected += 1;
+    written += f.print('\n');
+    f.close();
+
+    if (written != expected)
+    {
+        // La ligne partielle éventuelle sera purgée comme invalide (voir removeFromQueue).
+        g_log.printf("[queue] écriture incomplète (%u/%u octets), stockage plein ?\n", (unsigned)written, (unsigned)expected);
         return false;
     }
     return true;
@@ -417,51 +494,165 @@ static bool isValidPacket(const JsonDocument &doc)
     return doc.is<JsonObjectConst>() && localId[0] != '\0';
 }
 
-static bool readQueueBatch(std::vector<QueuedPacket> &out)
+/** Lecteur ArduinoJson limité à une ligne de la file. Sans cette borne, une
+ * ligne tronquée (coupure pendant l'écriture) ferait déborder l'analyse sur
+ * la ligne suivante. */
+struct BoundedFileReader
 {
+    File &file;
+    size_t remaining;
+
+    int read()
+    {
+        if (remaining == 0)
+            return -1;
+        remaining--;
+        return file.read();
+    }
+
+    size_t readBytes(char *buffer, size_t length)
+    {
+        const size_t n = file.readBytes(buffer, std::min(length, remaining));
+        remaining -= n;
+        return n;
+    }
+};
+
+/** Place le curseur juste après la ligne (borné à la taille du fichier : un
+ * seek au-delà de la fin échoue sur LittleFS et laisserait le curseur en place). */
+static void skipQueueLine(File &f, const QueueLine &line)
+{
+    f.seek(std::min<size_t>(line.start + line.length + 1, f.size()));
+}
+
+/**
+ * Place le curseur au début de la prochaine ligne non vide et en donne la
+ * position/longueur ; false en fin de fichier. La file est parcourue par
+ * blocs, directement dans le fichier : plus aucune ligne n'est chargée dans
+ * une String pour être simplement inspectée ou recopiée. Une ligne avec
+ * selfie pèse ~10 Ko et String grossit par pas de 16 octets : des centaines
+ * de réallocations, à chaque cycle de synchro, qui morcelaient le tas
+ * jusqu'à priver mbedTLS de ses blocs de 17 Ko ("SSL - Memory allocation
+ * failed").
+ */
+static bool nextQueueLine(File &f, QueueLine &line)
+{
+    uint8_t buf[128];
+    for (;;)
+    {
+        line.start = f.position();
+        line.length = 0;
+        bool ended = false;
+        bool hasContent = false;
+        int read;
+        while (!ended && (read = f.read(buf, sizeof(buf))) > 0)
+        {
+            for (int i = 0; i < read; i++)
+            {
+                if (buf[i] == '\n')
+                {
+                    ended = true;
+                    break;
+                }
+                if (buf[i] != '\r' && buf[i] != ' ')
+                    hasContent = true;
+                line.length++;
+            }
+        }
+        if (hasContent)
+        {
+            f.seek(line.start);
+            return true;
+        }
+        if (!ended)
+            return false; // fin de fichier
+        skipQueueLine(f, line);
+    }
+}
+
+/**
+ * Analyse une ligne de la file, lue directement dans le fichier, en n'en
+ * retenant que `local_id` (filtre ArduinoJson) : un petit document sur la
+ * pile suffit, quel que soit le poids du selfie.
+ */
+static DeserializationError parseLocalId(File &f, const QueueLine &line, JsonDocument &doc)
+{
+    StaticJsonDocument<32> filter;
+    filter["local_id"] = true;
+    f.seek(line.start);
+    BoundedFileReader reader{f, line.length};
+    return deserializeJson(doc, reader, DeserializationOption::Filter(filter));
+}
+
+/**
+ * Charge le premier paquet exploitable de la file dans `body`, déjà enveloppé
+ * dans le corps attendu par l'API ({"packets":[...]}) : une seule copie du
+ * paquet en RAM, allouée d'un coup à sa taille exacte (l'ancienne version en
+ * tenait jusqu'à quatre au moment d'ouvrir la connexion TLS). Un paquet par
+ * requête : la négociation TLS consomme déjà l'essentiel de la RAM libre.
+ * true si un paquet a été chargé.
+ */
+static bool readQueueHead(String &body, String &localId)
+{
+    static const char PREFIX[] = "{\"packets\":[";
+
     MutexGuard guard(g_fsMutex);
     if (!g_queueFs->exists(QUEUE_FILE))
-        return true;
-
-    // Un seul gros bloc pour toute la lecture (pas un par ligne) : moins de
-    // fragmentation du tas, déjà sollicité par TLS et BLE.
-    DynamicJsonDocument doc(PACKET_JSON_CAPACITY);
-    if (doc.capacity() == 0)
-    {
-        g_log.println("[queue] mémoire insuffisante pour lire la file, nouvel essai plus tard");
         return false;
-    }
 
     File f = g_queueFs->open(QUEUE_FILE, "r");
     if (!f)
         return false;
 
+    StaticJsonDocument<192> doc;
+    QueueLine line;
     unsigned skipped = 0;
-    while (f.available() && out.size() < SYNC_BATCH_SIZE)
+    bool loaded = false;
+    while (nextQueueLine(f, line))
     {
-        String line = f.readStringUntil('\n');
-        line.trim();
-        if (line.length() == 0)
-            continue;
-
-        if (deserializeJson(doc, line) != DeserializationError::Ok || !isValidPacket(doc))
+        if (parseLocalId(f, line, doc) != DeserializationError::Ok || !isValidPacket(doc))
         {
             skipped++;
+            skipQueueLine(f, line);
             continue;
         }
 
-        QueuedPacket p;
-        p.local_id = doc["local_id"].as<String>();
-        p.raw_json = line;
-        out.push_back(p);
+        localId = doc["local_id"].as<const char *>();
+        if (!body.reserve(sizeof(PREFIX) + line.length + 2))
+        {
+            g_log.printf("[queue] mémoire insuffisante pour charger un paquet de %u o, nouvel essai plus tard\n", (unsigned)line.length);
+            break;
+        }
+        body = PREFIX;
+        f.seek(line.start);
+        char buf[256];
+        size_t remaining = line.length;
+        while (remaining > 0)
+        {
+            const size_t n = f.readBytes(buf, std::min(remaining, sizeof(buf)));
+            if (n == 0)
+                break;
+            body.concat(buf, n);
+            remaining -= n;
+        }
+        body += "]}";
+        loaded = remaining == 0;
+        break;
     }
     f.close();
     if (skipped > 0)
         g_log.printf("[queue] %u ligne(s) invalide(s) ignorée(s), purgées à la prochaine confirmation\n", skipped);
-    return true;
+    return loaded;
 }
 
-/** Réécrit la file sans les local_id passés en paramètre (terminaux : ok ou rejected). */
+// Fichier de travail de removeFromQueue() (voir aussi recoverQueueRewrite()).
+static const char QUEUE_TMP_FILE[] = "/queue.tmp";
+
+/**
+ * Réécrit la file sans les local_id passés en paramètre (terminaux : ok ou
+ * rejected), recopiée par blocs vers un fichier temporaire qui remplace
+ * ensuite l'original — aucune ligne n'est chargée en RAM.
+ */
 static void removeFromQueue(const std::vector<String> &idsToRemove)
 {
     if (idsToRemove.empty())
@@ -470,67 +661,105 @@ static void removeFromQueue(const std::vector<String> &idsToRemove)
     if (!g_queueFs->exists(QUEUE_FILE))
         return;
 
-    // Pas de mémoire pour analyser la file : on ne réécrit rien plutôt que de
-    // risquer de jeter des paquets valides (nouvel essai au prochain cycle).
-    DynamicJsonDocument doc(PACKET_JSON_CAPACITY);
-    if (doc.capacity() == 0)
-        return;
-
     File in = g_queueFs->open(QUEUE_FILE, "r");
     if (!in)
         return;
-
-    String kept;
-    unsigned purged = 0;
-    while (in.available())
+    File out = g_queueFs->open(QUEUE_TMP_FILE, "w", true);
+    if (!out)
     {
-        String line = in.readStringUntil('\n');
-        String trimmed = line;
-        trimmed.trim();
-        if (trimmed.length() == 0)
-            continue;
+        in.close();
+        return;
+    }
 
-        const DeserializationError err = deserializeJson(doc, trimmed);
+    StaticJsonDocument<192> doc;
+    QueueLine line;
+    uint8_t buf[256];
+    unsigned purged = 0;
+    bool writeOk = true;
+    while (writeOk && nextQueueLine(in, line))
+    {
+        bool keep = true;
+        const DeserializationError err = parseLocalId(in, line, doc);
         if (err == DeserializationError::NoMemory)
         {
-            // Ligne trop grosse pour le document, pas forcément invalide : gardée.
-            kept += trimmed;
-            kept += '\n';
-            continue;
+            // local_id anormalement long pour le petit document : pas
+            // forcément invalide, on garde la ligne telle quelle.
         }
-        if (err || !isValidPacket(doc))
+        else if (err || !isValidPacket(doc))
         {
             // Ligne tronquée (coupure pendant l'écriture) ou paquet vide
             // (voir isValidPacket) : jamais exploitable, on la purge.
             purged++;
-            continue;
+            keep = false;
         }
-
-        String id = doc["local_id"].as<String>();
-        bool remove = false;
-        for (const auto &rid : idsToRemove)
+        else
         {
-            if (rid == id)
+            const char *id = doc["local_id"] | "";
+            for (const auto &rid : idsToRemove)
             {
-                remove = true;
-                break;
+                if (rid == id)
+                {
+                    keep = false;
+                    break;
+                }
             }
         }
-        if (!remove)
+
+        if (keep)
         {
-            kept += trimmed;
-            kept += '\n';
+            in.seek(line.start);
+            size_t remaining = line.length;
+            while (remaining > 0 && writeOk)
+            {
+                const int n = in.read(buf, std::min(remaining, sizeof(buf)));
+                if (n <= 0)
+                    break;
+                writeOk = out.write(buf, n) == static_cast<size_t>(n);
+                remaining -= n;
+            }
+            writeOk = writeOk && remaining == 0 && out.write('\n') == 1;
         }
+        skipQueueLine(in, line);
     }
     in.close();
-
-    File out = g_queueFs->open(QUEUE_FILE, "w");
-    if (!out)
-        return;
-    out.print(kept);
     out.close();
+
+    if (!writeOk)
+    {
+        // Stockage plein : on garde la file d'origine intacte (les paquets
+        // confirmés seront renvoyés puis rejetés/dédoublonnés par l'API).
+        g_queueFs->remove(QUEUE_TMP_FILE);
+        g_log.println("[queue] réécriture de la file impossible (stockage plein ?), file conservée");
+        return;
+    }
+
+    g_queueFs->remove(QUEUE_FILE);
+    g_queueFs->rename(QUEUE_TMP_FILE, QUEUE_FILE);
     if (purged > 0)
         g_log.printf("[queue] %u ligne(s) invalide(s) purgée(s) de la file\n", purged);
+}
+
+/**
+ * Au démarrage : répare une réécriture de file interrompue par une coupure
+ * de courant. Fichier temporaire seul (coupure entre la suppression de
+ * l'original et le renommage) : c'est la file, on le renomme. Les deux
+ * présents (coupure pendant l'écriture) : le temporaire est incomplet, on le
+ * jette et on garde l'original.
+ */
+static void recoverQueueRewrite()
+{
+    MutexGuard guard(g_fsMutex);
+    if (!g_queueFs->exists(QUEUE_TMP_FILE))
+        return;
+    if (g_queueFs->exists(QUEUE_FILE))
+    {
+        g_queueFs->remove(QUEUE_TMP_FILE);
+    }
+    else
+    {
+        g_queueFs->rename(QUEUE_TMP_FILE, QUEUE_FILE);
+        g_log.println("[queue] file restaurée après une réécriture interrompue");
+    }
 }
 
 static void setupStorage()
@@ -601,96 +830,173 @@ static WiFiClientSecure &apiClient()
     if (!secureClientReady)
     {
         secureClient.setInsecure(); // pas de CA pinnée, cf. comportement HTTPClient par défaut jusqu'ici
+        // Par défaut, une poignée de main TLS qui n'aboutit pas (liaison
+        // radio médiocre, serveur qui ne répond plus en cours de route)
+        // bloque la tâche de synchro 120 s avant d'échouer en "-1".
+        secureClient.setHandshakeTimeout(HTTPS_HANDSHAKE_TIMEOUT_S);
         secureClientReady = true;
     }
     return secureClient;
 }
 
-static void syncWithApi()
+// ---------------------------------------------------------------------------
+// Réserve mémoire TLS. mbedTLS (tel que compilé dans le core Arduino : pas de
+// tampons dynamiques) alloue à chaque connexion deux blocs de ~16,7 Ko d'un
+// seul tenant, plus quelques Ko pour la poignée de main. Sur ce module sans
+// PSRAM, BLE + WiFi (jusqu'à 32 tampons RX dynamiques de 1,6 Ko quand la
+// liaison est mauvaise) morcellent le tas : passé quelques minutes, ces blocs
+// n'étaient plus allouables ("SSL - Memory allocation failed" en boucle).
+// On les réserve donc au démarrage, tas encore propre, et on ne les prête
+// qu'au TLS, le temps d'une requête (TlsMemoryScope).
+// ---------------------------------------------------------------------------
+
+static void *g_tlsReserve[sizeof(TLS_RESERVE_BLOCK_SIZES) / sizeof(TLS_RESERVE_BLOCK_SIZES[0])] = {};
+static uint8_t g_tlsMemoryFailures = 0;
+
+static void logMemory(const char *context)
+{
+    g_log.printf("[mem] %s : libre=%u o, plus grand bloc=%u o, minimum atteint=%u o\n",
+                 context, (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap(), (unsigned)ESP.getMinFreeHeap());
+}
+
+static void reserveTlsMemory()
+{
+    for (size_t i = 0; i < sizeof(g_tlsReserve) / sizeof(g_tlsReserve[0]); i++)
+    {
+        if (!g_tlsReserve[i])
+            g_tlsReserve[i] = malloc(TLS_RESERVE_BLOCK_SIZES[i]);
+    }
+}
+
+static void releaseTlsMemory()
+{
+    for (auto &block : g_tlsReserve)
+    {
+        free(block);
+        block = nullptr;
+    }
+}
+
+/** Prête la réserve au TLS pour la durée de vie de l'objet. À déclarer AVANT
+ * le HTTPClient de la fonction : détruit après lui, il ne reprend la réserve
+ * qu'une fois la connexion fermée et ses tampons rendus. */
+struct TlsMemoryScope
+{
+    TlsMemoryScope() { releaseTlsMemory(); }
+    ~TlsMemoryScope() { reserveTlsMemory(); }
+};
+
+/**
+ * À appeler après chaque requête HTTPS. En cas d'échec de connexion, imprime
+ * de quoi distinguer les causes : durée (≈ HTTPS_CONNECT_TIMEOUT_MS : serveur
+ * injoignable ; ≈ HTTPS_HANDSHAKE_TIMEOUT_S : poignée de main TLS qui
+ * n'aboutit pas ; quasi immédiat : DNS), force du signal WiFi et code
+ * d'erreur mbedTLS. Compte aussi les échecs dus à la mémoire (voir le
+ * redémarrage de secours dans syncTask).
+ * `out` : g_log, ou Serial pour l'envoi des journaux lui-même (sinon chaque
+ * échec d'envoi ajouterait une ligne à envoyer).
+ */
+static void noteTlsResult(int httpStatus, uint32_t startedAtMs, Print &out)
+{
+    if (httpStatus > 0)
+    {
+        g_tlsMemoryFailures = 0;
+        return;
+    }
+    char unused[8];
+    const int tlsError = apiClient().lastError(unused, sizeof(unused));
+    out.printf("[net] connexion à l'API impossible après %u ms (WiFi %d dBm, code TLS %d)\n",
+               (unsigned)(millis() - startedAtMs), (int)WiFi.RSSI(), tlsError);
+    if (tlsError == MBEDTLS_ERR_SSL_ALLOC_FAILED)
+    {
+        if (g_tlsMemoryFailures < 255)
+            g_tlsMemoryFailures++;
+        logMemory("connexion TLS impossible faute de mémoire");
+    }
+}
+
+/** true : rien à envoyer, ou paquet confirmé/rejeté par l'API ; false : échec
+ * (réseau, API, mémoire) — l'appelant espace alors la tentative suivante. */
+static bool syncWithApi()
 {
     if (WiFi.status() != WL_CONNECTED)
-        return;
+        return true;
 
-    std::vector<QueuedPacket> batch;
-    if (!readQueueBatch(batch) || batch.empty())
-        return;
+    String body;
+    String localId;
+    if (!readQueueHead(body, localId))
+        return true;
 
-    String payload;
-    payload.reserve(12 + batch.size() * 256);
-    payload = "{\"packets\":[";
-    for (size_t i = 0; i < batch.size(); i++)
+    int status;
+    String respBody;
+    const uint32_t startedAt = millis();
     {
-        if (i > 0)
-            payload += ',';
-        payload += batch[i].raw_json;
+        TlsMemoryScope tlsMemory;
+        HTTPClient http;
+        http.begin(apiClient(), String(API_BASE_URL) + API_RELAY_SYNC_PATH);
+        http.setConnectTimeout(HTTPS_CONNECT_TIMEOUT_MS);
+        // Connexion fermée après la requête : gardée ouverte (keep-alive), la
+        // session TLS immobilisait en permanence ses tampons mbedTLS.
+        http.setReuse(false);
+        http.addHeader("Content-Type", "application/json");
+        http.addHeader("Authorization", String("Bearer ") + RELAY_API_TOKEN);
+        http.setTimeout(20000);
+        // Pointeur + taille : POST(String) prend son argument par valeur et
+        // dupliquerait le paquet (10 Ko avec selfie) pendant la connexion.
+        status = http.POST(reinterpret_cast<uint8_t *>(const_cast<char *>(body.c_str())), body.length());
+        respBody = http.getString();
+        http.end();
     }
-    payload += "]}";
-    const size_t batchCount = batch.size();
-    batch.clear();
-    batch.shrink_to_fit();
-    if (payload.length() <= 12)
-    {
-        g_log.println("[sync] corps JSON vide, on retentera au prochain cycle");
-        return;
-    }
+    noteTlsResult(status, startedAt, g_log);
+    body = String(); // paquet libéré avant d'analyser la réponse
 
-    HTTPClient http;
-    String url = String(API_BASE_URL) + API_RELAY_SYNC_PATH;
-    http.begin(apiClient(), url);
-    http.addHeader("Content-Type", "application/json");
-    http.addHeader("Authorization", String("Bearer ") + RELAY_API_TOKEN);
-    http.setTimeout(20000);
-
-    int status = http.POST(payload);
     if (status != 200)
     {
-        String errorBody = http.getString();
-        g_log.printf("[sync] échec HTTP %d: %s, on retentera au prochain cycle\n", status, errorBody.c_str());
-        http.end();
-        return; // rien n'est retiré de la file : nouvelle tentative plus tard
+        // Rien n'est retiré de la file : nouvelle tentative plus tard.
+        g_log.printf("[sync] échec HTTP %d: %s, nouvel essai dans %u s\n", status, respBody.c_str(), (unsigned)(SYNC_RETRY_INTERVAL_MS / 1000));
+        return false;
     }
 
-    String respBody = http.getString();
-    http.end();
-
-    StaticJsonDocument<4096> resp;
+    StaticJsonDocument<1024> resp;
     if (deserializeJson(resp, respBody) != DeserializationError::Ok)
     {
-        g_log.println("[sync] réponse API illisible, on retentera au prochain cycle");
-        return;
+        g_log.println("[sync] réponse API illisible, on retentera plus tard");
+        return false;
     }
 
     std::vector<String> toRemove;
     for (JsonObject result : resp["results"].as<JsonArray>())
     {
         const char *status_ = result["status"] | "";
-        const char *localId = result["local_id"] | "";
+        const char *resultId = result["local_id"] | "";
         // "ok" (accepté) et "rejected" (invalide, inutile de réessayer) sont
         // terminaux : on purge. "retry" reste en file pour le prochain cycle.
         if (strcmp(status_, "ok") == 0 || strcmp(status_, "rejected") == 0)
         {
-            toRemove.push_back(String(localId));
+            toRemove.push_back(String(resultId));
         }
     }
 
     removeFromQueue(toRemove);
-    g_log.printf("[sync] %u paquet(s) envoyés, %u confirmé(s)/rejeté(s)\n", (unsigned)batchCount, (unsigned)toRemove.size());
+    g_log.printf("[sync] 1 paquet(s) envoyés, %u confirmé(s)/rejeté(s)\n", (unsigned)toRemove.size());
+    return !toRemove.empty();
 }
 
 /**
  * Pousse vers l'API les lignes du moniteur série en attente (voir
  * RemoteLogger). Les échecs ne sont imprimés que sur Serial : les passer par
  * g_log alimenterait le tampon avec ses propres erreurs d'envoi.
+ * false en cas d'échec réseau : l'appelant espace la tentative suivante.
  */
-static void flushRemoteLogs()
+static bool flushRemoteLogs()
 {
     if (!REMOTE_LOG_ENABLED || WiFi.status() != WL_CONNECTED)
-        return;
+        return true;
 
     std::vector<LogLine> batch;
     g_log.snapshot(batch, LOG_BATCH_MAX_LINES);
     if (batch.empty())
-        return;
+        return true;
 
     // Capacité calculée sur le contenu réel plutôt que sur le pire cas
     // (LOG_BATCH_MAX_LINES x LOG_LINE_MAX_LEN) : le tas est déjà sollicité
@@ -715,30 +1021,38 @@ static void flushRemoteLogs()
     serializeJson(doc, body);
     doc.clear();
 
-    HTTPClient http;
-    http.begin(apiClient(), String(API_BASE_URL) + API_RELAY_LOGS_PATH);
-    http.addHeader("Content-Type", "application/json");
-    http.addHeader("Accept", "application/json");
-    http.addHeader("Authorization", String("Bearer ") + RELAY_API_TOKEN);
-    http.setTimeout(10000);
-    const int status = http.POST(body);
-    http.end();
+    int status;
+    const uint32_t startedAt = millis();
+    {
+        TlsMemoryScope tlsMemory;
+        HTTPClient http;
+        http.begin(apiClient(), String(API_BASE_URL) + API_RELAY_LOGS_PATH);
+        http.setConnectTimeout(HTTPS_CONNECT_TIMEOUT_MS);
+        http.setReuse(false); // voir syncWithApi() : libère les tampons TLS entre deux requêtes
+        http.addHeader("Content-Type", "application/json");
+        http.addHeader("Accept", "application/json");
+        http.addHeader("Authorization", String("Bearer ") + RELAY_API_TOKEN);
+        http.setTimeout(10000);
+        status = http.POST(reinterpret_cast<uint8_t *>(const_cast<char *>(body.c_str())), body.length());
+        http.end();
+    }
+    noteTlsResult(status, startedAt, Serial);
 
     if (status >= 200 && status < 300)
     {
         g_log.ack(lastSeq);
+        return true;
     }
-    else if (status >= 400 && status < 500 && status != 429)
+    if (status >= 400 && status < 500 && status != 429)
     {
         // Lot refusé tel quel (validation, token révoqué...) : il ne passera
         // jamais, on le jette plutôt que de bloquer les lignes suivantes.
         Serial.printf("[log] lot refusé par l'API (HTTP %d), ignoré\n", status);
         g_log.ack(lastSeq);
+        return true;
     }
-    else
-    {
-        Serial.printf("[log] échec envoi (HTTP %d), nouvelle tentative plus tard\n", status);
-    }
+    Serial.printf("[log] échec envoi (HTTP %d), nouvelle tentative plus tard\n", status);
+    return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -778,15 +1092,19 @@ static bool sha256Matches(const uint8_t digest[32], const String &expectedHex)
  * erreur réseau, réponse invalide). */
 static bool fetchOtaManifest(OtaManifest &out)
 {
+    const uint32_t startedAt = millis();
+    TlsMemoryScope tlsMemory;
     HTTPClient http;
     http.setConnectTimeout(OTA_CONNECT_TIMEOUT_MS);
     http.setTimeout(10000);
     http.begin(apiClient(), String(API_BASE_URL) + API_RELAY_FIRMWARE_MANIFEST_PATH);
+    http.setReuse(false); // voir syncWithApi() : libère les tampons TLS entre deux requêtes
     http.addHeader("Accept", "application/json");
     http.addHeader("Authorization", String("Bearer ") + RELAY_API_TOKEN);
     http.addHeader("X-Firmware-Version", FIRMWARE_VERSION);
 
     const int code = http.GET();
+    noteTlsResult(code, startedAt, g_log);
     if (code == 200 || code == 204)
         markOtaAppValidOnce();
     if (code != 200)
@@ -820,10 +1138,12 @@ static bool fetchOtaManifest(OtaManifest &out)
 
 static OtaResult downloadAndFlash(const OtaManifest &m)
 {
+    TlsMemoryScope tlsMemory;
     HTTPClient http;
     http.setConnectTimeout(OTA_CONNECT_TIMEOUT_MS);
     http.setTimeout(OTA_STALL_TIMEOUT_MS);
     http.begin(apiClient(), m.url);
+    http.setReuse(false); // voir syncWithApi() : libère les tampons TLS entre deux requêtes
     http.addHeader("Authorization", String("Bearer ") + RELAY_API_TOKEN);
 
     const int code = http.GET();
@@ -969,34 +1289,63 @@ static void checkForUpdate()
  * Tâche dédiée (pile 16 Ko) pour la synchro périodique : la poignée de main
  * TLS de mbedTLS (HTTPS vers l'API) a besoin de plus de pile que celle de la
  * tâche loop() par défaut — l'y exécuter directement provoquait un
- * débordement de pile sur esp32_borne/, même cause ici. Rythmée par
- * LOG_FLUSH_INTERVAL_MS (moniteur à distance quasi temps réel), la synchro
- * des scans gardant sa propre cadence SYNC_INTERVAL_MS, et la vérification
- * OTA la sienne (OTA_CHECK_INTERVAL_MS, plus une dès la première connexion).
- * Les trois s'enchaînent dans cette seule tâche : jamais deux connexions TLS
- * simultanées.
+ * débordement de pile sur esp32_borne/, même cause ici. Se réveille au
+ * rythme de la plus courte des cadences : synchro des scans
+ * (SYNC_INTERVAL_MS), envoi des journaux (LOG_FLUSH_INTERVAL_MS) et
+ * vérification OTA (OTA_CHECK_INTERVAL_MS, plus une dès la première
+ * connexion) gardent chacune leur propre minuterie. Les trois s'enchaînent
+ * dans cette seule tâche : jamais deux connexions TLS simultanées.
  */
 static void syncTask(void *)
 {
+    const uint32_t tickMs = REMOTE_LOG_ENABLED ? std::min(SYNC_INTERVAL_MS, LOG_FLUSH_INTERVAL_MS) : SYNC_INTERVAL_MS;
     uint32_t lastSync = millis();
+    uint32_t syncInterval = SYNC_INTERVAL_MS;
+    uint32_t lastLogFlush = millis();
+    uint32_t logInterval = LOG_FLUSH_INTERVAL_MS;
+    uint32_t lastMemoryLog = millis();
     uint32_t lastOtaCheck = 0;
     bool otaCheckedOnce = false;
     for (;;)
     {
-        vTaskDelay(pdMS_TO_TICKS(REMOTE_LOG_ENABLED ? LOG_FLUSH_INTERVAL_MS : SYNC_INTERVAL_MS));
+        vTaskDelay(pdMS_TO_TICKS(tickMs));
         if (WiFi.status() != WL_CONNECTED)
             continue;
-        if (millis() - lastSync >= SYNC_INTERVAL_MS)
+
+        // Après un échec, on espace les tentatives : chaque connexion TLS
+        // ratée mobilise la radio et ~45 Ko de tas pour rien, inutile de
+        // recommencer toutes les 3 s quand le modem n'a pas d'internet.
+        if (millis() - lastSync >= syncInterval)
         {
             lastSync = millis();
-            syncWithApi();
+            syncInterval = syncWithApi() ? SYNC_INTERVAL_MS : SYNC_RETRY_INTERVAL_MS;
         }
-        flushRemoteLogs();
+        if (millis() - lastLogFlush >= logInterval)
+        {
+            lastLogFlush = millis();
+            logInterval = flushRemoteLogs() ? LOG_FLUSH_INTERVAL_MS : LOG_RETRY_INTERVAL_MS;
+        }
         if ((!otaCheckedOnce || millis() - lastOtaCheck >= OTA_CHECK_INTERVAL_MS) && otaSafeToRun())
         {
             otaCheckedOnce = true;
             lastOtaCheck = millis();
             checkForUpdate();
+        }
+        if (millis() - lastMemoryLog >= MEMORY_LOG_INTERVAL_MS)
+        {
+            lastMemoryLog = millis();
+            logMemory("suivi");
+        }
+
+        // Dernier recours : si, malgré la réserve, le TLS échoue plusieurs
+        // fois de suite faute de mémoire, seul un redémarrage rend un tas
+        // propre. Sans risque pour les pointages (file sur SD/flash), et
+        // jamais pendant qu'un téléphone est connecté.
+        if (g_tlsMemoryFailures >= TLS_MEMORY_FAILURES_BEFORE_RESTART && otaSafeToRun())
+        {
+            g_log.println("[mem] mémoire trop morcelée pour le TLS, redémarrage de la borne (file conservée)");
+            delay(300);
+            ESP.restart();
         }
     }
 }
@@ -1006,30 +1355,6 @@ static void syncTask(void *)
 // (conservé pour du débogage via curl sur le WiFi STA déjà utilisé pour la
 // synchro, ex. `curl http://<ip-sta>/scan`).
 // ---------------------------------------------------------------------------
-
-/** Encode en base64 le selfie reçu par chunks BLE (voir ScanCharCallbacks) ;
- * chaîne vide si aucune photo n'a été transmise pour ce scan. Même motif que
- * capturePhotoBase64() sur esp32_borne/, mais à partir d'un buffer déjà en
- * mémoire (le téléphone capture et compresse la photo, pas la borne). */
-static String encodePhotoBase64(const std::vector<uint8_t> &raw)
-{
-    if (raw.empty())
-        return "";
-
-    size_t encodedLen = 0;
-    mbedtls_base64_encode(nullptr, 0, &encodedLen, raw.data(), raw.size());
-
-    std::vector<unsigned char> buf(encodedLen);
-    size_t written = 0;
-    int rc = mbedtls_base64_encode(buf.data(), buf.size(), &written, raw.data(), raw.size());
-    if (rc != 0)
-    {
-        g_log.println("[ble] échec encodage base64 du selfie");
-        return "";
-    }
-
-    return String(reinterpret_cast<char *>(buf.data()), written);
-}
 
 /**
  * { "type": "scan"|"admin_proxy", "teacher_token": "...", "payload": {...}, "captured_at"?: "ISO8601" }
@@ -1041,15 +1366,26 @@ static String encodePhotoBase64(const std::vector<uint8_t> &raw)
  * proximité) + `payload.photo_base64` si un selfie a été transmis (voir
  * ScanCharCallbacks/BLE_TAG_*), écrit sur flash, puis répond — l'envoi vers
  * l'API est différé au prochain cycle de `syncWithApi()`.
+ *
+ * `photo` : selfie JPEG brut reçu par chunks BLE (vide si aucun). Il n'est
+ * jamais copié dans le document JSON : seul un marqueur y est posé, remplacé
+ * par le base64 au moment de l'écriture (voir appendToQueue).
  */
-static String processScan(const String &rawJson, const String &photoBase64)
+static String processScan(const String &rawJson, const std::vector<uint8_t> &photo)
 {
     if (queueLength() >= queueCapacity())
     {
         return "{\"error\":\"file locale saturée, réessayez plus tard\"}";
     }
 
-    DynamicJsonDocument in(4096);
+    // Documents dimensionnés sur le contenu réel (un scan sans selfie pèse
+    // ~200 octets) et non sur le pire cas : voir le commentaire plus bas.
+    DynamicJsonDocument in(rawJson.length() + 1024);
+    if (in.capacity() == 0)
+    {
+        g_log.printf("[queue] mémoire insuffisante (bloc libre max %u o), scan refusé\n", (unsigned)ESP.getMaxAllocHeap());
+        return "{\"error\":\"borne momentanément saturée, réessayez\"}";
+    }
     if (deserializeJson(in, rawJson) != DeserializationError::Ok)
     {
         return "{\"error\":\"JSON invalide\"}";
@@ -1098,13 +1434,16 @@ static String processScan(const String &rawJson, const String &photoBase64)
     makeLocalId(localId, sizeof(localId));
 
     // ArduinoJson n'échoue pas bruyamment : si le tas (fragmenté par BLE + TLS,
-    // pas de PSRAM ici) n'a pas 20 Ko d'un seul tenant, le document a une
-    // capacité nulle, toutes les écritures ci-dessous sont ignorées et la
-    // sérialisation produit "null". Ce "null" était écrit dans la file et le
-    // téléphone recevait queued=true : scan perdu, et la ligne bloquait toute
-    // la synchro (422 en boucle). On refuse donc explicitement : le téléphone
-    // affiche l'erreur et l'enseignant rescanne.
-    DynamicJsonDocument out(PACKET_JSON_CAPACITY);
+    // pas de PSRAM ici) n'a pas le bloc demandé d'un seul tenant, le document
+    // a une capacité nulle, toutes les écritures ci-dessous sont ignorées et
+    // la sérialisation produit "null". Ce "null" était écrit dans la file et
+    // le téléphone recevait queued=true : scan perdu, et la ligne bloquait
+    // toute la synchro (422 en boucle). On refuse donc explicitement : le
+    // téléphone affiche l'erreur et l'enseignant rescanne.
+    // Le document ne contient plus le selfie (marqueur seulement) : ~1 Ko
+    // suffit là où l'ancienne version exigeait 20 Ko contigus — refusés dès
+    // que le plus grand bloc libre tombait à ~10 Ko, même sans photo.
+    DynamicJsonDocument out(in.memoryUsage() + 768);
     if (out.capacity() == 0)
     {
         g_log.printf("[queue] mémoire insuffisante (bloc libre max %u o), scan refusé\n", (unsigned)ESP.getMaxAllocHeap());
@@ -1119,25 +1458,14 @@ static String processScan(const String &rawJson, const String &photoBase64)
         out["payload"]["bssid"] = NimBLEDevice::getAddress().toString();
     }
     out["captured_at"] = capturedAt;
+    if (!photo.empty())
+    {
+        out["payload"]["photo_base64"] = PHOTO_PLACEHOLDER;
+    }
     if (out.overflowed())
     {
         g_log.println("[queue] paquet incomplet (document saturé), scan refusé");
         return "{\"error\":\"borne momentanément saturée, réessayez\"}";
-    }
-
-    bool photoCaptured = false;
-    if (photoBase64.length() > 0)
-    {
-        out["payload"]["photo_base64"] = photoBase64;
-        if (out.overflowed())
-        {
-            out["payload"].remove("photo_base64");
-            g_log.println("[ble] paquet JSON saturé, photo_base64 non enregistrée");
-        }
-        else
-        {
-            photoCaptured = true;
-        }
     }
 
     String serialized;
@@ -1147,7 +1475,7 @@ static String processScan(const String &rawJson, const String &photoBase64)
     // réseau : c'est ce qui garantit qu'un scan accepté ne se perd jamais,
     // même si l'ESP32 redémarre dans la seconde qui suit. Et pas de
     // queued=true si l'écriture a échoué : le téléphone doit le savoir.
-    if (!serialized.startsWith("{") || !appendToQueue(serialized))
+    if (!serialized.startsWith("{") || !appendToQueue(serialized, photo))
     {
         return "{\"error\":\"enregistrement impossible sur la borne, réessayez\"}";
     }
@@ -1155,7 +1483,7 @@ static String processScan(const String &rawJson, const String &photoBase64)
     StaticJsonDocument<160> resp;
     resp["queued"] = true;
     resp["local_id"] = localId;
-    resp["photo_captured"] = photoCaptured;
+    resp["photo_captured"] = !photo.empty();
     String respStr;
     serializeJson(resp, respStr);
     return respStr;
@@ -1289,10 +1617,8 @@ static void processPendingBleScan()
     }
 
     beepBuzzer();
-    String photoBase64 = encodePhotoBase64(photoBytes);
-    g_log.printf("[ble] scan reçu: json=%uo photo=%uo (base64=%uo)\n",
-                  (unsigned)rawJson.length(), (unsigned)photoBytes.size(), (unsigned)photoBase64.length());
-    String response = processScan(rawJson, photoBase64);
+    g_log.printf("[ble] scan reçu: json=%uo photo=%uo\n", (unsigned)rawJson.length(), (unsigned)photoBytes.size());
+    String response = processScan(rawJson, photoBytes);
     if (g_bleResultChar)
     {
         g_bleResultChar->setValue(response);
@@ -1365,7 +1691,8 @@ static void handleScan()
     }
     // Chemin de débogage uniquement (curl) : pas de selfie possible ici, voir
     // le commentaire au-dessus de handleScan().
-    String resp = processScan(server.arg("plain"), "");
+    static const std::vector<uint8_t> noPhoto;
+    String resp = processScan(server.arg("plain"), noPhoto);
     bool queued = resp.indexOf("\"queued\"") >= 0;
     server.send(queued ? 202 : 400, "application/json", resp);
 }
@@ -1427,10 +1754,11 @@ void setup()
 
     // Cause du dernier redémarrage : permet de repérer depuis le backoffice
     // un brownout (voir ci-dessus) ou un crash (panic/watchdog) sans câble USB.
-    g_log.printf("[boot] firmware %s, cause du reset=%d (1=mise sous tension, 4=panic, 5-7=watchdog, 9=brownout)\n",
+    g_log.printf("[boot] firmware %s, cause du reset=%d (1=mise sous tension, 3=redémarrage logiciel, 4=panic, 5-7=watchdog, 9=brownout)\n",
                  FIRMWARE_VERSION, (int)esp_reset_reason());
 
     setupStorage();
+    recoverQueueRewrite();
     g_log.printf("[queue] %u paquet(s) en attente au démarrage\n", (unsigned)queueLength());
 
     // Laisse le régulateur 3.3V se stabiliser après la séquence de boot
@@ -1459,6 +1787,11 @@ void setup()
 
     // Cœur 1 (APP_CPU), comme loopTask par défaut sur Arduino-ESP32 — la pile
     // dédiée de 16 Ko est la partie qui compte ici, pas l'affinité de cœur.
+    // BLE et pilote WiFi sont initialisés, le tas est encore propre : c'est le
+    // moment de mettre de côté la mémoire du TLS (voir reserveTlsMemory()).
+    reserveTlsMemory();
+    logMemory("démarrage, réserve TLS constituée");
+
     xTaskCreatePinnedToCore(syncTask, "sync_task", 16384, nullptr, 1, nullptr, 1);
 }
 

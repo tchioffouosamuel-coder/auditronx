@@ -62,6 +62,9 @@ if (Test-Path $queue) {
     Write-Host "Importez ce fichier dans le backoffice : Appareils & points d'accès > Import file borne."
 } else {
     Write-Host ""
-    Write-Host "Aucun queue.jsonl dans la flash (file vide, ou file stockée sur la carte SD)."
+    Write-Host "Aucun queue.jsonl dans la flash interne."
+    Write-Host "Si la borne annonce des paquets en attente, la file est sur la carte micro-SD"
+    Write-Host "(au démarrage, une carte détectée récupère la file interne puis l'efface) :"
+    Write-Host "retirez la carte, copiez queue.jsonl depuis sa racine sur le PC, puis importez-le."
     Write-Host "Contenu extrait : $files"
 }

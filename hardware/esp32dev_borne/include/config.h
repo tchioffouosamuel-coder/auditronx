@@ -80,22 +80,34 @@ inline constexpr char API_RELAY_SYNC_PATH[] = "/api/relay/sync";
 // device relais est identifié individuellement côté API).
 inline constexpr char RELAY_API_TOKEN[] = "76|nJRGTR5elU6Cg6kqXpYexMnZMKlVMTNrOLJAY8wfc653073d";
 
-// Un seul paquet par requête : la négociation TLS consomme déjà beaucoup de
-// RAM sur cet ESP32 sans PSRAM, et chaque paquet peut contenir un selfie.
-inline constexpr size_t SYNC_BATCH_SIZE = 1;
+// Plus de capacité fixe de document JSON par paquet : les documents sont
+// dimensionnés sur le contenu réel et le selfie est écrit dans la file par
+// blocs, sans passer par un document (voir processScan/appendToQueue dans
+// main.cpp). L'ancien bloc fixe de 20 Ko d'un seul tenant n'était plus
+// allouable dès que BLE et TLS avaient morcelé le tas.
 
-// Capacité des documents ArduinoJson dynamiques (RAM) par paquet : JPEG
-// ~160x120 qualité ~20 (quelques Ko) encodé en base64 (x1.37) + payload
-// qr_code/enseignant_id/motif + token + entêtes JSON, avec marge.
-// Capacité suffisante pour un selfie JPEG basse résolution (~160x120, qualité ~20)
-// encodé en base64 + le JSON du scan et ses métadonnées. Le seuil historique de
-// 10 Ko était trop juste et faisait tomber silencieusement photo_base64 quand le
-// paquet dépassait cette capacité, sans que le téléphone le remarque.
-inline constexpr size_t PACKET_JSON_CAPACITY = 20 * 1024;
-inline constexpr size_t SYNC_BODY_JSON_CAPACITY = SYNC_BATCH_SIZE * PACKET_JSON_CAPACITY;
+// Cadence de synchro : un paquet par requête (la négociation TLS consomme
+// déjà l'essentiel de la RAM libre sur cet ESP32 sans PSRAM), toutes les 3 s
+// tant que la file n'est pas vide. File vide : simple lecture de la file,
+// aucune connexion réseau. Après un échec (pas d'internet, API injoignable),
+// la tentative suivante attend SYNC_RETRY_INTERVAL_MS.
+inline constexpr uint32_t SYNC_INTERVAL_MS = 3000;
+inline constexpr uint32_t SYNC_RETRY_INTERVAL_MS = 15000;
 
-// Cadence de vérification de la connectivité / tentative de synchro.
-inline constexpr uint32_t SYNC_INTERVAL_MS = 15000;
+// ---- Délais des connexions HTTPS vers l'API ----
+// Courts à dessein : une tentative qui n'aboutit pas doit libérer vite la
+// tâche de synchro pour réessayer (SYNC_RETRY_INTERVAL_MS), au lieu de la
+// bloquer 120 s (délai de poignée de main par défaut du core).
+inline constexpr int32_t HTTPS_CONNECT_TIMEOUT_MS = 8000;
+inline constexpr unsigned long HTTPS_HANDSHAKE_TIMEOUT_S = 20;
+
+// ---- Mémoire réservée au TLS (voir reserveTlsMemory() dans main.cpp) ----
+// Deux tampons d'enregistrement mbedTLS de ~16,7 Ko + la poignée de main.
+inline constexpr size_t TLS_RESERVE_BLOCK_SIZES[] = {17 * 1024, 17 * 1024, 10 * 1024};
+// Échecs TLS consécutifs "faute de mémoire" avant un redémarrage de secours.
+inline constexpr uint8_t TLS_MEMORY_FAILURES_BEFORE_RESTART = 6;
+// Cadence de la ligne de suivi "[mem] ..." (moniteur série et backoffice).
+inline constexpr uint32_t MEMORY_LOG_INTERVAL_MS = 10UL * 60UL * 1000UL;
 
 // ---- Moniteur série à distance (backoffice > Moniteur des bornes) ----
 // Chaque ligne imprimée sur le port série est aussi gardée dans un tampon RAM
@@ -104,7 +116,10 @@ inline constexpr uint32_t SYNC_INTERVAL_MS = 15000;
 // uniquement, rien de critique n'y transite (contrairement à la file de scans).
 inline constexpr bool REMOTE_LOG_ENABLED = true;
 inline constexpr char API_RELAY_LOGS_PATH[] = "/api/relay/logs";
-inline constexpr uint32_t LOG_FLUSH_INTERVAL_MS = 5000;
+// 10 s : chaque envoi ouvre puis ferme une connexion TLS (plus de keep-alive,
+// pour rendre la mémoire aux scans) — inutile d'en ouvrir une toutes les 5 s.
+inline constexpr uint32_t LOG_FLUSH_INTERVAL_MS = 10000;
+inline constexpr uint32_t LOG_RETRY_INTERVAL_MS = 30000;
 inline constexpr size_t LOG_BUFFER_MAX_LINES = 80;
 inline constexpr size_t LOG_LINE_MAX_LEN = 240;
 inline constexpr size_t LOG_BATCH_MAX_LINES = 30;
@@ -116,7 +131,7 @@ inline constexpr char NTP_SERVER[] = "pool.ntp.org";
 // destiné à l'OTA et à saisir à l'identique dans le backoffice lors de
 // l'upload : la borne flashe dès que la version active côté serveur diffère
 // de celle-ci (activer une version plus ancienne fait donc un rollback).
-inline constexpr char FIRMWARE_VERSION[] = "1.0.1";
+inline constexpr char FIRMWARE_VERSION[] = "1.0.5";
 inline constexpr char API_RELAY_FIRMWARE_MANIFEST_PATH[] = "/api/relay/firmware/manifest";
 // Cadence de vérification du manifest (en plus d'une vérification dès la
 // première connexion WiFi). Pas de canal push ici, contrairement au MQTT de

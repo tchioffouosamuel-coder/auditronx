@@ -8,6 +8,7 @@ import AppareilsPage from "./pages/AppareilsPage";
 import AssiduitePage from "./pages/AssiduitePage";
 import CahierTextePage from "./pages/CahierTextePage";
 import ClassesPage from "./pages/ClassesPage";
+import ConfigurationPage from "./pages/ConfigurationPage";
 import DashboardPage from "./pages/DashboardPage";
 import DisciplinesPage from "./pages/DisciplinesPage";
 import EmploisPage from "./pages/EmploisPage";
@@ -64,6 +65,7 @@ export default function App() {
             <Route path="/appareils" element={<AppareilsPage />} />
             <Route path="/moniteur-bornes" element={<MoniteurBornesPage />} />
             <Route path="/firmwares" element={<FirmwaresPage />} />
+            <Route path="/configuration" element={<ConfigurationPage />} />
           </Route>
         </Routes>
       </AuthProvider>

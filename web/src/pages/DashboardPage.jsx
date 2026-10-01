@@ -70,6 +70,8 @@ function PeopleList({ title, people = [], tone = "neutral" }) {
                   <td className="px-2 py-3 text-ink-500">
                     {person.hors_emploi_du_temps ? (
                       <span className="italic text-ink-300">Pas de cours ce jour</span>
+                    ) : person.horaire_administratif ? (
+                      `Administration ${person.horaire_administratif.heure_debut}-${person.horaire_administratif.heure_fin}`
                     ) : (
                       (person.cours || [])
                         .map(

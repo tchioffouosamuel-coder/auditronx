@@ -7,6 +7,7 @@ use App\Http\Controllers\Traits\AccessibleEnseignants;
 use App\Models\EmploiDuTemps;
 use App\Models\Enseignant;
 use App\Models\Presence;
+use App\Services\HoraireAttendu;
 use App\Services\RetardCalculator;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -16,7 +17,7 @@ class DashboardController extends Controller
 {
     use AccessibleEnseignants;
 
-    public function index(Request $request, RetardCalculator $retards)
+    public function index(Request $request, RetardCalculator $retards, HoraireAttendu $horaires)
     {
         $date = $request->query('date') ? Carbon::parse($request->query('date')) : now();
 
@@ -27,7 +28,13 @@ class DashboardController extends Controller
             ->orderBy('heure_debut')
             ->get()
             ->groupBy('enseignant_id');
-        $planifies = $enseignants->filter(fn(Enseignant $e) => $emploisDuJour->has($e->id))->values();
+        // Plage attendue par personne : cours du jour pour un enseignant,
+        // journée de travail fixe pour le personnel administratif (voir
+        // HoraireAttendu) — ce dernier est donc planifié sans emploi du temps.
+        $plages = $enseignants
+            ->mapWithKeys(fn(Enseignant $e) => [$e->id => $horaires->plage($e, $date, $emploisDuJour->get($e->id, collect()))])
+            ->filter();
+        $planifies = $enseignants->filter(fn(Enseignant $e) => $plages->has($e->id))->values();
         // Présences de TOUT le personnel accessible, pas seulement de ceux qui
         // ont cours ce jour : un enseignant venu sans cours planifié (réunion,
         // permanence, emploi du temps incomplet...) compte parmi les présents.
@@ -38,7 +45,7 @@ class DashboardController extends Controller
             ->get()
             ->keyBy('enseignant_id');
         $presentsSansCours = $enseignants
-            ->filter(fn(Enseignant $e) => ! $emploisDuJour->has($e->id) && $presencesDuJour->get($e->id)?->heure_arrivee)
+            ->filter(fn(Enseignant $e) => ! $plages->has($e->id) && $presencesDuJour->get($e->id)?->heure_arrivee)
             ->sortBy('nom');
 
         $scannes = [];
@@ -48,6 +55,7 @@ class DashboardController extends Controller
         foreach ($planifies->concat($presentsSansCours) as $enseignant) {
             $presence = $presencesDuJour->get($enseignant->id);
             $cours = $emploisDuJour->get($enseignant->id, collect());
+            $plage = $plages->get($enseignant->id);
             $detail = [
                 'enseignant_id' => $enseignant->id,
                 'nom' => $enseignant->nom,
@@ -60,13 +68,15 @@ class DashboardController extends Controller
                     'heure_debut' => substr((string) $emploi->heure_debut, 0, 5),
                     'heure_fin' => substr((string) $emploi->heure_fin, 0, 5),
                 ])->values()->all(),
-                'hors_emploi_du_temps' => $cours->isEmpty(),
+                'hors_emploi_du_temps' => $plage === null,
+                'horaire_administratif' => $plage && $horaires->estAdministratif($enseignant)
+                    ? ['heure_debut' => $plage['heure_debut'], 'heure_fin' => $plage['heure_fin']]
+                    : null,
             ];
-            $premierCours = $cours->sortBy('heure_debut')->first();
-            $absenceEligible = $premierCours && (
+            $absenceEligible = $plage && (
                 $date->isBefore(Carbon::today())
                 || ($date->isSameDay(Carbon::today()) && now()->greaterThanOrEqualTo(
-                    Carbon::parse($date->toDateString() . ' ' . $premierCours->heure_debut)->addMinutes(5)
+                    Carbon::parse($date->toDateString() . ' ' . $plage['heure_debut'])->addMinutes(5)
                 ))
             );
 

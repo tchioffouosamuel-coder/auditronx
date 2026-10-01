@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Traits\AccessibleEnseignants;
 use App\Models\Enseignant;
 use App\Models\Presence;
+use App\Services\HoraireAttendu;
 use App\Services\RetardCalculator;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -59,14 +60,14 @@ class RetardsController extends Controller
     }
 
     /** GET /api/retards/bilan/{enseignant}?debut=&fin= — fiche individuelle PDF. */
-    public function bilanIndividuel(Request $request, Enseignant $enseignant, RetardCalculator $retards)
+    public function bilanIndividuel(Request $request, Enseignant $enseignant, RetardCalculator $retards, HoraireAttendu $horaires)
     {
         abort_unless($this->peutAccederA($request->user(), $enseignant), 403);
 
         $debut = Carbon::parse($request->query('debut', now()->startOfMonth()));
         $fin = Carbon::parse($request->query('fin', now()->endOfMonth()));
 
-        $fiche = $this->donneesFiche($enseignant, $debut, $fin, $retards);
+        $fiche = $this->donneesFiche($enseignant, $debut, $fin, $retards, $horaires);
 
         $pdf = Pdf::loadView('pdf.retards-individuel', [
             ...$fiche,
@@ -77,7 +78,7 @@ class RetardsController extends Controller
         return $pdf->download("bilan-retards-{$enseignant->matricule}.pdf");
     }
 
-    private function donneesFiche(Enseignant $enseignant, Carbon $debut, Carbon $fin, RetardCalculator $retards): array
+    private function donneesFiche(Enseignant $enseignant, Carbon $debut, Carbon $fin, RetardCalculator $retards, HoraireAttendu $horaires): array
     {
         $emplois = $enseignant->emploiDuTemps()->with(['discipline', 'classe'])->orderBy('jour')->orderBy('heure_debut')->get();
         $emploiParJour = $emplois->groupBy(fn($emploi) => $this->nomJour($emploi->jour));
@@ -91,17 +92,16 @@ class RetardsController extends Controller
         $totalRetard = $totalAnticipation = $totalPeriodesPresence = $totalPeriodesAbsence = 0;
 
         for ($date = $debut->copy(); $date->lte($fin); $date->addDay()) {
+            // Enseignant : jours avec cours ; personnel administratif : journée
+            // de travail fixe, sans emploi du temps (voir HoraireAttendu).
+            $plage = $horaires->plage($enseignant, $date, $emplois);
+            if (! $plage) continue;
             $coursDuJour = $emplois->where('jour', $date->isoWeekday())->values();
-            if ($coursDuJour->isEmpty()) continue;
-            $premierCours = $coursDuJour->first();
-            $dernierCours = $coursDuJour->sortBy('heure_fin')->last();
-            $minutesPrevues = $coursDuJour->sum(fn($cours) => Carbon::parse($cours->heure_debut)->diffInMinutes(Carbon::parse($cours->heure_fin)));
-            $periodesPrevues = max(1, (int) ceil($minutesPrevues / 40));
+            $periodesPrevues = max(1, (int) ceil($plage['minutes'] / 40));
             $presence = $presences->get($date->toDateString());
             $signalement = $signalements->first(fn($item) => $date->between($item->date, $item->date->copy()->addDays(max(0, $item->duree_jours - 1))));
             $futur = $date->isFuture();
-            $heureDebut = Carbon::parse($date->toDateString() . ' ' . $premierCours->heure_debut);
-            $heureFin = Carbon::parse($date->toDateString() . ' ' . $dernierCours->heure_fin);
+            $heureFin = Carbon::parse($date->toDateString() . ' ' . $plage['heure_fin']);
             $retard = $presence?->heure_arrivee ? $retards->minutesDeRetard($enseignant, $presence) ?? 0 : 0;
             $anticipation = $presence?->heure_depart ? max(0, (int) floor(($heureFin->timestamp - $presence->heure_depart->timestamp) / 60)) : 0;
             $signale = $signalement !== null;
@@ -120,8 +120,8 @@ class RetardsController extends Controller
                 'date' => $date->format('d/m/Y'),
                 'jour' => $this->nomJour($date->isoWeekday()),
                 'nb_cours' => $coursDuJour->count(),
-                'heure_debut_prevue' => $premierCours->heure_debut,
-                'heure_fin_prevue' => $dernierCours->heure_fin,
+                'heure_debut_prevue' => $plage['heure_debut'],
+                'heure_fin_prevue' => $plage['heure_fin'],
                 'heure_arrivee' => $presence?->heure_arrivee?->format('H:i'),
                 'heure_depart' => $presence?->heure_depart?->format('H:i'),
                 'retard_minutes' => $retard,
@@ -139,6 +139,7 @@ class RetardsController extends Controller
             'mois' => $debut->format('m'),
             'annee' => $debut->year,
             'emploi_par_jour' => $emploiParJour,
+            'horaire_administratif' => $horaires->estAdministratif($enseignant) ? $horaires->parametresAdministratifs() : null,
             'details' => $details,
             'total_retard_minutes' => $totalRetard,
             'total_anticipation_minutes' => $totalAnticipation,

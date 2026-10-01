@@ -110,6 +110,23 @@
             <td>{{ $enseignant->matricule ?? '-' }}</td>
         </tr>
     </table>
+    @if (!empty($horaire_administratif))
+        <h2>HORAIRE DE TRAVAIL (PERSONNEL ADMINISTRATIF)</h2>
+        <table>
+            <tr>
+                <th style="width:12%">Jour</th>
+                <th>Horaires</th>
+            </tr>
+            @foreach ([1 => 'Lundi', 2 => 'Mardi', 3 => 'Mercredi', 4 => 'Jeudi', 5 => 'Vendredi', 6 => 'Samedi', 7 => 'Dimanche'] as $numero => $jour)
+                @if (in_array($numero, $horaire_administratif['jours'], true))
+                    <tr>
+                        <td class="bold">{{ $jour }}</td>
+                        <td>{{ $horaire_administratif['heure_debut'] }} - {{ $horaire_administratif['heure_fin'] }}</td>
+                    </tr>
+                @endif
+            @endforeach
+        </table>
+    @else
     <h2>EMPLOI DU TEMPS HEBDOMADAIRE</h2>
     <table>
         <tr>
@@ -134,6 +151,7 @@
             @endif
         @endforeach
     </table>
+    @endif
     <h2>DÉTAIL MENSUEL DES PRÉSENCES</h2>
     <table>
         <tr>
@@ -208,7 +226,7 @@
         <tr>
             <td class="text-left bold">Total retard (min)</td>
             <td>{{ round($total_retard_minutes) }}</td>
-            <td class="text-left bold">Jours de cours prévus</td>
+            <td class="text-left bold">{{ !empty($horaire_administratif) ? 'Jours de travail prévus' : 'Jours de cours prévus' }}</td>
             <td>{{ $jours_attendus }}</td>
         </tr>
         <tr>

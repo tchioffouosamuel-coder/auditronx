@@ -9,17 +9,22 @@ use App\Models\Presence;
 use Carbon\Carbon;
 
 /**
- * Détecte les absences répétées (§4.2 — Alertes) : pour chaque enseignant ayant
- * cours un jour donné mais aucun pointage, incrémente son compteur d'absences
+ * Détecte les absences répétées (§4.2 — Alertes) : pour chaque personne attendue
+ * un jour donné (cours ou journée administrative) mais sans pointage, incrémente son compteur d'absences
  * consécutives et déclenche une alerte au-delà du seuil configuré.
  */
 class AbsenceDetectorService
 {
     public const SEUIL_ALERTE = 3;
 
+    public function __construct(private HoraireAttendu $horaires) {}
+
     public function detecterPour(Carbon $date): void
     {
-        Enseignant::whereHas('emploiDuTemps', fn ($q) => $q->where('jour', $date->isoWeekday()))
+        // Attendus ce jour : enseignants ayant cours + personnel administratif
+        // un jour ouvré de son horaire fixe (voir HoraireAttendu).
+        Enseignant::with('emploiDuTemps')->get()
+            ->filter(fn (Enseignant $enseignant) => $this->horaires->estAttendu($enseignant, $date))
             ->each(function (Enseignant $enseignant) use ($date) {
                 $aPointe = Presence::where('enseignant_id', $enseignant->id)
                     ->whereDate('date', $date->toDateString())

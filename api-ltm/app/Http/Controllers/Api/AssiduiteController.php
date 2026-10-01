@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Traits\AccessibleEnseignants;
 use App\Models\Enseignant;
 use App\Models\Presence;
+use App\Services\HoraireAttendu;
 use Carbon\Carbon;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -16,7 +17,7 @@ class AssiduiteController extends Controller
     use AccessibleEnseignants;
 
     /** GET /api/assiduite/stats?debut=&fin=&section= */
-    public function stats(Request $request)
+    public function stats(Request $request, HoraireAttendu $horaires)
     {
         $debut = Carbon::parse($request->query('debut', now()->startOfMonth()));
         $fin = Carbon::parse($request->query('fin', now()->endOfMonth()));
@@ -31,10 +32,10 @@ class AssiduiteController extends Controller
             ->get()
             ->groupBy('enseignant_id');
 
-        $lignes = $enseignants->map(function (Enseignant $enseignant) use ($presences, $debut, $fin) {
+        $lignes = $enseignants->map(function (Enseignant $enseignant) use ($presences, $debut, $fin, $horaires) {
             $datesAttendues = collect();
             for ($date = $debut->copy(); $date->lte($fin); $date->addDay()) {
-                if ($enseignant->emploiDuTemps->contains('jour', $date->isoWeekday())) {
+                if ($horaires->estAttendu($enseignant, $date)) {
                     $datesAttendues->push($date->toDateString());
                 }
             }
