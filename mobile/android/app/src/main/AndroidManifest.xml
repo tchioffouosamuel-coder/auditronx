@@ -18,7 +18,12 @@
 	<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 	<uses-feature android:name="android.hardware.camera" android:required="false" />
 	<uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
-	<application android:label="Auditron X" android:name="${applicationName}" android:icon="@mipmap/ic_launcher" android:enableOnBackInvokedCallback="true">
+	<!--
+	allowBackup="false" : flutter_secure_storage chiffre ses valeurs avec une clé
+	du Keystore, qui n'est jamais sauvegardée. Restaurées après une
+	réinstallation, les valeurs sont indéchiffrables (connexion bloquée).
+	-->
+	<application android:label="Auditron X" android:name="${applicationName}" android:icon="@mipmap/ic_launcher" android:enableOnBackInvokedCallback="true" android:allowBackup="false" android:fullBackupContent="false">
 		<activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:taskAffinity="" android:theme="@style/LaunchTheme" android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode" android:hardwareAccelerated="true" android:windowSoftInputMode="adjustResize">
 			<!--
 			Specifies an Android theme to apply to this Activity as soon as

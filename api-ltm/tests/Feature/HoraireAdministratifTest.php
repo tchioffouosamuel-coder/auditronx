@@ -217,6 +217,47 @@ class HoraireAdministratifTest extends TestCase
     }
 
     /**
+     * Régression : le bilan cumulé écartait le personnel administratif même
+     * quand la fiche demandée était celle de la section « Administration »
+     * (fiche vide). Tous ses membres doivent y figurer, quelle que soit la
+     * casse de la section saisie, avec l'horaire fixe comme référence.
+     */
+    public function test_le_bilan_cumule_de_la_section_administration_liste_tout_son_personnel(): void
+    {
+        $this->actingAsBackoffice();
+        $this->administratif(['nom' => 'Bello']);
+        $this->administratif(['nom' => 'Abdou', 'section' => 'administration']);
+        $retardataire = $this->administratif(['nom' => 'Chantal', 'section' => ' ADMINISTRATION ']);
+        Enseignant::factory()->create(['nom' => 'Zulu Enseignant', 'section' => 'Sciences']);
+        // Mercredi : 20 min de retard (tolérance déduite), départ 60 min avant 15:30.
+        $this->pointer($retardataire, self::MERCREDI, '08:00', '14:30');
+
+        $pdf = \Mockery::mock(\Barryvdh\DomPDF\PDF::class);
+        $pdf->shouldReceive('download')->once()->andReturn(response()->noContent());
+        Pdf::shouldReceive('loadView')
+            ->once()
+            ->with('pdf.retards-cumule', \Mockery::on(function (array $viewData): bool {
+                $this->assertSame(['Abdou', 'Bello', 'Chantal'], array_column($viewData['data'], 'nom'));
+
+                // Du lundi 28/09 au mercredi 30/09 (jours futurs ignorés).
+                $absent = $viewData['data'][0];
+                $this->assertSame(3, $absent['nb_jours_absence']);
+                $this->assertSame(36, $absent['periodes_absence']); // 3 journées de 8 h = 3 × 12 périodes
+
+                $retardataire = $viewData['data'][2];
+                $this->assertSame(2, $retardataire['nb_jours_absence']);
+                $this->assertSame(20, $retardataire['total_retard_minutes']);
+                $this->assertSame(60, $retardataire['total_anticipation_minutes']);
+                $this->assertEquals(33.3, $retardataire['taux_assiduite']);
+
+                return true;
+            }))
+            ->andReturn($pdf);
+
+        $this->get('/api/retards/bilan-cumule?debut=2026-09-28&fin=2026-10-04&section=ADMINISTRATION')->assertNoContent();
+    }
+
+    /**
      * Régression : l'export ZIP remplissait chaque bilan avec des zéros en dur
      * (taux d'assiduité 0 % pour tout le monde, détail vide). Il doit porter
      * les mêmes chiffres que la fiche individuelle, horaire fixe compris.

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'secure_storage_safe.dart';
 
 import '../models/presence.dart';
 import 'api_client.dart';
@@ -49,7 +50,7 @@ class PresenceRepository {
     final now = DateTime.now();
     final arrivals = <DateTime>[];
 
-    final localRaw = await _storage.read(key: _localArrivalKey);
+    final localRaw = await _storage.readOrNull(_localArrivalKey);
     final localArrival = localRaw == null ? null : DateTime.tryParse(localRaw);
     if (localArrival != null && _isToday(localArrival, now)) {
       arrivals.add(localArrival);
@@ -80,7 +81,7 @@ class PresenceRepository {
 
   Future<bool> hasOpenArrivalToday() async {
     final now = DateTime.now();
-    final localRaw = await _storage.read(key: _localArrivalKey);
+    final localRaw = await _storage.readOrNull(_localArrivalKey);
     final localArrival = localRaw == null ? null : DateTime.tryParse(localRaw);
     if (localArrival != null && _isToday(localArrival, now)) return true;
 
@@ -146,7 +147,7 @@ class PresenceRepository {
   );
 
   Future<List<PresenceEntry>> _loadLocalHistory() async {
-    final raw = await _storage.read(key: _localHistoryKey);
+    final raw = await _storage.readOrNull(_localHistoryKey);
     if (raw == null) return [];
 
     try {
@@ -208,7 +209,7 @@ class PresenceRepository {
   };
 
   Future<List<PresenceEntry>?> _loadCache() async {
-    final raw = await _storage.read(key: _cacheKey);
+    final raw = await _storage.readOrNull(_cacheKey);
     if (raw == null) return null;
 
     try {

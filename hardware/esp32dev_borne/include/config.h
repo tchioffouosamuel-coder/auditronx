@@ -19,6 +19,13 @@ inline constexpr char BLE_CHAR_RESULT_UUID[] = "b3a1a102-2c33-4e6f-9a1e-5f6a2e6c
 // inline constexpr char STA_PASSWORD[] = "19750000";
 inline constexpr char STA_SSID[] = "Auditron";
 inline constexpr char STA_PASSWORD[] = "1234567890";
+// Puissance d'émission WiFi. Au maximum par défaut (19,5 dBm), chaque
+// émission tire un pic de courant que l'alimentation de ce banc ne tient
+// pas : la tension chute et la borne panique au moment de joindre le modem
+// (exceptions aléatoires, voir setup() dans main.cpp). Portée réduite en
+// contrepartie : à remonter (WIFI_POWER_11dBm, WIFI_POWER_15dBm...) une fois
+// l'alimentation fiabilisée ou si le modem est loin.
+inline constexpr wifi_power_t STA_TX_POWER = WIFI_POWER_8_5dBm;
 // Limite de sécurité de la file. La carte SD permet de conserver beaucoup
 // plus de scans hors ligne ; LittleFS conserve une limite basse lorsqu'elle
 // sert de secours.
@@ -66,6 +73,16 @@ inline constexpr uint8_t SD_MISO_GPIO = 19;
 inline constexpr uint8_t SD_MOSI_GPIO = 23;
 inline constexpr uint8_t SD_CS_GPIO = 5;
 inline constexpr uint32_t SD_SPI_FREQUENCY_HZ = 10000000;
+
+// Carte qui ne répond plus en service : la file bascule sur LittleFS, et le
+// montage est retenté à cette cadence (voir superviseStorage() dans main.cpp).
+inline constexpr uint32_t SD_RETRY_INTERVAL_MS = 30000;
+
+// Durée maximale d'une connexion BLE sans pointage en attente. Un pointage
+// complet prend moins de 30 s côté app (connexion 8 s + réponse 15 s) ;
+// au-delà, le téléphone est déconnecté pour rendre la borne visible aux
+// autres (une seule connexion à la fois, voir superviseBle() dans main.cpp).
+inline constexpr uint32_t BLE_MAX_CONNECTION_MS = 60000;
 
 // Buzzer actif : bip court à la réception complète d'un scan BLE.
 inline constexpr uint8_t BUZZER_GPIO = 25;

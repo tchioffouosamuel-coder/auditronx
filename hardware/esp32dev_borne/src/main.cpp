@@ -233,6 +233,42 @@ private:
 
 static RemoteLogger g_log;
 
+// ---------------------------------------------------------------------------
+// Carte SD qui décroche en service (alimentation, faux contact) : le pilote
+// échoue alors à chaque accès ("sdSelectCard(): Select Failed") et, sans
+// repli, tout pointage est refusé au téléphone faute de pouvoir l'écrire. La
+// file bascule donc sur LittleFS, puis revient sur la carte quand elle répond
+// à nouveau (voir superviseStorage()).
+// ---------------------------------------------------------------------------
+
+// Carte vue au moins une fois depuis le démarrage : sans ça, pas de nouvelle
+// tentative de montage (borne installée sans carte).
+static bool g_sd_seen = false;
+static uint32_t g_sdLastRetryMs = 0;
+
+static bool mountSd()
+{
+    return SD.begin(SD_CS_GPIO, SPI, SD_SPI_FREQUENCY_HZ, "/sdcard", 5, false);
+}
+
+/** Lecture d'un secteur brut : contrairement à exists()/open(), un échec ne
+ * se confond pas avec « fichier absent ». */
+static bool sdResponds()
+{
+    uint8_t sector[512];
+    return SD.readRAW(sector, 0);
+}
+
+/** Bascule la file sur LittleFS. g_fsMutex doit être tenu par l'appelant. */
+static void markSdLost()
+{
+    SD.end();
+    g_queueFs = &LittleFS;
+    g_sd_ready = false;
+    g_sdLastRetryMs = millis();
+    g_log.println("[sd] carte perdue : pointages enregistrés en mémoire interne ; ceux restés sur la carte partiront à son retour");
+}
+
 static size_t queueLength()
 {
     MutexGuard guard(g_fsMutex);
@@ -288,6 +324,13 @@ static bool appendToQueue(const String &json, const std::vector<uint8_t> &photo)
 {
     MutexGuard guard(g_fsMutex);
     File f = g_queueFs->open(QUEUE_FILE, "a", true);
+    if (!f && g_sd_ready)
+    {
+        // Carte muette : le pointage en cours part en mémoire interne plutôt
+        // que d'être refusé au téléphone.
+        markSdLost();
+        f = g_queueFs->open(QUEUE_FILE, "a", true);
+    }
     if (!f)
     {
         g_log.println("[queue] échec ouverture flash en écriture");
@@ -622,7 +665,7 @@ static void setupStorage()
     pinMode(SD_CS_GPIO, OUTPUT);
     digitalWrite(SD_CS_GPIO, HIGH);
     SPI.begin(SD_SCK_GPIO, SD_MISO_GPIO, SD_MOSI_GPIO, SD_CS_GPIO);
-    if (!SD.begin(SD_CS_GPIO, SPI, SD_SPI_FREQUENCY_HZ, "/sdcard", 5, false))
+    if (!mountSd())
     {
         g_log.printf("[sd] échec initialisation SPI (CS=%u, SCK=%u, MISO=%u, MOSI=%u) ; vérifiez câblage, 3.3 V et FAT32\n",
                       SD_CS_GPIO, SD_SCK_GPIO, SD_MISO_GPIO, SD_MOSI_GPIO);
@@ -657,8 +700,77 @@ static void setupStorage()
 
     g_queueFs = &SD;
     g_sd_ready = true;
+    g_sd_seen = true;
     g_log.printf("[sd] carte détectée, file SD active (%llu Mo libres)\n",
                   (unsigned long long)((SD.totalBytes() - SD.usedBytes()) / (1024 * 1024)));
+}
+
+/** File LittleFS vide ou absente. g_fsMutex doit être tenu par l'appelant. */
+static bool internalQueueEmpty()
+{
+    if (!LittleFS.exists(QUEUE_FILE))
+        return true;
+    File f = LittleFS.open(QUEUE_FILE, "r");
+    const bool empty = !f || f.size() == 0;
+    if (f)
+        f.close();
+    return empty;
+}
+
+/**
+ * Appelée à chaque tour de syncTask. Carte active : vérifie qu'elle répond,
+ * tente un remontage sinon, et bascule sur LittleFS s'il échoue. Carte
+ * perdue : retente le montage toutes les SD_RETRY_INTERVAL_MS, une fois la
+ * file LittleFS vidée — une seule file active à la fois.
+ */
+static void superviseStorage()
+{
+    if (!g_sd_seen)
+        return;
+
+    if (g_sd_ready)
+    {
+        MutexGuard guard(g_fsMutex);
+        if (!g_sd_ready || sdResponds())
+            return;
+        g_log.println("[sd] la carte ne répond plus, remontage...");
+        SD.end();
+        if (mountSd() && sdResponds())
+        {
+            g_log.println("[sd] carte remontée");
+            return;
+        }
+        markSdLost();
+        return;
+    }
+
+    if (millis() - g_sdLastRetryMs < SD_RETRY_INTERVAL_MS)
+        return;
+    g_sdLastRetryMs = millis();
+    {
+        MutexGuard guard(g_fsMutex);
+        if (!internalQueueEmpty())
+            return;
+    }
+    // Hors mutex : personne n'utilise la carte tant que la file est sur
+    // LittleFS, et un montage qui échoue peut prendre plusieurs secondes.
+    if (!mountSd() || !sdResponds())
+    {
+        SD.end();
+        return;
+    }
+    {
+        MutexGuard guard(g_fsMutex);
+        if (!internalQueueEmpty())
+        {
+            SD.end();
+            return;
+        }
+        g_queueFs = &SD;
+        g_sd_ready = true;
+    }
+    g_log.println("[sd] carte de retour, file SD active");
+    recoverQueueRewrite();
 }
 
 // ---------------------------------------------------------------------------
@@ -756,6 +868,26 @@ static void releaseTlsMemory()
 static bool g_pauseBleDuringTls = false;
 static bool otaSafeToRun();
 
+// Suspensions volontaires de la publicité BLE en cours (connexion TLS, sonde
+// réseau, téléchargement OTA — toutes depuis syncTask, parfois imbriquées).
+// Lu par superviseBle() dans loop() : elle relance une publicité arrêtée
+// toute seule, pas une publicité suspendue exprès.
+static volatile uint8_t g_bleAdvertisingPauses = 0;
+
+static void pauseBleAdvertising()
+{
+    g_bleAdvertisingPauses++;
+    NimBLEDevice::getAdvertising()->stop();
+}
+
+static void resumeBleAdvertising()
+{
+    if (g_bleAdvertisingPauses > 0)
+        g_bleAdvertisingPauses--;
+    if (g_bleAdvertisingPauses == 0)
+        NimBLEDevice::getAdvertising()->start();
+}
+
 /**
  * Encadre une connexion TLS. À déclarer AVANT le HTTPClient de la fonction :
  * détruit après lui, il ne reprend la réserve mémoire qu'une fois la
@@ -774,7 +906,7 @@ struct TlsSessionScope
         releaseTlsMemory();
         if (g_pauseBleDuringTls && otaSafeToRun())
         {
-            NimBLEDevice::getAdvertising()->stop();
+            pauseBleAdvertising();
             advertisingPaused = true;
         }
     }
@@ -782,7 +914,7 @@ struct TlsSessionScope
     ~TlsSessionScope()
     {
         if (advertisingPaused)
-            NimBLEDevice::getAdvertising()->start();
+            resumeBleAdvertising();
         reserveTlsMemory();
     }
 };
@@ -1240,7 +1372,7 @@ static void checkForUpdate()
 
     // Borne invisible pendant le téléchargement : un téléphone qui s'y
     // connecterait verrait son pointage coupé par le redémarrage final.
-    NimBLEDevice::getAdvertising()->stop();
+    pauseBleAdvertising();
     const OtaResult result = downloadAndFlash(manifest);
 
     if (result == OtaResult::SUCCESS)
@@ -1265,7 +1397,7 @@ static void checkForUpdate()
     {
         g_log.println("[ota] erreur réseau, nouvel essai au prochain cycle");
     }
-    NimBLEDevice::getAdvertising()->start();
+    resumeBleAdvertising();
 }
 
 /** GET HTTPS vers le site de référence, dans les mêmes conditions que les
@@ -1294,14 +1426,14 @@ static int httpsProbe(uint32_t &elapsedMs)
 static int32_t apiTcpProbe(const IPAddress &ip, bool pauseBle)
 {
     if (pauseBle)
-        NimBLEDevice::getAdvertising()->stop();
+        pauseBleAdvertising();
     WiFiClient client;
     const uint32_t startedAt = millis();
     const bool connected = client.connect(ip, 443, NET_DIAG_TCP_TIMEOUT_MS);
     const uint32_t elapsed = millis() - startedAt;
     client.stop();
     if (pauseBle)
-        NimBLEDevice::getAdvertising()->start();
+        resumeBleAdvertising();
     return connected ? (int32_t)elapsed : -1;
 }
 
@@ -1485,6 +1617,7 @@ static void syncTask(void *)
     for (;;)
     {
         vTaskDelay(pdMS_TO_TICKS(tickMs));
+        superviseStorage();
         if (WiFi.status() != WL_CONNECTED)
             continue;
 
@@ -1784,6 +1917,60 @@ class BorneServerCallbacks : public NimBLEServerCallbacks
     }
 };
 
+/**
+ * Appelée depuis loop(), une fois par seconde : garde la borne joignable en
+ * BLE. Une seule connexion est acceptée et la publicité s'arrête tant qu'un
+ * téléphone est connecté ; deux cas rendaient donc la borne invisible
+ * jusqu'au redémarrage :
+ *  - la publicité ne repart pas après une déconnexion (redémarrage refusé par
+ *    le contrôleur, occupé par le WiFi) : on la relance ;
+ *  - un téléphone reste connecté sans rien faire (app en arrière-plan,
+ *    liaison fantôme) : au-delà de BLE_MAX_CONNECTION_MS, on le déconnecte.
+ */
+static void superviseBle()
+{
+    static uint32_t lastCheck = 0;
+    static bool wasConnected = false;
+    static uint32_t connectedAt = 0;
+    if (millis() - lastCheck < 1000)
+        return;
+    lastCheck = millis();
+
+    NimBLEServer *bleServer = NimBLEDevice::getServer();
+    if (!bleServer)
+        return;
+
+    const bool connected = bleServer->getConnectedCount() > 0;
+    if (connected && !wasConnected)
+    {
+        connectedAt = millis();
+        g_log.println("[ble] téléphone connecté");
+    }
+    else if (!connected && wasConnected)
+    {
+        g_log.printf("[ble] téléphone déconnecté après %u s\n", (unsigned)((millis() - connectedAt) / 1000));
+    }
+    wasConnected = connected;
+
+    if (connected)
+    {
+        if (!g_pendingScan && millis() - connectedAt >= BLE_MAX_CONNECTION_MS)
+        {
+            g_log.printf("[ble] téléphone connecté depuis %u s sans pointage, connexion libérée\n", (unsigned)(BLE_MAX_CONNECTION_MS / 1000));
+            for (uint16_t connHandle : bleServer->getPeerDevices())
+                bleServer->disconnect(connHandle);
+            connectedAt = millis(); // pas de nouvelle tentative avant un délai complet
+        }
+        return;
+    }
+
+    if (g_bleAdvertisingPauses == 0 && !NimBLEDevice::getAdvertising()->isAdvertising())
+    {
+        if (NimBLEDevice::getAdvertising()->start())
+            g_log.println("[ble] publicité relancée (elle s'était arrêtée)");
+    }
+}
+
 /** Appelé depuis loop() : traite la requête en attente (s'il y en a une) hors du callback GATT. */
 static void processPendingBleScan()
 {
@@ -1968,6 +2155,8 @@ void setup()
     delay(1500);
     g_log.println("[wifi] tentative de connexion au modem...");
     WiFi.begin(STA_SSID, STA_PASSWORD);
+    // Conservée par le pilote pour les reconnexions (connectWifiIfNeeded()).
+    WiFi.setTxPower(STA_TX_POWER);
 
     // Cœur 1 (APP_CPU), comme loopTask par défaut sur Arduino-ESP32 — la pile
     // dédiée de 16 Ko est la partie qui compte ici, pas l'affinité de cœur.
@@ -1982,6 +2171,7 @@ void setup()
 void loop()
 {
     processPendingBleScan();
+    superviseBle();
 
     static bool wasConnected = false;
     bool isConnected = WiFi.status() == WL_CONNECTED;

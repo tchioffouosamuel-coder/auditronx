@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../secure_storage_safe.dart';
 
 /// Cache de lecture générique (§offline-sync) — même principe "réseau
 /// d'abord, secours sur le cache local" que [PresenceRepository]
@@ -29,7 +30,7 @@ class OfflineCache {
       await _storage.write(key: _key(cacheKey), value: jsonEncode(data));
       return data;
     } catch (e) {
-      final cached = await _storage.read(key: _key(cacheKey));
+      final cached = await _storage.readOrNull(_key(cacheKey));
       if (cached != null) return jsonDecode(cached);
       rethrow;
     }
@@ -37,7 +38,7 @@ class OfflineCache {
 
   /// Lit directement la dernière valeur locale, sans tenter le réseau.
   Future<dynamic> read(String cacheKey) async {
-    final cached = await _storage.read(key: _key(cacheKey));
+    final cached = await _storage.readOrNull(_key(cacheKey));
     if (cached == null) return null;
     try {
       return jsonDecode(cached);

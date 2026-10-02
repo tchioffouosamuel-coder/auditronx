@@ -73,8 +73,31 @@ class AdminPersonnelScreen extends StatelessWidget {
           Navigator.pop(context);
           await _key.currentState?.deleteItem(item);
         },
+        onChangePassword: () async {
+          Navigator.pop(context);
+          await _changePassword(context, item);
+        },
       ),
     );
+  }
+
+  Future<void> _changePassword(
+    BuildContext context,
+    Map<String, dynamic> item,
+  ) async {
+    final changed = await showDialog<bool>(
+      context: context,
+      builder: (_) => _PersonnelPasswordDialog(item: item),
+    );
+    if (changed != true || !context.mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('Mot de passe de ${item['nom'] ?? 'ce compte'} modifié.'),
+          backgroundColor: AuditronColors.brand700,
+        ),
+      );
   }
 
   Future<void> _changePhoto(
@@ -241,11 +264,13 @@ class _PersonnelDetailsSheet extends StatelessWidget {
   final Map<String, dynamic> item;
   final Future<void> Function() onEdit;
   final Future<void> Function() onDelete;
+  final Future<void> Function() onChangePassword;
 
   const _PersonnelDetailsSheet({
     required this.item,
     required this.onEdit,
     required this.onDelete,
+    required this.onChangePassword,
   });
 
   Future<Map<String, dynamic>> _loadAttendance() async {
@@ -322,6 +347,15 @@ class _PersonnelDetailsSheet extends StatelessWidget {
                   onPressed: () => _openSchedule(context),
                   icon: const Icon(Icons.calendar_month_outlined),
                   label: const Text('Emploi du temps'),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: onChangePassword,
+                  icon: const Icon(Icons.lock_reset),
+                  label: const Text('Modifier le mot de passe'),
                 ),
               ),
               const SizedBox(height: 12),
@@ -402,6 +436,153 @@ class _PersonnelDetailsSheet extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       builder: (_) => _TeacherScheduleSheet(item: item),
+    );
+  }
+}
+
+/// Modification du mot de passe d'un compte du personnel par un admin : pas
+/// de mot de passe actuel à saisir, contrairement à `ChangePasswordScreen`
+/// (self-service). Passe par `PUT /personnel/{id}` avec le seul champ
+/// `password` — l'API le recopie sur le compte administrateur lié si
+/// `est_admin`. En ligne uniquement : un mot de passe en clair n'a pas sa
+/// place dans la file d'actions hors ligne.
+class _PersonnelPasswordDialog extends StatefulWidget {
+  final Map<String, dynamic> item;
+  const _PersonnelPasswordDialog({required this.item});
+
+  @override
+  State<_PersonnelPasswordDialog> createState() =>
+      _PersonnelPasswordDialogState();
+}
+
+class _PersonnelPasswordDialogState extends State<_PersonnelPasswordDialog> {
+  // Même minimum que la validation de l'API (EnseignantController).
+  static const _minLength = 6;
+
+  final _formKey = GlobalKey<FormState>();
+  final _newController = TextEditingController();
+  final _confirmController = TextEditingController();
+  bool _obscure = true;
+  bool _submitting = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _newController.dispose();
+    _confirmController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      await AdminApiClient.instance.put('/personnel/${widget.item['id']}', {
+        'password': _newController.text,
+      });
+      if (mounted) Navigator.pop(context, true);
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _error = e.statusCode == 0
+              ? 'Pas de connexion au serveur : le mot de passe n’a pas été modifié.'
+              : _firstMessage(e);
+        });
+      }
+    }
+  }
+
+  String _firstMessage(ApiException e) {
+    if (e.errors is Map && (e.errors as Map).isNotEmpty) {
+      final firstFieldErrors = (e.errors as Map).values.first;
+      if (firstFieldErrors is List && firstFieldErrors.isNotEmpty) {
+        return firstFieldErrors.first.toString();
+      }
+    }
+    return e.message;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      scrollable: true,
+      title: const Text('Modifier le mot de passe'),
+      content: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.item['nom']?.toString() ?? 'Personnel',
+              style: const TextStyle(color: AuditronColors.ink500),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _newController,
+              obscureText: _obscure,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: 'Nouveau mot de passe',
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscure ? Icons.visibility_off : Icons.visibility,
+                    size: 18,
+                  ),
+                  onPressed: () => setState(() => _obscure = !_obscure),
+                ),
+              ),
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Requis.';
+                if (v.length < _minLength) {
+                  return '$_minLength caractères minimum.';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _confirmController,
+              obscureText: _obscure,
+              decoration: const InputDecoration(
+                labelText: 'Confirmer le mot de passe',
+              ),
+              validator: (v) => v != _newController.text
+                  ? 'Les mots de passe ne correspondent pas.'
+                  : null,
+              onFieldSubmitted: (_) => _submitting ? null : _submit(),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(_error!, style: const TextStyle(color: Colors.red)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.pop(context, false),
+          child: const Text('Annuler'),
+        ),
+        FilledButton(
+          onPressed: _submitting ? null : _submit,
+          child: _submitting
+              ? const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text('Enregistrer'),
+        ),
+      ],
     );
   }
 }

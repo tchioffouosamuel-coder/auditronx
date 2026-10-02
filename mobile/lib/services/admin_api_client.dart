@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'secure_storage_safe.dart';
 import 'api_client.dart';
 
 /// Client API dédié à l'espace admin (§admin-mobile), distinct de [ApiClient]
@@ -18,9 +19,9 @@ class AdminApiClient {
   static const _tokenKey = 'auditron_admin_token';
   static const _lastEmailKey = 'auditron_admin_last_email';
 
-  Future<String?> get token => _storage.read(key: _tokenKey);
+  Future<String?> get token => _storage.readOrNull(_tokenKey);
 
-  Future<String?> get lastEmail => _storage.read(key: _lastEmailKey);
+  Future<String?> get lastEmail => _storage.readOrNull(_lastEmailKey);
 
   Future<void> saveLastEmail(String email) =>
       _storage.write(key: _lastEmailKey, value: email);

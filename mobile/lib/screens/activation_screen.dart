@@ -55,7 +55,17 @@ class _ActivationScreenState extends State<ActivationScreen> {
         _passwordController.text,
       );
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      if (mounted) setState(() => _error = e.message);
+    } catch (e) {
+      // Toute autre erreur (stockage du téléphone, réponse inattendue...) :
+      // sans message, le bouton semblait simplement ne rien faire.
+      debugPrint('Connexion impossible : $e');
+      if (mounted) {
+        setState(
+          () => _error =
+              'Connexion impossible sur ce téléphone. Réessayez ; si le problème persiste, réinstallez l\'application.',
+        );
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

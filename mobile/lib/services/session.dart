@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'secure_storage_safe.dart';
 import 'api_client.dart';
 import 'presence_repository.dart';
 import 'push_notifications.dart';
@@ -31,9 +32,20 @@ class Session extends ChangeNotifier {
   Map<String, dynamic>? get me => _me;
   String get nom => _me?['nom'] as String? ?? '';
 
-  Future<String?> get lastTel => _storage.read(key: _lastTelKey);
+  Future<String?> get lastTel => _storage.readOrNull(_lastTelKey);
+
+  /// L'API a refusé la session (token révoqué, supprimé ou perdu) : retour à
+  /// l'écran de connexion, quel que soit l'écran d'où venait la requête.
+  void _onSessionExpired() {
+    if (!_activated && _me == null) return;
+    _activated = false;
+    _me = null;
+    unawaited(_storage.delete(key: _meCacheKey));
+    notifyListeners();
+  }
 
   Future<void> bootstrap() async {
+    ApiClient.instance.onSessionExpired = _onSessionExpired;
     _activated = await ApiClient.instance.isActivated;
 
     if (_activated) {
@@ -57,7 +69,7 @@ class Session extends ChangeNotifier {
       _storage.write(key: _meCacheKey, value: jsonEncode(me));
 
   Future<Map<String, dynamic>?> _loadCachedMe() async {
-    final raw = await _storage.read(key: _meCacheKey);
+    final raw = await _storage.readOrNull(_meCacheKey);
     if (raw == null) return null;
     try {
       return jsonDecode(raw) as Map<String, dynamic>;
@@ -67,7 +79,7 @@ class Session extends ChangeNotifier {
   }
 
   Future<String> deviceUuid() async {
-    var uuid = await _storage.read(key: _deviceUuidKey);
+    var uuid = await _storage.readOrNull(_deviceUuidKey);
     if (uuid == null) {
       uuid = const Uuid().v4();
       await _storage.write(key: _deviceUuidKey, value: uuid);
@@ -106,9 +118,22 @@ class Session extends ChangeNotifier {
       deviceUuid: uuid,
     );
     _activated = true;
-    _me = await ApiClient.instance.get('/me') as Map<String, dynamic>;
-    await _cacheMe(_me!);
-    unawaited(PushNotifications.instance.registerDevice());
+    try {
+      _me = await ApiClient.instance.get('/me') as Map<String, dynamic>;
+      await _cacheMe(_me!);
+      unawaited(PushNotifications.instance.registerDevice());
+    } on ApiException catch (e) {
+      if (e.statusCode == 401) {
+        // Le serveur refuse le token qu'il vient d'émettre : ce n'est pas une
+        // session expirée, et se reconnecter n'y changera rien.
+        throw ApiException(
+          "Le serveur a refusé la session qu'il vient de créer. Contactez l'administrateur.",
+          401,
+        );
+      }
+      // Réseau coupé juste après la connexion : le token est enregistré, le
+      // profil sera chargé au prochain démarrage (voir bootstrap()).
+    }
     notifyListeners();
   }
 

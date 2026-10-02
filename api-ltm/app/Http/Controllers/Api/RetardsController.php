@@ -7,6 +7,7 @@ use App\Http\Controllers\Traits\AccessibleEnseignants;
 use App\Models\Enseignant;
 use App\Models\Presence;
 use App\Services\BilanIndividuel;
+use App\Services\HoraireAttendu;
 use App\Services\RetardCalculator;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -41,12 +42,17 @@ class RetardsController extends Controller
     }
 
     /** GET /api/retards/bilan-cumule?debut=&fin=&section= — bilan PDF de tous les enseignants du périmètre. */
-    public function bilanCumule(Request $request, RetardCalculator $retards)
+    public function bilanCumule(Request $request, RetardCalculator $retards, HoraireAttendu $horaires)
     {
         [$debut, $fin, $enseignants] = $this->periodeEtEnseignants($request);
-        $enseignants = $enseignants->reject(fn(Enseignant $enseignant) => mb_strtolower(trim((string) $enseignant->section)) === 'administration');
 
-        $data = $enseignants->map(fn(Enseignant $enseignant) => $this->ligneBilanCumule($enseignant, $debut, $fin, $retards))
+        // Le personnel administratif n'apparaît pas sur le bilan des enseignants,
+        // mais la fiche de la section « Administration » doit le lister en entier.
+        if (mb_strtolower(trim((string) $request->query('section'))) !== HoraireAttendu::SECTION_ADMINISTRATIVE) {
+            $enseignants = $enseignants->reject(fn(Enseignant $enseignant) => $horaires->estAdministratif($enseignant));
+        }
+
+        $data = $enseignants->map(fn(Enseignant $enseignant) => $this->ligneBilanCumule($enseignant, $debut, $fin, $retards, $horaires))
             ->sortBy(fn(array $ligne) => mb_strtolower($ligne['nom']), SORT_NATURAL)
             ->values()->all();
 
@@ -78,7 +84,7 @@ class RetardsController extends Controller
         return $pdf->download("bilan-retards-{$enseignant->matricule}.pdf");
     }
 
-    private function ligneBilanCumule(Enseignant $enseignant, Carbon $debut, Carbon $fin, RetardCalculator $retards): array
+    private function ligneBilanCumule(Enseignant $enseignant, Carbon $debut, Carbon $fin, RetardCalculator $retards, HoraireAttendu $horaires): array
     {
         $emplois = $enseignant->emploiDuTemps()->get();
         $presences = $enseignant->presences()->whereBetween('date', [$debut->toDateString(), $fin->toDateString()])->get()->keyBy(fn($presence) => $presence->date->toDateString());
@@ -86,16 +92,16 @@ class RetardsController extends Controller
         $result = ['nom' => $enseignant->nom, 'tel' => $enseignant->tel, 'matricule' => $enseignant->matricule, 'specialite' => $enseignant->section, 'nb_jours_retard' => 0, 'total_retard_minutes' => 0, 'nb_jours_anticipation' => 0, 'total_anticipation_minutes' => 0, 'nb_jours_absence' => 0, 'periodes_absence' => 0, 'periodes_presence' => 0, 'periodes_totales' => 0];
         $joursAttendus = $joursValides = 0;
         for ($date = $debut->copy(); $date->lte($fin) && !$date->isFuture(); $date->addDay()) {
-            $cours = $emplois->where('jour', $date->isoWeekday())->values();
-            if ($cours->isEmpty()) continue;
+            // Enseignant : jours avec cours ; personnel administratif : journée
+            // de travail fixe, sans emploi du temps (voir HoraireAttendu).
+            $plage = $horaires->plage($enseignant, $date, $emplois);
+            if (! $plage) continue;
             $presence = $presences->get($date->toDateString());
             $signale = $signalements->first(fn($item) => $date->between($item->date, $item->date->copy()->addDays(max(0, $item->duree_jours - 1)))) !== null;
             $joursAttendus++;
             if ($signale || $presence?->heure_arrivee || $presence?->heure_depart) $joursValides++;
-            $minutesPrevues = $cours->sum(fn($item) => Carbon::parse($item->heure_debut)->diffInMinutes(Carbon::parse($item->heure_fin)));
-            $periodes = max(1, (int) ceil($minutesPrevues / 40));
-            $dernierCours = $cours->sortBy('heure_fin')->last();
-            $finPrevue = Carbon::parse($date->toDateString() . ' ' . $dernierCours->heure_fin);
+            $periodes = max(1, (int) ceil($plage['minutes'] / 40));
+            $finPrevue = Carbon::parse($date->toDateString() . ' ' . $plage['heure_fin']);
             $retard = $presence?->heure_arrivee ? ($retards->minutesDeRetard($enseignant, $presence) ?? 0) : 0;
             $anticipation = $presence?->heure_depart ? max(0, (int) floor(($finPrevue->timestamp - $presence->heure_depart->timestamp) / 60)) : 0;
             $absent = !$signale && (!$presence || (!$presence->heure_arrivee && !$presence->heure_depart));
@@ -126,13 +132,13 @@ class RetardsController extends Controller
 
         $enseignants = $this->enseignantsAccessibles($request->user())
             ->when($request->query('section'), function ($q, $section) {
-                $normalized = mb_strtolower((string) $section);
+                $normalized = mb_strtolower(trim((string) $section));
                 $sections = $normalized === 'générale'
                     ? ['générale', 'enseignement générale', 'enseignement général']
                     : [$normalized];
 
                 return $q->whereRaw(
-                    'LOWER(section) IN (' . implode(',', array_fill(0, count($sections), '?')) . ')',
+                    'LOWER(TRIM(section)) IN (' . implode(',', array_fill(0, count($sections), '?')) . ')',
                     $sections,
                 );
             })

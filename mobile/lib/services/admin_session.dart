@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'secure_storage_safe.dart';
 import 'admin_api_client.dart';
 import 'api_client.dart';
 
@@ -61,7 +62,7 @@ class AdminSession extends ChangeNotifier {
       _storage.write(key: _userCacheKey, value: jsonEncode(user));
 
   Future<Map<String, dynamic>?> _loadCachedUser() async {
-    final raw = await _storage.read(key: _userCacheKey);
+    final raw = await _storage.readOrNull(_userCacheKey);
     if (raw == null) return null;
     try {
       return jsonDecode(raw) as Map<String, dynamic>;

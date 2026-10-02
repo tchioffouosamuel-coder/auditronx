@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../secure_storage_safe.dart';
 import 'package:uuid/uuid.dart';
 
 import 'pending_action.dart';
@@ -18,7 +19,7 @@ class PendingActionsQueue {
   static const _uuid = Uuid();
 
   Future<List<PendingAction>> all() async {
-    final raw = await _storage.read(key: _key);
+    final raw = await _storage.readOrNull(_key);
     if (raw == null) return [];
     try {
       final list = jsonDecode(raw) as List<dynamic>;
