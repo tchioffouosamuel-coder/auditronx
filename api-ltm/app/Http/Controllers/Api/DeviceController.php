@@ -64,9 +64,11 @@ class DeviceController extends Controller
                 ? $q->whereNotNull('revoked_at')
                 : $q->whereNull('revoked_at'))
             ->orderByDesc('activated_at')
-            ->paginate(30);
+            ->get();
 
-        return response()->json($devices);
+        // Liste complète, sans pagination ; l'enveloppe `data` est conservée
+        // pour les clients web et mobile.
+        return response()->json(['data' => $devices]);
     }
 
     /** Un enseignant ne peut conserver qu'un seul téléphone actif à la fois. */

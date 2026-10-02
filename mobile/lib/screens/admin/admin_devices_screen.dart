@@ -11,7 +11,7 @@ import '../../theme.dart';
 const _cacheKey = 'admin_devices';
 
 /// Gestion des appareils (§admin-mobile) — équivalent mobile de l'onglet
-/// "Devices" d'AppareilsPage.jsx : liste + révocation.
+/// "Devices" d'AppareilsPage.jsx : liste + révocation, avec recherche locale.
 class AdminDevicesScreen extends StatefulWidget {
   const AdminDevicesScreen({super.key});
 
@@ -20,12 +20,19 @@ class AdminDevicesScreen extends StatefulWidget {
 }
 
 class _AdminDevicesScreenState extends State<AdminDevicesScreen> {
+  final _searchController = TextEditingController();
   late Future<List<dynamic>> _future;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<List<dynamic>> _load() async {
@@ -150,64 +157,136 @@ class _AdminDevicesScreenState extends State<AdminDevicesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return RefreshIndicator(
-      onRefresh: _refresh,
-      child: FutureBuilder<List<dynamic>>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: TextField(
+            controller: _searchController,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              labelText: 'Rechercher un device',
+              hintText: 'Nom, matricule, téléphone ou identifiant',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _searchController.text.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.clear),
+                      tooltip: 'Effacer la recherche',
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() {});
+                      },
+                    ),
+            ),
+          ),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _refresh,
+            child: FutureBuilder<List<dynamic>>(
+              future: _future,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-          final devices = snapshot.data ?? [];
-          if (devices.isEmpty) {
-            return ListView(
-              children: const [
-                Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Text('Aucun device actif.'),
-                ),
-              ],
-            );
-          }
+                final tous = snapshot.data ?? [];
+                final query = _searchController.text.trim().toLowerCase();
+                final devices = query.isEmpty
+                    ? tous
+                    : tous.where((d) => _matches(d, query)).toList();
+                if (devices.isEmpty) {
+                  return _message(
+                    query.isEmpty
+                        ? 'Aucun device actif.'
+                        : 'Aucun device trouvé pour « ${_searchController.text.trim()} ».',
+                  );
+                }
 
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: devices.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 8),
-            itemBuilder: (context, i) {
-              final d = devices[i] as Map<String, dynamic>;
-              return Card(
-                child: ListTile(
-                  leading: Icon(
-                    d['device_type'] == 'relay_gateway'
-                        ? Icons.router
-                        : Icons.phone_android,
-                    color: AuditronColors.brand700,
-                  ),
-                  title: Text(d['teacher']?['nom'] ?? d['device_type'] ?? '—'),
-                  subtitle: Text('${d['device_type']} · ${d['device_uuid']}'),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (d['device_type'] == 'relay_gateway')
-                        IconButton(
-                          tooltip: 'Régénérer le token',
-                          icon: const Icon(Icons.vpn_key_outlined, size: 20),
-                          onPressed: () => _rotateToken(d),
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  // +1 : ligne de compteur en tête de liste.
+                  itemCount: devices.length + 1,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, i) {
+                    if (i == 0) {
+                      return Text(
+                        query.isEmpty
+                            ? '${tous.length} device(s) actif(s)'
+                            : '${devices.length} sur ${tous.length} device(s) actif(s)',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: AuditronColors.ink700,
                         ),
-                      TextButton(
-                        onPressed: () => _revoke(d),
-                        child: const Text('Révoquer'),
+                      );
+                    }
+                    final d = devices[i - 1] as Map<String, dynamic>;
+                    return Card(
+                      child: ListTile(
+                        leading: Icon(
+                          d['device_type'] == 'relay_gateway'
+                              ? Icons.router
+                              : Icons.phone_android,
+                          color: AuditronColors.brand700,
+                        ),
+                        title: Text(
+                          d['teacher']?['nom'] ?? d['device_type'] ?? '—',
+                        ),
+                        subtitle: Text(
+                          '${d['device_type']} · ${d['device_uuid']}',
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (d['device_type'] == 'relay_gateway')
+                              IconButton(
+                                tooltip: 'Régénérer le token',
+                                icon: const Icon(
+                                  Icons.vpn_key_outlined,
+                                  size: 20,
+                                ),
+                                onPressed: () => _rotateToken(d),
+                              ),
+                            TextButton(
+                              onPressed: () => _revoke(d),
+                              child: const Text('Révoquer'),
+                            ),
+                          ],
+                        ),
                       ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          );
-        },
-      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Recherche locale : enseignant lié (nom, matricule, téléphone) ou
+  /// identifiant du device.
+  bool _matches(dynamic device, String query) {
+    if (device is! Map) return false;
+    final teacher = device['teacher'];
+    return [
+      device['device_uuid'],
+      if (teacher is Map) ...[
+        teacher['nom'],
+        teacher['matricule'],
+        teacher['tel'],
+      ],
+    ].any((value) => '${value ?? ''}'.toLowerCase().contains(query));
+  }
+
+  /// ListView (et non Center) pour garder le tirer-pour-rafraîchir actif.
+  Widget _message(String message) {
+    return ListView(
+      children: [
+        Padding(padding: const EdgeInsets.all(24), child: Text(message)),
+      ],
     );
   }
 }
