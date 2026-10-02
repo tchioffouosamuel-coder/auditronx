@@ -143,6 +143,8 @@ départ anticipé depuis l'heure de fin. Défaut : lundi–vendredi, 07:30–15:
 | GET | `/assiduite/stats?debut=&fin=&section=` | Taux d'assiduité par enseignant |
 | GET | `/assiduite/journal?date=&section=` | Journal des présences d'un jour |
 | GET | `/assiduite/personnel-inactif?jours=N` | Enseignants sans pointage depuis N jours |
+| GET | `/assiduite/sans-presence` | Enseignants n'ayant jamais pointé |
+| GET | `/assiduite/sans-presence/pdf` | Export PDF de la liste des enseignants n'ayant jamais pointé |
 | GET | `/statistiques/export-zip?debut=&fin=&section=` | ZIP de bilans PDF individuels (`application/zip`) |
 
 ## Correcteur de présences (§4.2)

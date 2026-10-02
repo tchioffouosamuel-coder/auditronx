@@ -19,6 +19,7 @@ class AdminValidationScreen extends StatefulWidget {
 }
 
 class _AdminValidationScreenState extends State<AdminValidationScreen> {
+  final _searchController = TextEditingController();
   late Future<List<dynamic>> _future;
   DateTime _date = DateTime.now();
 
@@ -26,6 +27,12 @@ class _AdminValidationScreenState extends State<AdminValidationScreen> {
   void initState() {
     super.initState();
     _future = _load();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   String get _dateStr => _date.toIso8601String().substring(0, 10);
@@ -103,6 +110,28 @@ class _AdminValidationScreenState extends State<AdminValidationScreen> {
             ],
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: TextField(
+            controller: _searchController,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              labelText: 'Rechercher un cours',
+              hintText: 'Enseignant, discipline ou classe',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _searchController.text.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.clear),
+                      tooltip: 'Effacer la recherche',
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() {});
+                      },
+                    ),
+            ),
+          ),
+        ),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _refresh,
@@ -116,13 +145,33 @@ class _AdminValidationScreenState extends State<AdminValidationScreen> {
                   return ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Text('${snapshot.error}'))]);
                 }
 
-                final cours = snapshot.data ?? [];
+                final tous = snapshot.data ?? [];
+                final query = _searchController.text.trim().toLowerCase();
+                final cours = query.isEmpty
+                    ? tous
+                    : tous.where((item) {
+                        if (item is! Map) return false;
+                        return ['enseignant', 'discipline', 'classe'].any(
+                          (key) => '${item[key] ?? ''}'.toLowerCase().contains(query),
+                        );
+                      }).toList();
                 if (cours.isEmpty) {
-                  return ListView(children: const [Padding(padding: EdgeInsets.all(24), child: Text('Aucun cours ce jour-là.'))]);
+                  return ListView(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          query.isEmpty
+                              ? 'Aucun cours ce jour-là.'
+                              : 'Aucun cours trouvé pour « ${_searchController.text.trim()} ».',
+                        ),
+                      ),
+                    ],
+                  );
                 }
 
                 return ListView.separated(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                   itemCount: cours.length,
                   separatorBuilder: (_, _) => const SizedBox(height: 8),
                   itemBuilder: (context, i) {

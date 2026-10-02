@@ -118,6 +118,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/assiduite/journal/pdf', [AssiduiteController::class, 'journalPdf']);
     Route::get('/assiduite/personnel-inactif', [AssiduiteController::class, 'personnelInactif']);
     Route::get('/assiduite/sans-presence', [AssiduiteController::class, 'sansPresence']);
+    Route::get('/assiduite/sans-presence/pdf', [AssiduiteController::class, 'sansPresencePdf']);
     Route::get('/statistiques/export-zip', [StatistiquesController::class, 'exportZip']);
 
     // Configuration (§4.2) — horaire fixe du personnel administratif.

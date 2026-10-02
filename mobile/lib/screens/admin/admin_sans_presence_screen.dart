@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../services/admin_api_client.dart';
 import '../../services/offline/offline_cache.dart';
@@ -14,7 +18,7 @@ List<dynamic> _asList(dynamic data) {
 
 /// Sans présence (§admin-mobile) — enseignants du périmètre n'ayant jamais
 /// pointé : aucune présence enregistrée dans le système, toutes périodes
-/// confondues. Lecture seule, avec recherche locale.
+/// confondues. Lecture seule, avec recherche locale et export PDF.
 class AdminSansPresenceScreen extends StatefulWidget {
   const AdminSansPresenceScreen({super.key});
 
@@ -26,6 +30,7 @@ class AdminSansPresenceScreen extends StatefulWidget {
 class _AdminSansPresenceScreenState extends State<AdminSansPresenceScreen> {
   final _searchController = TextEditingController();
   late Future<List<dynamic>> _future;
+  bool _downloadingPdf = false;
 
   @override
   void initState() {
@@ -52,30 +57,70 @@ class _AdminSansPresenceScreenState extends State<AdminSansPresenceScreen> {
     await _future;
   }
 
+  /// Le PDF contient toute la liste (la recherche locale ne s'y applique pas).
+  Future<void> _downloadPdf() async {
+    setState(() => _downloadingPdf = true);
+    try {
+      final bytes = await AdminApiClient.instance.getBytes(
+        '/assiduite/sans-presence/pdf',
+      );
+      final directory = await getTemporaryDirectory();
+      final date = DateTime.now().toIso8601String().substring(0, 10);
+      final file = File('${directory.path}/sans-presence-$date.pdf');
+      await file.writeAsBytes(bytes, flush: true);
+      await Share.shareXFiles([XFile(file.path)]);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    } finally {
+      if (mounted) setState(() => _downloadingPdf = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: TextField(
-            controller: _searchController,
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              labelText: 'Rechercher un enseignant',
-              hintText: 'Nom, matricule ou section',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: _searchController.text.isEmpty
-                  ? null
-                  : IconButton(
-                      icon: const Icon(Icons.clear),
-                      tooltip: 'Effacer la recherche',
-                      onPressed: () {
-                        _searchController.clear();
-                        setState(() {});
-                      },
-                    ),
-            ),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    labelText: 'Rechercher un enseignant',
+                    hintText: 'Nom, matricule ou section',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchController.text.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.clear),
+                            tooltip: 'Effacer la recherche',
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {});
+                            },
+                          ),
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Télécharger la liste en PDF',
+                onPressed: _downloadingPdf ? null : _downloadPdf,
+                icon: _downloadingPdf
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.picture_as_pdf_outlined),
+              ),
+            ],
           ),
         ),
         Expanded(

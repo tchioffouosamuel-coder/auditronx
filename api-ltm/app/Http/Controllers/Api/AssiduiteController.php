@@ -122,12 +122,7 @@ class AssiduiteController extends Controller
     /** GET /api/assiduite/sans-presence — enseignants n'ayant jamais pointé (aucune présence enregistrée). */
     public function sansPresence(Request $request)
     {
-        $enseignants = $this->enseignantsAccessibles($request->user())
-            ->whereDoesntHave('presences')
-            ->orderBy('nom')
-            ->get();
-
-        return response()->json($enseignants->map(fn(Enseignant $e) => [
+        return response()->json($this->enseignantsSansPresence($request)->map(fn(Enseignant $e) => [
             'enseignant_id' => $e->id,
             'nom' => $e->nom,
             'matricule' => $e->matricule,
@@ -135,5 +130,24 @@ class AssiduiteController extends Controller
             'fonction' => $e->fonction,
             'tel' => $e->tel,
         ]));
+    }
+
+    /** GET /api/assiduite/sans-presence/pdf — exporte la liste des enseignants n'ayant jamais pointé en PDF. */
+    public function sansPresencePdf(Request $request)
+    {
+        $pdf = Pdf::loadView('pdf.sans-presence', [
+            'date' => now(),
+            'enseignants' => $this->enseignantsSansPresence($request),
+        ]);
+
+        return $pdf->download('sans-presence-'.now()->toDateString().'.pdf');
+    }
+
+    private function enseignantsSansPresence(Request $request)
+    {
+        return $this->enseignantsAccessibles($request->user())
+            ->whereDoesntHave('presences')
+            ->orderBy('nom')
+            ->get();
     }
 }

@@ -75,6 +75,18 @@ class PdfExportsTest extends TestCase
         $this->assertSame('application/pdf', $response->headers->get('content-type'));
     }
 
+    public function test_la_liste_sans_presence_pdf_se_telecharge(): void
+    {
+        $this->actingAsBackoffice();
+        Enseignant::factory()->count(2)->create();
+
+        $response = $this->get('/api/assiduite/sans-presence/pdf');
+
+        $response->assertOk();
+        $this->assertSame('application/pdf', $response->headers->get('content-type'));
+        $this->assertStringContainsString('sans-presence-', $response->headers->get('content-disposition'));
+    }
+
     public function test_le_bilan_individuel_pdf_se_telecharge(): void
     {
         $this->actingAsBackoffice();

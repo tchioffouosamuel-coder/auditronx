@@ -85,9 +85,10 @@ class AdminPersonnelScreen extends StatelessWidget {
     BuildContext context,
     Map<String, dynamic> item,
   ) async {
-    final changed = await showDialog<bool>(
+    final changed = await showModalBottomSheet<bool>(
       context: context,
-      builder: (_) => _PersonnelPasswordDialog(item: item),
+      isScrollControlled: true,
+      builder: (_) => _PersonnelPasswordSheet(item: item),
     );
     if (changed != true || !context.mounted) return;
     ScaffoldMessenger.of(context)
@@ -446,16 +447,16 @@ class _PersonnelDetailsSheet extends StatelessWidget {
 /// `password` — l'API le recopie sur le compte administrateur lié si
 /// `est_admin`. En ligne uniquement : un mot de passe en clair n'a pas sa
 /// place dans la file d'actions hors ligne.
-class _PersonnelPasswordDialog extends StatefulWidget {
+class _PersonnelPasswordSheet extends StatefulWidget {
   final Map<String, dynamic> item;
-  const _PersonnelPasswordDialog({required this.item});
+  const _PersonnelPasswordSheet({required this.item});
 
   @override
-  State<_PersonnelPasswordDialog> createState() =>
-      _PersonnelPasswordDialogState();
+  State<_PersonnelPasswordSheet> createState() =>
+      _PersonnelPasswordSheetState();
 }
 
-class _PersonnelPasswordDialogState extends State<_PersonnelPasswordDialog> {
+class _PersonnelPasswordSheetState extends State<_PersonnelPasswordSheet> {
   // Même minimum que la validation de l'API (EnseignantController).
   static const _minLength = 6;
 
@@ -509,80 +510,114 @@ class _PersonnelPasswordDialogState extends State<_PersonnelPasswordDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      scrollable: true,
-      title: const Text('Modifier le mot de passe'),
-      content: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.item['nom']?.toString() ?? 'Personnel',
-              style: const TextStyle(color: AuditronColors.ink500),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _newController,
-              obscureText: _obscure,
-              autofocus: true,
-              decoration: InputDecoration(
-                labelText: 'Nouveau mot de passe',
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscure ? Icons.visibility_off : Icons.visibility,
-                    size: 18,
+    return SafeArea(
+      child: Padding(
+        // viewInsets : la feuille remonte au-dessus du clavier.
+        padding: EdgeInsets.fromLTRB(
+          20,
+          12,
+          20,
+          MediaQuery.of(context).viewInsets.bottom + 20,
+        ),
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.black26,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
                   ),
-                  onPressed: () => setState(() => _obscure = !_obscure),
                 ),
-              ),
-              validator: (v) {
-                if (v == null || v.isEmpty) return 'Requis.';
-                if (v.length < _minLength) {
-                  return '$_minLength caractères minimum.';
-                }
-                return null;
-              },
+                const SizedBox(height: 18),
+                Text(
+                  'Modifier le mot de passe',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                Text(
+                  widget.item['nom']?.toString() ?? 'Personnel',
+                  style: const TextStyle(color: AuditronColors.ink500),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _newController,
+                  obscureText: _obscure,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Nouveau mot de passe',
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscure ? Icons.visibility_off : Icons.visibility,
+                        size: 18,
+                      ),
+                      onPressed: () => setState(() => _obscure = !_obscure),
+                    ),
+                  ),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Requis.';
+                    if (v.length < _minLength) {
+                      return '$_minLength caractères minimum.';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _confirmController,
+                  obscureText: _obscure,
+                  decoration: const InputDecoration(
+                    labelText: 'Confirmer le mot de passe',
+                  ),
+                  validator: (v) => v != _newController.text
+                      ? 'Les mots de passe ne correspondent pas.'
+                      : null,
+                  onFieldSubmitted: (_) => _submitting ? null : _submit(),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(_error!, style: const TextStyle(color: Colors.red)),
+                ],
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _submitting
+                            ? null
+                            : () => Navigator.pop(context, false),
+                        child: const Text('Annuler'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: _submitting ? null : _submit,
+                        child: _submitting
+                            ? const SizedBox(
+                                height: 18,
+                                width: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text('Enregistrer'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _confirmController,
-              obscureText: _obscure,
-              decoration: const InputDecoration(
-                labelText: 'Confirmer le mot de passe',
-              ),
-              validator: (v) => v != _newController.text
-                  ? 'Les mots de passe ne correspondent pas.'
-                  : null,
-              onFieldSubmitted: (_) => _submitting ? null : _submit(),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(_error!, style: const TextStyle(color: Colors.red)),
-            ],
-          ],
+          ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: _submitting ? null : () => Navigator.pop(context, false),
-          child: const Text('Annuler'),
-        ),
-        FilledButton(
-          onPressed: _submitting ? null : _submit,
-          child: _submitting
-              ? const SizedBox(
-                  height: 18,
-                  width: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : const Text('Enregistrer'),
-        ),
-      ],
     );
   }
 }

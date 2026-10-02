@@ -80,12 +80,19 @@ class _StatsTab extends StatefulWidget {
 class _StatsTabState extends State<_StatsTab> {
   DateTime _debut = _startOfMonth();
   DateTime _fin = _endOfMonth();
+  final _searchController = TextEditingController();
   late Future<List<dynamic>> _future;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<List<dynamic>> _load() async {
@@ -148,6 +155,11 @@ class _StatsTabState extends State<_StatsTab> {
             ],
           ),
         ),
+        _SearchField(
+          controller: _searchController,
+          hintText: 'Nom ou section',
+          onChanged: () => setState(() {}),
+        ),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _refresh,
@@ -160,9 +172,17 @@ class _StatsTabState extends State<_StatsTab> {
                 if (snapshot.hasError) {
                   return _errorList('${snapshot.error}');
                 }
-                final lignes = snapshot.data ?? [];
-                if (lignes.isEmpty) {
+                final toutes = snapshot.data ?? [];
+                if (toutes.isEmpty) {
                   return _emptyList('Aucune donnée pour cette période.');
+                }
+                final lignes = _filtrer(
+                  toutes,
+                  _searchController,
+                  (l) => [l['nom'], l['section']],
+                );
+                if (lignes.isEmpty) {
+                  return _emptyList(_aucunResultat(_searchController));
                 }
                 return ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -215,6 +235,7 @@ class _JournalTab extends StatefulWidget {
 
 class _JournalTabState extends State<_JournalTab> {
   DateTime _date = DateTime.now();
+  final _searchController = TextEditingController();
   late Future<List<dynamic>> _future;
   bool _downloadingPdf = false;
 
@@ -222,6 +243,12 @@ class _JournalTabState extends State<_JournalTab> {
   void initState() {
     super.initState();
     _future = _load();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<List<dynamic>> _load() async {
@@ -361,6 +388,11 @@ class _JournalTabState extends State<_JournalTab> {
             ),
           ),
         ),
+        _SearchField(
+          controller: _searchController,
+          hintText: 'Nom, matricule ou section',
+          onChanged: () => setState(() {}),
+        ),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _refresh,
@@ -373,9 +405,21 @@ class _JournalTabState extends State<_JournalTab> {
                 if (snapshot.hasError) {
                   return _errorList('${snapshot.error}');
                 }
-                final presences = snapshot.data ?? [];
-                if (presences.isEmpty) {
+                final toutes = snapshot.data ?? [];
+                if (toutes.isEmpty) {
                   return _emptyList('Aucune présence enregistrée ce jour.');
+                }
+                final presences = _filtrer(toutes, _searchController, (p) {
+                  final enseignant = p['enseignant'];
+                  if (enseignant is! Map) return const [];
+                  return [
+                    enseignant['nom'],
+                    enseignant['matricule'],
+                    enseignant['section'],
+                  ];
+                });
+                if (presences.isEmpty) {
+                  return _emptyList(_aucunResultat(_searchController));
                 }
                 return ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -463,6 +507,7 @@ class _PersonnelInactifTab extends StatefulWidget {
 
 class _PersonnelInactifTabState extends State<_PersonnelInactifTab> {
   final _joursController = TextEditingController(text: '7');
+  final _searchController = TextEditingController();
   late Future<List<dynamic>> _future;
 
   @override
@@ -474,6 +519,7 @@ class _PersonnelInactifTabState extends State<_PersonnelInactifTab> {
   @override
   void dispose() {
     _joursController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -536,6 +582,11 @@ class _PersonnelInactifTabState extends State<_PersonnelInactifTab> {
             ],
           ),
         ),
+        _SearchField(
+          controller: _searchController,
+          hintText: 'Nom ou section',
+          onChanged: () => setState(() {}),
+        ),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _refresh,
@@ -548,11 +599,19 @@ class _PersonnelInactifTabState extends State<_PersonnelInactifTab> {
                 if (snapshot.hasError) {
                   return _errorList('${snapshot.error}');
                 }
-                final inactifs = snapshot.data ?? [];
-                if (inactifs.isEmpty) {
+                final tous = snapshot.data ?? [];
+                if (tous.isEmpty) {
                   return _emptyList(
                     'Aucun personnel inactif sur cette période.',
                   );
+                }
+                final inactifs = _filtrer(
+                  tous,
+                  _searchController,
+                  (p) => [p['nom'], p['section']],
+                );
+                if (inactifs.isEmpty) {
+                  return _emptyList(_aucunResultat(_searchController));
                 }
                 return ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -614,6 +673,66 @@ class _DateFilterButton extends StatelessWidget {
     );
   }
 }
+
+/// Barre de recherche locale commune aux trois onglets : filtre la liste déjà
+/// chargée, sans appel réseau.
+class _SearchField extends StatelessWidget {
+  final TextEditingController controller;
+  final String hintText;
+  final VoidCallback onChanged;
+
+  const _SearchField({
+    required this.controller,
+    required this.hintText,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+      child: TextField(
+        controller: controller,
+        onChanged: (_) => onChanged(),
+        decoration: InputDecoration(
+          labelText: 'Rechercher un enseignant',
+          hintText: hintText,
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: controller.text.isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.clear),
+                  tooltip: 'Effacer la recherche',
+                  onPressed: () {
+                    controller.clear();
+                    onChanged();
+                  },
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Garde les lignes dont l'une des valeurs de [values] contient la recherche
+/// saisie (insensible à la casse) ; liste inchangée si la recherche est vide.
+List<dynamic> _filtrer(
+  List<dynamic> lignes,
+  TextEditingController controller,
+  List<dynamic> Function(Map<dynamic, dynamic> ligne) values,
+) {
+  final query = controller.text.trim().toLowerCase();
+  if (query.isEmpty) return lignes;
+  return lignes.where((ligne) {
+    if (ligne is! Map) return false;
+    return values(
+      ligne,
+    ).any((value) => '${value ?? ''}'.toLowerCase().contains(query));
+  }).toList();
+}
+
+String _aucunResultat(TextEditingController controller) =>
+    'Aucun enseignant trouvé pour « ${controller.text.trim()} ».';
 
 Widget _emptyList(String message) {
   return ListView(
