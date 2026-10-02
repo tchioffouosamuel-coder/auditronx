@@ -109,6 +109,51 @@ class RelaySyncTest extends TestCase
     }
 
     /**
+     * Régression : un départ par procuration relayé par la borne était
+     * `rejected` (donc purgé de sa file, sans trace) dès que l'enseignant
+     * ciblé avait déjà son arrivée du jour — aucun départ par procuration
+     * n'atteignait jamais le serveur.
+     */
+    public function test_un_depart_par_procuration_relaye_est_enregistre(): void
+    {
+        $this->actingAsRelay();
+        $acteur = Enseignant::factory()->create(['est_admin' => true]);
+        $token = $acteur->createToken('mobile')->plainTextToken;
+        $cible = Enseignant::factory()->create();
+        $qrPoint = QrPoint::factory()->create();
+        $accessPoint = AccessPoint::factory()->create();
+
+        $paquet = fn (string $localId, string $capturedAt) => [
+            'local_id' => $localId,
+            'type' => 'admin_proxy',
+            'captured_at' => $capturedAt,
+            'teacher_token' => $token,
+            'payload' => [
+                'qr_code' => $qrPoint->code,
+                'bssid' => $accessPoint->bssid,
+                'enseignant_id' => $cible->id,
+                'motif' => 'Téléphone en panne',
+            ],
+        ];
+
+        $this->postJson('/api/relay/sync', [
+            'packets' => [
+                $paquet('borne-arrivee', '2026-07-02T06:30:00Z'),
+                $paquet('borne-depart', '2026-07-02T14:30:00Z'),
+                $paquet('borne-en-trop', '2026-07-02T16:00:00Z'),
+            ],
+        ])->assertOk()
+            ->assertJsonPath('results.0.status', 'ok')
+            ->assertJsonPath('results.1.status', 'ok')
+            ->assertJsonPath('results.2.status', 'rejected');
+
+        $presence = Presence::where('enseignant_id', $cible->id)->sole();
+        $this->assertSame('07:30', $presence->heure_arrivee->format('H:i'));
+        $this->assertSame('15:30', $presence->heure_depart->format('H:i'));
+        $this->assertSame('admin_proxy', $presence->source);
+    }
+
+    /**
      * Régression : la borne envoie `captured_at` en UTC ("...Z") ; l'heure doit
      * être stockée en GMT+1 (fuseau de l'application), sinon le journal des
      * présences affiche une heure de retard.

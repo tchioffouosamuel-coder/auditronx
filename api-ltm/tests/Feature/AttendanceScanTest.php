@@ -142,7 +142,7 @@ class AttendanceScanTest extends TestCase
         ]);
     }
 
-    public function test_un_second_scan_par_procuration_le_meme_jour_pour_le_meme_enseignant_est_refuse(): void
+    public function test_la_procuration_couvre_larrivee_puis_le_depart_mais_pas_au_dela(): void
     {
         $acteur = Enseignant::factory()->create();
         $device = Device::factory()->for($acteur, 'teacher')->create(['device_uuid' => 'device-uuid-5']);
@@ -161,10 +161,13 @@ class AttendanceScanTest extends TestCase
 
         $this->withToken($token)->postJson('/api/attendance/admin-proxy', $payload)->assertCreated();
 
-        // Même après le délai minimal entre arrivée/départ, la procuration ne
-        // doit pas pouvoir rejouer une seconde fois pour le même enseignant
-        // le même jour — le départ, s'il reste à faire, revient à l'enseignant.
+        // Passé le délai minimal entre arrivée et départ, une seconde
+        // procuration pose le départ ; la journée étant alors complète, une
+        // troisième est refusée.
         try {
+            Carbon::setTestNow(now()->addMinutes(45));
+            $this->withToken($token)->postJson('/api/attendance/admin-proxy', $payload)->assertCreated();
+
             Carbon::setTestNow(now()->addMinutes(45));
             $this->withToken($token)->postJson('/api/attendance/admin-proxy', $payload)->assertUnprocessable();
         } finally {
@@ -172,7 +175,7 @@ class AttendanceScanTest extends TestCase
         }
 
         $this->assertDatabaseCount('presences', 1);
-        $this->assertDatabaseHas('presences', [
+        $this->assertDatabaseMissing('presences', [
             'enseignant_id' => $cible->id,
             'heure_depart' => null,
         ]);

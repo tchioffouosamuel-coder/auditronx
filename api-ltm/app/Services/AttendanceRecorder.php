@@ -70,14 +70,15 @@ class AttendanceRecorder
         ?Carbon $deviceCaptureAt = null,
         ?string $photoBase64 = null,
     ): Presence {
-        // La procuration ne couvre qu'un oubli ponctuel : une seule fois par
-        // jour et par enseignant ciblé, qu'il s'agisse d'une arrivée ou d'un
-        // départ déjà posé (par procuration ou en scan normal) — au-delà,
-        // l'enseignant doit scanner lui-même.
-        if (Presence::where('enseignant_id', $cible->id)->where('date', $timestamp->toDateString())->exists()) {
+        // La procuration couvre l'arrivée et le départ du jour, une fois
+        // chacun : elle n'est refusée que si la journée est déjà complète
+        // (départ posé, par procuration ou en scan normal). Refuser dès qu'un
+        // pointage existait écartait tous les départs par procuration — et,
+        // via la borne, en silence : le paquet `rejected` est purgé de sa file.
+        if (Presence::where('enseignant_id', $cible->id)->where('date', $timestamp->toDateString())->whereNotNull('heure_depart')->exists()) {
             throw ValidationException::withMessages([
                 'attendance' => [
-                    'Cet enseignant a déjà un pointage aujourd\'hui : la procuration ne peut être utilisée qu\'une seule fois par jour.',
+                    'Cet enseignant a déjà son arrivée et son départ aujourd\'hui : aucune procuration supplémentaire n\'est possible.',
                 ],
             ]);
         }

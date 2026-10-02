@@ -118,4 +118,22 @@ class AssiduiteController extends Controller
             'derniere_presence' => $dernieresPresences->get($e->id),
         ]));
     }
+
+    /** GET /api/assiduite/sans-presence — enseignants n'ayant jamais pointé (aucune présence enregistrée). */
+    public function sansPresence(Request $request)
+    {
+        $enseignants = $this->enseignantsAccessibles($request->user())
+            ->whereDoesntHave('presences')
+            ->orderBy('nom')
+            ->get();
+
+        return response()->json($enseignants->map(fn(Enseignant $e) => [
+            'enseignant_id' => $e->id,
+            'nom' => $e->nom,
+            'matricule' => $e->matricule,
+            'section' => $e->section,
+            'fonction' => $e->fonction,
+            'tel' => $e->tel,
+        ]));
+    }
 }

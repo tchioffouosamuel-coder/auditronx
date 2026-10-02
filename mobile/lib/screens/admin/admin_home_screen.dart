@@ -18,6 +18,7 @@ import 'admin_fiche_progression_screen.dart';
 import 'admin_personnel_screen.dart';
 import 'admin_qr_points_screen.dart';
 import 'admin_retards_screen.dart';
+import 'admin_sans_presence_screen.dart';
 import 'admin_scan_screen.dart';
 import 'admin_signalements_screen.dart';
 import 'admin_validation_screen.dart';
@@ -124,6 +125,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           title: 'Alertes',
           icon: Icons.warning_amber,
           screen: const AdminAlertesScreen(),
+        ),
+        _AdminMenuEntry(
+          title: 'Sans présence',
+          icon: Icons.person_off_outlined,
+          screen: const AdminSansPresenceScreen(),
         ),
       ],
     ),

@@ -287,6 +287,22 @@ class HoraireAdministratifTest extends TestCase
         $this->assertSame('application/zip', $response->headers->get('content-type'));
     }
 
+    public function test_la_liste_sans_presence_ne_retient_que_ceux_qui_nont_jamais_pointe(): void
+    {
+        $this->actingAsBackoffice();
+        $jamaisPointe = Enseignant::factory()->create(['nom' => 'Bello', 'section' => 'Sciences']);
+        $administratif = $this->administratif(['nom' => 'Abdou']);
+        $dejaPointe = Enseignant::factory()->create(['nom' => 'Chantal']);
+        $this->pointer($dejaPointe, '2026-01-12', '07:30');
+
+        $this->getJson('/api/assiduite/sans-presence')
+            ->assertOk()
+            ->assertJsonCount(2)
+            ->assertJsonPath('0.enseignant_id', $administratif->id)
+            ->assertJsonPath('1.enseignant_id', $jamaisPointe->id)
+            ->assertJsonPath('1.matricule', $jamaisPointe->matricule);
+    }
+
     public function test_la_detection_dabsences_couvre_les_administratifs_les_jours_ouvres(): void
     {
         $administratif = $this->administratif();
