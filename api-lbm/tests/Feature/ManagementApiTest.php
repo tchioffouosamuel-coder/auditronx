@@ -97,6 +97,49 @@ class ManagementApiTest extends TestCase
         $this->assertCount(2, $response->json('data'));
     }
 
+    public function test_un_role_restreint_ne_peut_pas_lire_ni_modifier_les_accreditations(): void
+    {
+        $accreditation = Accreditation::create(['label' => 'Chef Sciences', 'groupe' => 'Sciences']);
+        $otherAccreditation = Accreditation::create(['label' => 'Chef Lettres', 'groupe' => 'Lettres']);
+        $this->actingAsBackoffice($accreditation);
+
+        $this->getJson('/api/accreditations')->assertForbidden();
+        $this->getJson("/api/accreditations/{$otherAccreditation->id}")->assertForbidden();
+        $this->postJson('/api/accreditations', [
+            'label' => 'Accès total',
+            'groupe' => '*',
+        ])->assertForbidden();
+        $this->patchJson("/api/accreditations/{$accreditation->id}", ['groupe' => '*'])->assertForbidden();
+        $this->deleteJson("/api/accreditations/{$otherAccreditation->id}")->assertForbidden();
+
+        $this->assertDatabaseHas('accreditations', ['id' => $accreditation->id, 'groupe' => 'Sciences']);
+        $this->assertDatabaseHas('accreditations', ['id' => $otherAccreditation->id, 'groupe' => 'Lettres']);
+        $this->assertDatabaseCount('accreditations', 2);
+    }
+
+    public function test_un_administrateur_a_acces_total_peut_gerer_les_accreditations(): void
+    {
+        $adminAccreditation = Accreditation::create(['label' => 'Direction', 'groupe' => '*']);
+        $this->actingAsBackoffice($adminAccreditation);
+
+        $accreditation = $this->postJson('/api/accreditations', [
+            'label' => 'Chef Sciences',
+            'groupe' => 'Sciences',
+        ])->assertCreated()->json();
+
+        $this->getJson('/api/accreditations')->assertOk()->assertJsonFragment(['label' => 'Chef Sciences']);
+        $this->patchJson("/api/accreditations/{$accreditation['id']}", ['groupe' => 'Lettres'])
+            ->assertOk()->assertJsonFragment(['groupe' => 'Lettres']);
+        $this->deleteJson("/api/accreditations/{$accreditation['id']}")->assertNoContent();
+    }
+
+    public function test_un_administrateur_sans_accreditation_conserve_lacces_total(): void
+    {
+        $this->actingAsBackoffice();
+
+        $this->getJson('/api/accreditations')->assertOk();
+    }
+
     public function test_la_liste_du_personnel_accepte_une_taille_de_page_personnalisee(): void
     {
         $this->actingAsBackoffice();

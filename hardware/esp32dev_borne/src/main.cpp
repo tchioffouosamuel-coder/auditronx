@@ -670,9 +670,9 @@ static void setupStorage()
  * reconstruire l'objet WiFiClientSecure à chaque appel ; les buffers mbedTLS
  * eux-mêmes sont (dé)alloués par connect()/stop(), pas par le cycle de vie de
  * cet objet — setBufferSizes() n'existe pas sur cette version du core
- * arduino-esp32 (basée esp-idf 5, buffers fixes). Partagé par syncWithApi()
- * et flushRemoteLogs(), appelées l'une après l'autre depuis syncTask : jamais
- * deux connexions TLS simultanées sur cet ESP32 sans PSRAM.
+ * arduino-esp32 (basée esp-idf 5, buffers fixes). Partagé par tous les appels
+ * à l'API, enchaînés depuis syncTask (voir ApiSession) : jamais deux
+ * connexions TLS simultanées sur cet ESP32 sans PSRAM.
  */
 static WiFiClientSecure &apiClient()
 {
@@ -703,6 +703,29 @@ static WiFiClientSecure &apiClient()
 
 static void *g_tlsReserve[sizeof(TLS_RESERVE_BLOCK_SIZES) / sizeof(TLS_RESERVE_BLOCK_SIZES[0])] = {};
 static uint8_t g_tlsMemoryFailures = 0;
+
+// Échecs de connexion consécutifs vers l'API (voir noteTlsResult()) : tant
+// qu'ils durent, synchro, journaux et OTA partagent une même attente, doublée
+// à chaque échec jusqu'à API_RETRY_MAX_INTERVAL_MS. Sans elle, une API
+// injoignable coûtait un délai de connexion complet à chacun des trois, en
+// boucle — publicité BLE suspendue pendant ce temps (g_pauseBleDuringTls),
+// donc borne invisible des téléphones l'essentiel du temps. Lus et écrits
+// depuis syncTask uniquement.
+static uint8_t g_apiConnectFailures = 0;
+static uint32_t g_apiLastFailureMs = 0;
+
+static uint32_t apiBackoffMs()
+{
+    if (g_apiConnectFailures == 0)
+        return 0;
+    const uint32_t doublings = std::min<uint32_t>(g_apiConnectFailures - 1, 8);
+    return std::min<uint32_t>(SYNC_RETRY_INTERVAL_MS << doublings, API_RETRY_MAX_INTERVAL_MS);
+}
+
+static bool apiInBackoff()
+{
+    return g_apiConnectFailures > 0 && millis() - g_apiLastFailureMs < apiBackoffMs();
+}
 
 static void logMemory(const char *context)
 {
@@ -779,8 +802,12 @@ static void noteTlsResult(int httpStatus, uint32_t startedAtMs, Print &out)
     if (httpStatus > 0)
     {
         g_tlsMemoryFailures = 0;
+        g_apiConnectFailures = 0;
         return;
     }
+    if (g_apiConnectFailures < 255)
+        g_apiConnectFailures++;
+    g_apiLastFailureMs = millis();
     char unused[8];
     const int tlsError = apiClient().lastError(unused, sizeof(unused));
     out.printf("[net] connexion à l'API impossible après %u ms (WiFi %d dBm, code TLS %d)\n",
@@ -793,45 +820,75 @@ static void noteTlsResult(int httpStatus, uint32_t startedAtMs, Print &out)
     }
 }
 
-/** true : rien à envoyer, ou paquet confirmé/rejeté par l'API ; false : échec
- * (réseau, API, mémoire) — l'appelant espace alors la tentative suivante. */
-static bool syncWithApi()
+/**
+ * Session vers l'API : une seule connexion TLS, gardée ouverte (keep-alive)
+ * d'une requête à la suivante tant que l'objet vit, fermée avec lui. Une
+ * connexion par requête multipliait les connexions quand la file se vidait
+ * après une coupure (une par paquet, plus une par envoi de journaux) — de
+ * quoi faire bloquer l'IP du modem par l'hébergeur. La session reste courte
+ * (voir API_BURST_MAX_*) : ouverte, elle immobilise les tampons mbedTLS et,
+ * si g_pauseBleDuringTls, la publicité BLE.
+ */
+struct ApiSession
 {
-    if (WiFi.status() != WL_CONNECTED)
-        return true;
+    TlsSessionScope tls; // en premier : détruit après http (voir TlsSessionScope)
+    HTTPClient http;
+    unsigned requests = 0;
+};
 
-    String body;
-    String localId;
-    if (!readQueueHead(body, localId))
-        return true;
+/** POST JSON vers l'API sur la connexion de la session (ouverte au besoin).
+ * La réponse est toujours lue en entier : un reste non lu serait pris pour
+ * le début de la réponse suivante. Renvoie le code HTTP, ou l'erreur
+ * HTTPClient (< 0). */
+static int apiPost(ApiSession &session, const char *path, const String &body, uint16_t timeoutMs, bool acceptJson, String &response)
+{
+    HTTPClient &http = session.http;
+    http.begin(apiClient(), String(API_BASE_URL) + path);
+    http.setConnectTimeout(HTTPS_CONNECT_TIMEOUT_MS);
+    http.setReuse(true);
+    http.addHeader("Content-Type", "application/json");
+    if (acceptJson)
+        http.addHeader("Accept", "application/json");
+    http.addHeader("Authorization", String("Bearer ") + RELAY_API_TOKEN);
+    http.setTimeout(timeoutMs);
+    // Pointeur + taille : POST(String) prend son argument par valeur et
+    // dupliquerait le paquet (10 Ko avec selfie) pendant la connexion.
+    const int status = http.POST(reinterpret_cast<uint8_t *>(const_cast<char *>(body.c_str())), body.length());
+    response = http.getString();
+    http.end();
+    session.requests++;
+    return status;
+}
 
-    int status;
+static bool flushRemoteLogs(ApiSession *openSession = nullptr);
+
+/**
+ * Envoie le paquet `body` (voir readQueueHead) et retire de la file ce que
+ * l'API confirme. true : paquet confirmé/rejeté, ou connexion réutilisée
+ * perdue (`status` < 0, le paquet reste en file sans que ce soit un échec de
+ * l'API) ; false : échec (réseau, API, mémoire).
+ */
+static bool sendQueuedPacket(ApiSession &session, String &body, int &status)
+{
+    const bool reusedConnection = session.requests > 0;
     String respBody;
     const uint32_t startedAt = millis();
+    status = apiPost(session, API_RELAY_SYNC_PATH, body, 20000, false, respBody);
+    body = String(); // paquet libéré avant d'analyser la réponse
+
+    if (status < 0 && reusedConnection)
     {
-        TlsSessionScope tlsSession;
-        HTTPClient http;
-        http.begin(apiClient(), String(API_BASE_URL) + API_RELAY_SYNC_PATH);
-        http.setConnectTimeout(HTTPS_CONNECT_TIMEOUT_MS);
-        // Connexion fermée après la requête : gardée ouverte (keep-alive), la
-        // session TLS immobilisait en permanence ses tampons mbedTLS.
-        http.setReuse(false);
-        http.addHeader("Content-Type", "application/json");
-        http.addHeader("Authorization", String("Bearer ") + RELAY_API_TOKEN);
-        http.setTimeout(20000);
-        // Pointeur + taille : POST(String) prend son argument par valeur et
-        // dupliquerait le paquet (10 Ko avec selfie) pendant la connexion.
-        status = http.POST(reinterpret_cast<uint8_t *>(const_cast<char *>(body.c_str())), body.length());
-        respBody = http.getString();
-        http.end();
+        // Le serveur a fermé la connexion gardée ouverte : l'API n'est pas
+        // en cause, le prochain cycle en ouvrira une neuve.
+        Serial.printf("[sync] connexion réutilisée perdue (%d), reprise au prochain cycle\n", status);
+        return true;
     }
     noteTlsResult(status, startedAt, g_log);
-    body = String(); // paquet libéré avant d'analyser la réponse
 
     if (status != 200)
     {
         // Rien n'est retiré de la file : nouvelle tentative plus tard.
-        g_log.printf("[sync] échec HTTP %d: %s, nouvel essai dans %u s\n", status, respBody.c_str(), (unsigned)(SYNC_RETRY_INTERVAL_MS / 1000));
+        g_log.printf("[sync] échec HTTP %d: %s, nouvel essai dans %u s\n", status, respBody.c_str(), (unsigned)(std::max(SYNC_RETRY_INTERVAL_MS, apiBackoffMs()) / 1000));
         return false;
     }
 
@@ -861,12 +918,52 @@ static bool syncWithApi()
 }
 
 /**
+ * Vide la file vers l'API sur une seule connexion : un paquet par requête,
+ * enchaînés sans pause jusqu'à API_BURST_MAX_PACKETS / API_BURST_MAX_MS, ou
+ * dès qu'un téléphone se présente en BLE. Les journaux en attente partent
+ * ensuite sur la même connexion. File vide : aucune connexion.
+ * true : rien à envoyer, ou paquets confirmés/rejetés par l'API ; false :
+ * échec (réseau, API, mémoire) — l'appelant espace alors la tentative suivante.
+ */
+static bool syncWithApi()
+{
+    if (WiFi.status() != WL_CONNECTED)
+        return true;
+
+    String body;
+    String localId;
+    if (!readQueueHead(body, localId))
+        return true;
+
+    ApiSession session;
+    const uint32_t burstStartedAt = millis();
+    bool ok;
+    int status;
+    for (;;)
+    {
+        ok = sendQueuedPacket(session, body, status);
+        if (!ok || status < 0)
+            break;
+        if (session.requests >= API_BURST_MAX_PACKETS || millis() - burstStartedAt >= API_BURST_MAX_MS || !otaSafeToRun())
+            break;
+        if (!readQueueHead(body, localId))
+            break;
+    }
+    // L'API a répondu (même par une erreur) : la connexion est utilisable.
+    if (status > 0)
+        flushRemoteLogs(&session);
+    return ok;
+}
+
+/**
  * Pousse vers l'API les lignes du moniteur série en attente (voir
  * RemoteLogger). Les échecs ne sont imprimés que sur Serial : les passer par
  * g_log alimenterait le tampon avec ses propres erreurs d'envoi.
  * false en cas d'échec réseau : l'appelant espace la tentative suivante.
+ * `openSession` : connexion déjà ouverte par syncWithApi(), réutilisée ;
+ * sinon une session est ouverte pour cet envoi seul.
  */
-static bool flushRemoteLogs()
+static bool flushRemoteLogs(ApiSession *openSession)
 {
     if (!REMOTE_LOG_ENABLED || WiFi.status() != WL_CONNECTED)
         return true;
@@ -884,6 +981,10 @@ static bool flushRemoteLogs()
         capacity += line.message.length() + 1;
 
     DynamicJsonDocument doc(capacity);
+    // Tas trop sollicité (connexion TLS déjà ouverte) : le lot attendra,
+    // plutôt que d'envoyer un document vide que l'API refuserait.
+    if (doc.capacity() == 0)
+        return false;
     doc["uptime_ms"] = (uint32_t)millis();
     JsonArray lines = doc.createNestedArray("lines");
     for (const auto &line : batch)
@@ -900,19 +1001,23 @@ static bool flushRemoteLogs()
     doc.clear();
 
     int status;
+    String unusedResponse;
     const uint32_t startedAt = millis();
+    const bool reusedConnection = openSession && openSession->requests > 0;
+    if (openSession)
     {
-        TlsSessionScope tlsSession;
-        HTTPClient http;
-        http.begin(apiClient(), String(API_BASE_URL) + API_RELAY_LOGS_PATH);
-        http.setConnectTimeout(HTTPS_CONNECT_TIMEOUT_MS);
-        http.setReuse(false); // voir syncWithApi() : libère les tampons TLS entre deux requêtes
-        http.addHeader("Content-Type", "application/json");
-        http.addHeader("Accept", "application/json");
-        http.addHeader("Authorization", String("Bearer ") + RELAY_API_TOKEN);
-        http.setTimeout(10000);
-        status = http.POST(reinterpret_cast<uint8_t *>(const_cast<char *>(body.c_str())), body.length());
-        http.end();
+        status = apiPost(*openSession, API_RELAY_LOGS_PATH, body, 10000, true, unusedResponse);
+    }
+    else
+    {
+        ApiSession session;
+        status = apiPost(session, API_RELAY_LOGS_PATH, body, 10000, true, unusedResponse);
+    }
+    if (status < 0 && reusedConnection)
+    {
+        // Voir sendQueuedPacket() : connexion fermée par le serveur, pas un échec de l'API.
+        Serial.printf("[log] connexion réutilisée perdue (%d), nouvelle tentative plus tard\n", status);
+        return false;
     }
     noteTlsResult(status, startedAt, Serial);
 
@@ -1183,6 +1288,74 @@ static int httpsProbe(uint32_t &elapsedMs)
     return code;
 }
 
+/** Ouverture TCP seule (ni TLS ni HTTP) vers l'API, avec un délai long.
+ * `pauseBle` : publicité BLE suspendue le temps de la sonde.
+ * Renvoie la durée d'ouverture en ms, ou -1 si rien n'a répondu. */
+static int32_t apiTcpProbe(const IPAddress &ip, bool pauseBle)
+{
+    if (pauseBle)
+        NimBLEDevice::getAdvertising()->stop();
+    WiFiClient client;
+    const uint32_t startedAt = millis();
+    const bool connected = client.connect(ip, 443, NET_DIAG_TCP_TIMEOUT_MS);
+    const uint32_t elapsed = millis() - startedAt;
+    client.stop();
+    if (pauseBle)
+        NimBLEDevice::getAdvertising()->start();
+    return connected ? (int32_t)elapsed : -1;
+}
+
+/**
+ * Suite du diagnostic quand le TLS fonctionne vers le site de référence mais
+ * pas vers l'API : distingue une API injoignable (DNS, route, filtrage) d'une
+ * API joignable trop lentement pour HTTPS_CONNECT_TIMEOUT_MS (paquets perdus
+ * puis retransmis), et vérifie si suspendre la publicité BLE y change
+ * quelque chose — auquel cas le remède est conservé.
+ */
+static void diagnoseApiRoute()
+{
+    String host = API_BASE_URL;
+    host.remove(0, host.indexOf("://") + 3);
+    const int slash = host.indexOf('/');
+    if (slash >= 0)
+        host.remove(slash);
+
+    IPAddress ip;
+    if (!WiFi.hostByName(host.c_str(), ip))
+    {
+        g_log.printf("[net] verdict : DNS, %s introuvable (serveur DNS %s)\n", host.c_str(), WiFi.dnsIP().toString().c_str());
+        return;
+    }
+
+    // Remède BLE déjà actif : la sonde tourne dans les mêmes conditions que
+    // les appels à l'API, sinon son échec ne dirait rien du chemin réseau.
+    const bool bleAlreadyPaused = g_pauseBleDuringTls && otaSafeToRun();
+    const int32_t plainMs = apiTcpProbe(ip, bleAlreadyPaused);
+    g_log.printf("[net] TCP seul vers l'API (%s -> %s:443, délai %u s%s) : %d ms (-1 = aucune réponse)\n",
+                 host.c_str(), ip.toString().c_str(), (unsigned)(NET_DIAG_TCP_TIMEOUT_MS / 1000),
+                 bleAlreadyPaused ? ", publicité BLE suspendue" : "", (int)plainMs);
+    const bool plainInTime = plainMs >= 0 && plainMs < HTTPS_CONNECT_TIMEOUT_MS;
+
+    if (!plainInTime && !g_pauseBleDuringTls && otaSafeToRun())
+    {
+        const int32_t quietMs = apiTcpProbe(ip, true);
+        g_log.printf("[net] TCP seul vers l'API, publicité BLE suspendue : %d ms\n", (int)quietMs);
+        if (quietMs >= 0 && quietMs < HTTPS_CONNECT_TIMEOUT_MS)
+        {
+            g_pauseBleDuringTls = true;
+            g_log.println("[net] verdict : le BLE perturbait la liaison vers l'API — publicité BLE désormais suspendue pendant chaque connexion à l'API");
+            return;
+        }
+    }
+
+    if (plainInTime)
+        g_log.println("[net] verdict : l'API répond en TCP cette fois, pertes intermittentes sur la liaison");
+    else if (plainMs >= 0)
+        g_log.println("[net] verdict : l'API est joignable mais trop lentement pour le délai de connexion (paquets perdus en route)");
+    else
+        g_log.println("[net] verdict : aucune réponse TCP de l'API alors que le TLS fonctionne ailleurs (route ou filtrage entre ce modem et le serveur)");
+}
+
 /**
  * Auto-diagnostic lancé quand l'API ne répond pas, pour savoir OÙ ça bloque
  * sans matériel de mesure, et y remédier seul quand c'est possible :
@@ -1191,6 +1364,7 @@ static int httpsProbe(uint32_t &elapsedMs)
  *     pleines (une poignée de main TLS en exige plusieurs Ko d'affilée, une
  *     redirection HTTP tient dans un seul petit paquet) ?
  *  3. HTTPS vers un site de référence : le TLS marche-t-il avec un autre ?
+ *     Si oui, le problème est sur le chemin de l'API : diagnoseApiRoute().
  *  4. Si non, même test avec la publicité BLE suspendue (WiFi et BLE se
  *     partagent la radio) — s'il passe, le remède est conservé.
  *  5. Si non, même test avec une puissance d'émission WiFi réduite (pics de
@@ -1254,7 +1428,7 @@ static void diagnoseConnectivity()
     g_log.printf("[net] test 3/5, HTTPS vers %s : %d en %u ms (code > 0 = TLS fonctionnel)\n", NET_DIAG_HTTPS_URL, code, (unsigned)elapsed);
     if (code > 0)
     {
-        g_log.println("[net] verdict : le TLS fonctionne vers un autre site, le blocage est propre au serveur de l'API");
+        diagnoseApiRoute();
         return;
     }
 
@@ -1266,6 +1440,8 @@ static void diagnoseConnectivity()
         if (code > 0)
         {
             g_log.println("[net] verdict : le BLE perturbait le TLS — publicité BLE désormais suspendue pendant chaque connexion à l'API");
+            // Le TLS passe désormais ailleurs : reste à savoir si l'API, elle, répond.
+            diagnoseApiRoute();
             return;
         }
         g_pauseBleDuringTls = false;
@@ -1277,6 +1453,7 @@ static void diagnoseConnectivity()
     if (code > 0)
     {
         g_log.println("[net] verdict : l'alimentation ne tient pas les pics d'émission — puissance WiFi réduite conservée");
+        diagnoseApiRoute();
         return;
     }
     WiFi.setTxPower(WIFI_POWER_19_5dBm);
@@ -1313,8 +1490,10 @@ static void syncTask(void *)
 
         // Après un échec, la tentative suivante attend SYNC_RETRY_INTERVAL_MS
         // (compté à partir de la FIN de la tentative ratée, qui peut elle-même
-        // durer jusqu'à ~30 s de délais de connexion).
-        if (millis() - lastSync >= syncInterval)
+        // durer jusqu'à ~30 s de délais de connexion). API injoignable : les
+        // trois appels ci-dessous attendent ensemble (voir apiInBackoff()),
+        // réévalué avant chacun car le précédent vient peut-être d'échouer.
+        if (!apiInBackoff() && millis() - lastSync >= syncInterval)
         {
             const bool synced = syncWithApi();
             if (!synced && (lastDiagnostic == 0 || millis() - lastDiagnostic >= NET_DIAG_INTERVAL_MS))
@@ -1325,12 +1504,12 @@ static void syncTask(void *)
             lastSync = millis();
             syncInterval = synced ? SYNC_INTERVAL_MS : SYNC_RETRY_INTERVAL_MS;
         }
-        if (millis() - lastLogFlush >= logInterval)
+        if (!apiInBackoff() && millis() - lastLogFlush >= logInterval)
         {
             lastLogFlush = millis();
             logInterval = flushRemoteLogs() ? LOG_FLUSH_INTERVAL_MS : LOG_RETRY_INTERVAL_MS;
         }
-        if ((!otaCheckedOnce || millis() - lastOtaCheck >= OTA_CHECK_INTERVAL_MS) && otaSafeToRun())
+        if (!apiInBackoff() && (!otaCheckedOnce || millis() - lastOtaCheck >= OTA_CHECK_INTERVAL_MS) && otaSafeToRun())
         {
             otaCheckedOnce = true;
             lastOtaCheck = millis();

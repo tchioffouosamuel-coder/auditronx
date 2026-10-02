@@ -85,7 +85,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('signalements', SignalementController::class);
     Route::apiResource('feries', FerieController::class)
         ->parameters(['feries' => 'ferie']);
-    Route::apiResource('accreditations', AccreditationController::class);
+    Route::apiResource('accreditations', AccreditationController::class)
+        ->middleware(['backoffice', 'accreditation-admin']);
     Route::post('/personnel/import', [EnseignantController::class, 'import']);
 
     // Import/export/modèle XLSX génériques (§4.2) pour les entités principales.

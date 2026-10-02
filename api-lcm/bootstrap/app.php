@@ -15,6 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'backoffice' => \App\Http\Middleware\EnsureBackofficeUser::class,
+            'accreditation-admin' => \App\Http\Middleware\EnsureAccreditationAdministrator::class,
         ]);
 
         $middleware->redirectGuestsTo(function (Request $request): ?string {

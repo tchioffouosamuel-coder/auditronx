@@ -86,13 +86,23 @@ inline constexpr char RELAY_API_TOKEN[] = "76|nJRGTR5elU6Cg6kqXpYexMnZMKlVMTNrOL
 // main.cpp). L'ancien bloc fixe de 20 Ko d'un seul tenant n'était plus
 // allouable dès que BLE et TLS avaient morcelé le tas.
 
-// Cadence de synchro : un paquet par requête (la négociation TLS consomme
-// déjà l'essentiel de la RAM libre sur cet ESP32 sans PSRAM), toutes les 3 s
-// tant que la file n'est pas vide. File vide : simple lecture de la file,
-// aucune connexion réseau. Après un échec (pas d'internet, API injoignable),
-// la tentative suivante attend SYNC_RETRY_INTERVAL_MS.
+// Cadence de synchro : toutes les 3 s tant que la file n'est pas vide, un
+// paquet par requête (la négociation TLS consomme déjà l'essentiel de la RAM
+// libre sur cet ESP32 sans PSRAM) mais plusieurs requêtes par connexion (voir
+// API_BURST_MAX_* ci-dessous). File vide : simple lecture de la file, aucune
+// connexion réseau. Après un échec (pas d'internet, API injoignable), la
+// tentative suivante attend SYNC_RETRY_INTERVAL_MS.
 inline constexpr uint32_t SYNC_INTERVAL_MS = 3000;
+// Bornes d'une connexion gardée ouverte pour vider la file (voir ApiSession
+// dans main.cpp) : au-delà, elle est fermée et la suite attend le cycle
+// suivant — le temps de rendre la mémoire du TLS et la publicité BLE.
+inline constexpr unsigned API_BURST_MAX_PACKETS = 10;
+inline constexpr uint32_t API_BURST_MAX_MS = 15000;
 inline constexpr uint32_t SYNC_RETRY_INTERVAL_MS = 5000;
+// API injoignable (connexion impossible, pas une réponse d'erreur) : l'attente
+// double à chaque échec consécutif, de SYNC_RETRY_INTERVAL_MS jusqu'à ce
+// plafond, et vaut pour tous les appels à l'API (synchro, journaux, OTA).
+inline constexpr uint32_t API_RETRY_MAX_INTERVAL_MS = 60000;
 
 // Auto-test de connectivité lancé quand l'API ne répond pas (voir
 // diagnoseConnectivity() dans main.cpp) : au premier échec, puis au plus
@@ -102,6 +112,10 @@ inline constexpr char NET_DIAG_HTTPS_URL[] = "https://www.google.com/generate_20
 inline constexpr char NET_DIAG_HTTP_LARGE_URL[] = "http://www.google.com/";
 inline constexpr size_t NET_DIAG_LARGE_BYTES = 20000;
 inline constexpr uint32_t NET_DIAG_INTERVAL_MS = 10UL * 60UL * 1000UL;
+// Délai de l'ouverture TCP seule vers l'API (voir diagnoseApiRoute()) : bien
+// plus long que HTTPS_CONNECT_TIMEOUT_MS, pour laisser passer les
+// retransmissions.
+inline constexpr int32_t NET_DIAG_TCP_TIMEOUT_MS = 20000;
 
 // ---- Délais des connexions HTTPS vers l'API ----
 // Courts à dessein : une tentative qui n'aboutit pas doit libérer vite la
@@ -140,7 +154,7 @@ inline constexpr char NTP_SERVER[] = "pool.ntp.org";
 // destiné à l'OTA et à saisir à l'identique dans le backoffice lors de
 // l'upload : la borne flashe dès que la version active côté serveur diffère
 // de celle-ci (activer une version plus ancienne fait donc un rollback).
-inline constexpr char FIRMWARE_VERSION[] = "1.0.7";
+inline constexpr char FIRMWARE_VERSION[] = "1.0.8";
 inline constexpr char API_RELAY_FIRMWARE_MANIFEST_PATH[] = "/api/relay/firmware/manifest";
 // Cadence de vérification du manifest (en plus d'une vérification dès la
 // première connexion WiFi). Pas de canal push ici, contrairement au MQTT de
