@@ -2,6 +2,20 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
+/**
+ * Le journal d'audit sert à contrôler les rôles restreints : l'API le réserve
+ * aux accréditations à accès total qui ne sont pas elles-mêmes bridées
+ * (surveillance générale). On masque le lien dans les mêmes conditions, pour
+ * ne pas proposer une page qui répondrait 403.
+ */
+function aAccesTotal(user) {
+  const accreditation = user?.accreditation
+
+  if (!accreditation) return true
+
+  return accreditation.groupe === '*' && !accreditation.exclut_administration
+}
+
 const NAV_SECTIONS = [
   {
     title: 'Vue d’ensemble',
@@ -14,7 +28,7 @@ const NAV_SECTIONS = [
       { to: '/classes', label: 'Classes' },
       { to: '/disciplines', label: 'Disciplines' },
       { to: '/emplois', label: 'Emplois du temps' },
-      { to: '/accreditations', label: 'Accréditations' },
+      { to: '/accreditations', label: 'Accréditations', visible: aAccesTotal },
     ],
   },
   {
@@ -41,6 +55,7 @@ const NAV_SECTIONS = [
       { to: '/appareils', label: 'Appareils & points d’accès' },
       { to: '/moniteur-bornes', label: 'Moniteur des bornes' },
       { to: '/firmwares', label: 'Mises à jour firmware' },
+      { to: '/journal-audit', label: 'Journal d’audit', visible: aAccesTotal },
       { to: '/configuration', label: 'Configuration' },
     ],
   },
@@ -70,7 +85,9 @@ function SidebarContent({ onNavigate }) {
             <div className="mb-1 px-2 text-xs font-semibold uppercase tracking-wide text-brand-300">
               {section.title}
             </div>
-            {section.links.map((link) => (
+            {section.links
+              .filter((link) => !link.visible || link.visible(user))
+              .map((link) => (
               <NavLink
                 key={link.to}
                 to={link.to}

@@ -9,6 +9,7 @@ use App\Models\Enseignant;
 use App\Models\Ferie;
 use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
+use App\Support\Audit;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -39,6 +40,10 @@ class LegacyImportSeeder extends Seeder
 {
     public function run(): void
     {
+        // Reprise de l'historique : des milliers de lignes qui ne sont pas des
+        // actions d'utilisateur. Les journaliser noierait le vrai journal.
+        Audit::desactiver();
+
         $this->loadLegacyDump();
 
         try {

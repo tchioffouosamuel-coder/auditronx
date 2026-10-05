@@ -18,6 +18,13 @@ return Application::configure(basePath: dirname(__DIR__))
             'accreditation-admin' => \App\Http\Middleware\EnsureAccreditationAdministrator::class,
         ]);
 
+        // Journal d'audit (§4.2) : appliqué à toutes les routes API, y compris
+        // la connexion et les tentatives refusées, afin qu'aucune action ne
+        // puisse être menée hors trace.
+        $middleware->api(append: [
+            \App\Http\Middleware\JournaliseAction::class,
+        ]);
+
         $middleware->redirectGuestsTo(function (Request $request): ?string {
             // Les routes API doivent renvoyer 401 JSON, jamais chercher une
             // route web `login` qui n'existe pas dans cette application.

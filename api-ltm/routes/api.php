@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\AccessPointController;
 use App\Http\Controllers\Api\AccreditationController;
 use App\Http\Controllers\Api\AssiduiteController;
 use App\Http\Controllers\Api\AttendanceController;
+use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CahierTexteController;
 use App\Http\Controllers\Api\ClasseController;
@@ -91,6 +92,13 @@ Route::middleware('auth:sanctum')->group(function () {
         ->parameters(['feries' => 'ferie']);
     Route::apiResource('accreditations', AccreditationController::class)
         ->middleware(['backoffice', 'accreditation-admin']);
+
+    // Journal d'audit (§4.2) — lecture seule, réservée aux accréditations à
+    // accès total : il sert justement à contrôler les autres rôles.
+    Route::middleware(['backoffice', 'accreditation-admin'])->group(function () {
+        Route::get('/audit-logs', [AuditLogController::class, 'index']);
+        Route::get('/audit-logs/actions', [AuditLogController::class, 'actions']);
+    });
     Route::post('/personnel/import', [EnseignantController::class, 'import']);
 
     // Import/export/modèle XLSX génériques (§4.2) pour les entités principales.

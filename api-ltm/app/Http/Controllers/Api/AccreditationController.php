@@ -20,6 +20,7 @@ class AccreditationController extends Controller
             'label' => ['required', 'string', 'max:255'],
             'groupe' => ['nullable', 'string', 'max:255'],
             'niveau' => ['nullable', 'integer', 'between:1,4'],
+            'exclut_administration' => ['sometimes', 'boolean'],
         ]);
 
         return response()->json(Accreditation::create($data), 201);
@@ -36,6 +37,7 @@ class AccreditationController extends Controller
             'label' => ['sometimes', 'string', 'max:255'],
             'groupe' => ['nullable', 'string', 'max:255'],
             'niveau' => ['nullable', 'integer', 'between:1,4'],
+            'exclut_administration' => ['sometimes', 'boolean'],
         ]);
 
         $accreditation->update($data);

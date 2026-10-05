@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Traits\AccessibleEnseignants;
+use App\Models\Accreditation;
 use App\Models\Enseignant;
 use App\Models\Presence;
 use App\Models\User;
@@ -55,6 +56,8 @@ class EnseignantController extends Controller
         if (empty($data['password'])) {
             unset($data['password']);
         }
+
+        $this->refuserSectionInterdite($request->user(), $data['section'] ?? null);
 
         $enseignant = DB::transaction(function () use ($data) {
             $enseignant = Enseignant::create($data);
@@ -110,12 +113,37 @@ class EnseignantController extends Controller
             unset($data['password']);
         }
 
+        if (array_key_exists('section', $data)) {
+            $this->refuserSectionInterdite($request->user(), $data['section']);
+        }
+
         DB::transaction(function () use ($enseignant, $data) {
             $enseignant->update($data);
             $this->synchroniserCompteAdmin($enseignant);
         });
 
         return response()->json($enseignant);
+    }
+
+    /**
+     * Interdit de créer ou de déplacer une fiche dans une section que
+     * l'accréditation de l'auteur n'a pas le droit de voir.
+     *
+     * Sans ce garde-fou, un rôle exclu de l'administration (surveillant
+     * général) pouvait y verser une fiche, puis la perdre de vue
+     * définitivement — ou s'en servir pour la soustraire à son propre
+     * périmètre.
+     */
+    private function refuserSectionInterdite(User $auteur, ?string $section): void
+    {
+        $accreditation = $auteur->accreditation;
+
+        abort_if(
+            $accreditation?->exclutAdministration()
+                && Accreditation::estSectionAdministrative($section),
+            403,
+            'Votre accréditation ne permet pas de gérer le personnel administratif.',
+        );
     }
 
     /**
@@ -191,6 +219,8 @@ class EnseignantController extends Controller
 
                 continue;
             }
+
+            $this->refuserSectionInterdite($request->user(), $ligne['section'] ?? null);
 
             $crees[] = Enseignant::create($ligne);
         }
