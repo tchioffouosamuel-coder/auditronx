@@ -26,6 +26,40 @@ const SELECT_STYLES = {
   menu: (base) => ({ ...base, zIndex: 50 }),
 }
 
+/** Garde-fou : plafonne le nombre d'allers-retours si l'API pagine à l'infini. */
+const MAX_PAGES = 100
+
+/**
+ * Récupère l'intégralité d'une ressource en suivant la pagination Laravel.
+ *
+ * La recherche, le tri et la pagination de `DataTable` travaillent sur le
+ * tableau déjà en mémoire : ne lire que la première page revenait à chercher
+ * dans les 25 (ou 50) premières lignes seulement — un enseignant classé après
+ * la lettre B ressortait en « 0 résultat » alors qu'il existe bien en base.
+ * Les listes déroulantes souffraient du même tronquage. On agrège donc toutes
+ * les pages avant d'afficher.
+ */
+async function fetchAllPages(url) {
+  const all = []
+  let page = 1
+  let lastPage = 1
+
+  do {
+    const { data } = await api.get(url, { params: { page } })
+
+    if (Array.isArray(data)) {
+      all.push(...data)
+      break
+    }
+
+    all.push(...(data.data ?? []))
+    lastPage = Number(data.last_page ?? 1)
+    page += 1
+  } while (page <= lastPage && page <= MAX_PAGES)
+
+  return all
+}
+
 /**
  * Table CRUD générique pilotée par un schéma de champs — évite de réécrire le
  * même boilerplate (liste, création, édition, suppression) pour chaque module
@@ -50,8 +84,7 @@ export default function ResourceTable({ title, resource, fields, columns, idKey 
     setLoading(true)
     setError(null)
     try {
-      const { data } = await api.get(resource)
-      setRows(Array.isArray(data) ? data : data.data ?? [])
+      setRows(await fetchAllPages(resource))
     } catch {
       setError("Impossible de charger les données.")
     } finally {
@@ -68,8 +101,7 @@ export default function ResourceTable({ title, resource, fields, columns, idKey 
     fields
       .filter((f) => f.type === 'select' && f.optionsUrl)
       .forEach((f) => {
-        api.get(f.optionsUrl).then(({ data }) => {
-          const list = Array.isArray(data) ? data : data.data ?? []
+        fetchAllPages(f.optionsUrl).then((list) => {
           setOptionsByField((prev) => ({ ...prev, [f.key]: list }))
         })
       })

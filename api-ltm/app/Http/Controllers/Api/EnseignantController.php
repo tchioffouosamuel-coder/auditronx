@@ -26,7 +26,14 @@ class EnseignantController extends Controller
                 $q->where('nom', 'like', "%{$v}%")->orWhere('matricule', 'like', "%{$v}%");
             }));
 
-        return response()->json($query->orderBy('nom')->paginate(25));
+        // `per_page` est honoré (plafonné) : plusieurs écrans — sélecteur
+        // d'enseignant du cahier de texte, des emplois du temps et des
+        // signalements — demandent déjà `?per_page=500` pour afficher tout le
+        // personnel d'un coup. Ignorer le paramètre tronquait ces listes aux
+        // 25 premiers noms sans la moindre erreur visible.
+        $perPage = min(max((int) $request->query('per_page', 25), 1), 500);
+
+        return response()->json($query->orderBy('nom')->paginate($perPage));
     }
 
     public function store(Request $request)
