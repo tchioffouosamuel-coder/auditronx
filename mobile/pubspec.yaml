@@ -31,6 +31,12 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Sélecteurs de date en français (historique enseignant, journal d'audit) :
+  # sans ce paquet, `showDatePicker` retombe sur l'anglais quelle que soit la
+  # locale passée, le délégué français n'existant tout simplement pas.
+  flutter_localizations:
+    sdk: flutter
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
@@ -39,7 +45,7 @@ dependencies:
   flutter_secure_storage: ^9.2.2
   mobile_scanner: ^6.0.2
   permission_handler: ^11.3.1
-  intl: ^0.19.0
+  intl: ^0.20.2
   google_fonts: ^6.2.1
   provider: ^6.1.2
   uuid: ^4.5.1

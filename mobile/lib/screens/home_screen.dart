@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/session.dart';
+import '../widgets/assiduite_mensuelle_card.dart';
 import '../widgets/sync_status_banner.dart';
 import 'change_password_screen.dart';
 import 'historique_screen.dart';
@@ -143,19 +144,21 @@ class _ScanTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Image.asset('assets/logo.png', height: 64),
-          const SizedBox(height: 16),
-          Text(
-            'Bonjour, $nom',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 24),
-          FilledButton.icon(
+    // Liste défilante plutôt que colonne centrée : la carte d'assiduité
+    // déborderait sur un petit écran en mode paysage.
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 28, 20, 28),
+      children: [
+        Image.asset('assets/logo.png', height: 64),
+        const SizedBox(height: 16),
+        Text(
+          'Bonjour, $nom',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: 24),
+        Center(
+          child: FilledButton.icon(
             onPressed: onScan,
             icon: const Icon(Icons.qr_code_scanner),
             label: const Text('Scanner ma présence'),
@@ -163,8 +166,10 @@ class _ScanTab extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
             ),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 28),
+        const AssiduiteMensuelleCard(),
+      ],
     );
   }
 }

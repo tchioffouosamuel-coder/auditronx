@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 import 'screens/activation_screen.dart';
@@ -44,6 +45,16 @@ class AuditronXApp extends StatelessWidget {
         title: 'Auditron X',
         debugShowCheckedModeBanner: false,
         theme: buildAuditronTheme(),
+        // L'établissement travaille en français : la langue est imposée plutôt
+        // que déduite du téléphone, pour que les sélecteurs de date et les
+        // libellés système restent cohérents avec le reste de l'interface.
+        locale: const Locale('fr'),
+        supportedLocales: const [Locale('fr'), Locale('en')],
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
         home: const _RootGate(),
       ),
     );

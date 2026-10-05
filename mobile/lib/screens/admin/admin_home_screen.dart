@@ -15,6 +15,7 @@ import 'admin_disciplines_screen.dart';
 import 'admin_emplois_screen.dart';
 import 'admin_feries_screen.dart';
 import 'admin_fiche_progression_screen.dart';
+import 'admin_journal_audit_screen.dart';
 import 'admin_personnel_screen.dart';
 import 'admin_qr_points_screen.dart';
 import 'admin_retards_screen.dart';
@@ -52,7 +53,20 @@ class AdminHomeScreen extends StatefulWidget {
 }
 
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
-  static final _groups = [
+  /// Le journal d'audit sert à contrôler les rôles restreints : l'API le
+  /// réserve aux accréditations à accès total qui ne sont pas elles-mêmes
+  /// bridées (surveillance générale). On masque l'entrée de menu dans les
+  /// mêmes conditions, pour ne pas proposer un écran qui répondrait 403.
+  static bool _aAccesTotal(AdminSession session) {
+    final accreditation = session.user?['accreditation'];
+
+    if (accreditation is! Map) return true;
+
+    return accreditation['groupe'] == '*' &&
+        accreditation['exclut_administration'] != true;
+  }
+
+  static List<_AdminMenuGroup> _groupesPour({required bool accesTotal}) => [
     _AdminMenuGroup(
       title: "Vue d'ensemble",
       entries: [
@@ -166,13 +180,20 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           icon: Icons.qr_code,
           screen: const AdminQrPointsScreen(),
         ),
+        // Ajouté en dernier, donc sans effet sur `_primaryIndexes`, qui vise
+        // des positions fixes dans la liste à plat.
+        if (accesTotal)
+          _AdminMenuEntry(
+            title: "Journal d'audit",
+            icon: Icons.fact_check_outlined,
+            screen: const AdminJournalAuditScreen(),
+          ),
       ],
     ),
   ];
 
-  late final List<_AdminMenuEntry> _flatEntries = [
-    for (final g in _groups) ...g.entries,
-  ];
+  List<_AdminMenuGroup> _groups = _groupesPour(accesTotal: false);
+  List<_AdminMenuEntry> _flatEntries = const [];
   static const _primaryIndexes = [0, 1, 7, 2];
 
   int _index = 0;
@@ -252,6 +273,12 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _groups = _groupesPour(
+      accesTotal: _aAccesTotal(context.watch<AdminSession>()),
+    );
+    _flatEntries = [for (final g in _groups) ...g.entries];
+    if (_index >= _flatEntries.length) _index = 0;
+
     // Coquille "one page" : les destinations se pilotent par setState, pas par
     // le Navigator, donc rien à empiler pour le bouton retour système. Sans ce
     // PopScope, ce bouton fermerait directement l'app depuis n'importe quelle

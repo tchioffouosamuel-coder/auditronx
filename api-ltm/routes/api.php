@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\EnseignantController;
 use App\Http\Controllers\Api\FerieController;
 use App\Http\Controllers\Api\FicheProgressionController;
 use App\Http\Controllers\Api\FirmwareController;
+use App\Http\Controllers\Api\MonAssiduiteController;
 use App\Http\Controllers\Api\MyPresenceController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OtpController;
@@ -65,6 +66,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Historique personnel & notifications (§4.1 — app mobile)
     Route::get('/mes-presences', [MyPresenceController::class, 'index']);
+    Route::get('/mon-assiduite', MonAssiduiteController::class);
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead']);
 

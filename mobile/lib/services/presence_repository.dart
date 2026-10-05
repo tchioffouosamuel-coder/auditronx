@@ -17,11 +17,25 @@ class PresenceRepository {
 
   final FlutterSecureStorage _storage;
 
-  Future<List<PresenceEntry>> load() async {
+  /// Historique de l'enseignant.
+  ///
+  /// Sans bornes, l'API s'en tient au mois en cours, ce qui suffit aux
+  /// vérifications de pointage. L'écran d'historique passe une fenêtre plus
+  /// large pour que ses filtres (semaine dernière à cheval sur deux mois,
+  /// choix d'un mois passé) aient des données à montrer. Le résultat, plus
+  /// complet, est mis en cache tel quel : il sert aussi au mode hors ligne.
+  Future<List<PresenceEntry>> load({DateTime? debut, DateTime? fin}) async {
     final localEntries = await _loadLocalHistory();
     try {
       final data =
-          await ApiClient.instance.get('/mes-presences') as List<dynamic>;
+          await ApiClient.instance.get(
+                '/mes-presences',
+                query: {
+                  if (debut != null) 'debut': _dateKey(debut),
+                  if (fin != null) 'fin': _dateKey(fin),
+                },
+              )
+              as List<dynamic>;
       final serverEntries = _parse(data);
       await _reconcileLocalHistory(serverEntries, localEntries);
       final entries = _merge(serverEntries, localEntries);
