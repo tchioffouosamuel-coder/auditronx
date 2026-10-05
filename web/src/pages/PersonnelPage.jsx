@@ -23,7 +23,12 @@ export default function PersonnelPage() {
           { key: 'grade', label: 'Grade' },
           { key: 'tel', label: 'Téléphone' },
           { key: 'poste', label: 'Poste' },
-          { key: 'password', label: 'Mot de passe app mobile (laisser vide pour ne pas changer)', type: 'password' },
+          {
+            key: 'password',
+            label:
+              'Mot de passe app mobile (vide : ChangeMe123! à la création, inchangé en modification)',
+            type: 'password',
+          },
           { key: 'est_admin', label: 'Accès direct à l’app sans OTP (admin)', type: 'checkbox' },
         ]}
         columns={[

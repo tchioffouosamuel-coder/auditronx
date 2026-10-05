@@ -53,9 +53,7 @@ class EnseignantController extends Controller
             'est_admin' => ['sometimes', 'boolean'],
         ]);
 
-        if (empty($data['password'])) {
-            unset($data['password']);
-        }
+        $data = $this->avecMotDePasse($data);
 
         $this->refuserSectionInterdite($request->user(), $data['section'] ?? null);
 
@@ -123,6 +121,36 @@ class EnseignantController extends Controller
         });
 
         return response()->json($enseignant);
+    }
+
+    /**
+     * Complète les données d'une création avec le mot de passe par défaut.
+     *
+     * Un champ laissé vide signifie « ne pas changer » en modification, mais
+     * à la création il produisait une fiche sans mot de passe, donc incapable
+     * d'activer l'app mobile.
+     *
+     * Exception délibérée pour les comptes administrateurs : leur mot de passe
+     * est recopié sur un compte backoffice par `synchroniserCompteAdmin`, et un
+     * accès d'administration dont le mot de passe est public n'est pas
+     * acceptable. Pour ceux-là, la saisie reste obligatoire et la validation
+     * existante refuse la création.
+     */
+    private function avecMotDePasse(array $data): array
+    {
+        if (filled($data['password'] ?? null)) {
+            return $data;
+        }
+
+        unset($data['password']);
+
+        if (filter_var($data['est_admin'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            return $data;
+        }
+
+        $data['password'] = Enseignant::MOT_DE_PASSE_PAR_DEFAUT;
+
+        return $data;
     }
 
     /**
@@ -222,7 +250,7 @@ class EnseignantController extends Controller
 
             $this->refuserSectionInterdite($request->user(), $ligne['section'] ?? null);
 
-            $crees[] = Enseignant::create($ligne);
+            $crees[] = Enseignant::create($this->avecMotDePasse($ligne));
         }
 
         return response()->json(['crees' => count($crees), 'erreurs' => $erreurs], 201);

@@ -27,6 +27,7 @@ class JournaliseAction
         'api/spreadsheet/*/export',
         'api/spreadsheet/personnel/export-pdf',
         'api/assiduite/journal/pdf',
+        'api/assiduite/journal-hebdomadaire/pdf',
         'api/assiduite/sans-presence/pdf',
         'api/statistiques/export-zip',
     ];

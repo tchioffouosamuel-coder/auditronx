@@ -9,6 +9,7 @@ import '../../services/admin_api_client.dart';
 import '../../services/offline/offline_cache.dart';
 import '../../theme.dart';
 import '../../utils/date_format_utils.dart';
+import 'admin_journal_hebdomadaire_tab.dart';
 
 /// Assiduité & rapports (§admin-mobile) — équivalent mobile d'AssiduitePage.jsx.
 /// Lecture seule, 3 onglets : Statistiques / Journal des présences /
@@ -226,14 +227,53 @@ class _StatsTabState extends State<_StatsTab> {
   }
 }
 
+/// Onglet Journal : deux périodes dans la même vue. Le journal du jour reste
+/// l'affichage par défaut (consultation courante), la grille hebdomadaire sert
+/// aux bilans et à l'archivage papier.
 class _JournalTab extends StatefulWidget {
   const _JournalTab();
 
   @override
-  State<_JournalTab> createState() => _JournalTabState();
+  State<_JournalTab> createState() => _JournalTabWrapperState();
 }
 
-class _JournalTabState extends State<_JournalTab> {
+class _JournalTabWrapperState extends State<_JournalTab> {
+  bool _parSemaine = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(value: false, label: Text('Par jour')),
+              ButtonSegment(value: true, label: Text('Par semaine')),
+            ],
+            selected: {_parSemaine},
+            onSelectionChanged: (choix) =>
+                setState(() => _parSemaine = choix.first),
+          ),
+        ),
+        Expanded(
+          child: _parSemaine
+              ? const AdminJournalHebdomadaireTab()
+              : const _JournalDuJourTab(),
+        ),
+      ],
+    );
+  }
+}
+
+class _JournalDuJourTab extends StatefulWidget {
+  const _JournalDuJourTab();
+
+  @override
+  State<_JournalDuJourTab> createState() => _JournalTabState();
+}
+
+class _JournalTabState extends State<_JournalDuJourTab> {
   DateTime _date = DateTime.now();
   final _searchController = TextEditingController();
   late Future<List<dynamic>> _future;

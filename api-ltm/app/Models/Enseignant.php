@@ -20,6 +20,19 @@ class Enseignant extends Model implements AuthenticatableContract
 {
     use Authenticatable, HasApiTokens, HasFactory, SoftDeletes;
 
+    /**
+     * Mot de passe attribué à toute fiche créée sans mot de passe explicite.
+     *
+     * L'activation de l'app mobile exige téléphone + mot de passe
+     * (`DeviceController::requestActivation`) et refuse une fiche dont le mot
+     * de passe est nul, avec le message « Identifiants invalides ». Une fiche
+     * créée sans mot de passe était donc inutilisable, sans que rien ne le
+     * signale ni à l'administration ni à l'enseignant. La valeur est
+     * volontairement connue et commune : c'est un amorçage, à changer à la
+     * première connexion.
+     */
+    public const MOT_DE_PASSE_PAR_DEFAUT = 'ChangeMe123!';
+
     protected $fillable = [
         'nom',
         'matricule',

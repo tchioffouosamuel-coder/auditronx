@@ -126,6 +126,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/assiduite/stats', [AssiduiteController::class, 'stats']);
     Route::get('/assiduite/journal', [AssiduiteController::class, 'journal']);
     Route::get('/assiduite/journal/pdf', [AssiduiteController::class, 'journalPdf']);
+    Route::get('/assiduite/journal-hebdomadaire', [AssiduiteController::class, 'journalHebdomadaire']);
+    Route::get('/assiduite/journal-hebdomadaire/pdf', [AssiduiteController::class, 'journalHebdomadairePdf']);
     Route::get('/assiduite/personnel-inactif', [AssiduiteController::class, 'personnelInactif']);
     Route::get('/assiduite/sans-presence', [AssiduiteController::class, 'sansPresence']);
     Route::get('/assiduite/sans-presence/pdf', [AssiduiteController::class, 'sansPresencePdf']);

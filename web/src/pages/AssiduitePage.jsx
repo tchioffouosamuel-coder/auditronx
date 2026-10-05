@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import DataTable from "../components/DataTable";
+import JournalHebdomadaire from "../components/JournalHebdomadaire";
 import Modal from "../components/Modal";
 import api from "../lib/api";
 import { formatTime, todayIso } from "../lib/datetime";
@@ -41,6 +42,39 @@ function StatsTab() {
 }
 
 function JournalTab() {
+  // Deux périodes dans le même onglet : le journal du jour reste la vue par
+  // défaut (consultation courante), la grille hebdomadaire sert aux bilans et
+  // à l'archivage papier.
+  const [periode, setPeriode] = useState("jour");
+
+  return (
+    <div>
+      <div className="mb-3 inline-flex rounded-md border border-ink-100 bg-white p-0.5">
+        {[
+          ["jour", "Par jour"],
+          ["semaine", "Par semaine"],
+        ].map(([cle, libelle]) => (
+          <button
+            key={cle}
+            type="button"
+            onClick={() => setPeriode(cle)}
+            className={`rounded px-3 py-1 text-sm transition ${
+              periode === cle
+                ? "bg-brand-700 text-white"
+                : "text-ink-700 hover:bg-ink-50"
+            }`}
+          >
+            {libelle}
+          </button>
+        ))}
+      </div>
+
+      {periode === "jour" ? <JournalDuJour /> : <JournalHebdomadaire />}
+    </div>
+  );
+}
+
+function JournalDuJour() {
   const [date, setDate] = useState(todayIso);
   const [presences, setPresences] = useState([]);
   const [loading, setLoading] = useState(true);

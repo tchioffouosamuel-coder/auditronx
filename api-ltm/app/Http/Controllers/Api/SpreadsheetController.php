@@ -52,18 +52,28 @@ class SpreadsheetController extends Controller
                         return 'nom et matricule requis';
                     }
 
-                    Enseignant::updateOrCreate(
-                        ['matricule' => $matricule],
-                        [
-                            'nom' => $nom,
-                            'email' => $this->blankToNull($row['email'] ?? null),
-                            'fonction' => $this->blankToNull($row['fonction'] ?? null),
-                            'section' => $this->blankToNull($row['section'] ?? null),
-                            'grade' => $this->blankToNull($row['grade'] ?? null),
-                            'tel' => $this->blankToNull($row['tel'] ?? null),
-                            'poste' => $this->blankToNull($row['poste'] ?? null),
-                        ]
-                    );
+                    $enseignant = Enseignant::firstOrNew(['matricule' => $matricule]);
+
+                    $enseignant->fill([
+                        'nom' => $nom,
+                        'email' => $this->blankToNull($row['email'] ?? null),
+                        'fonction' => $this->blankToNull($row['fonction'] ?? null),
+                        'section' => $this->blankToNull($row['section'] ?? null),
+                        'grade' => $this->blankToNull($row['grade'] ?? null),
+                        'tel' => $this->blankToNull($row['tel'] ?? null),
+                        'poste' => $this->blankToNull($row['poste'] ?? null),
+                    ]);
+
+                    // Le fichier d'import ne porte pas de mot de passe : sans
+                    // cette valeur d'amorçage, chaque ligne nouvelle produisait
+                    // une fiche incapable d'activer l'app mobile. On ne touche
+                    // jamais au mot de passe d'une fiche existante, qu'un
+                    // réimport écraserait sinon à chaque passage.
+                    if (! $enseignant->exists) {
+                        $enseignant->password = Enseignant::MOT_DE_PASSE_PAR_DEFAUT;
+                    }
+
+                    $enseignant->save();
 
                     return null;
                 },

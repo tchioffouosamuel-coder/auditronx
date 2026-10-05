@@ -274,7 +274,7 @@ class LegacyImportSeeder extends Seeder
                     // Ancien système : authentification par carte RFID, pas de mot de
                     // passe. Le mobile Auditron X exige tel+password : mot de passe
                     // par défaut à faire changer par l'enseignant à sa première connexion.
-                    'password' => Hash::make('ChangeMe123!'),
+                    'password' => Hash::make(Enseignant::MOT_DE_PASSE_PAR_DEFAUT),
                 ]
             );
             $n++;

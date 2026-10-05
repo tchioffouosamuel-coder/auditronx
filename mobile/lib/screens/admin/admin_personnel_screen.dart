@@ -47,7 +47,8 @@ class AdminPersonnelScreen extends StatelessWidget {
       label: 'Mot de passe',
       type: AdminFieldType.password,
       helperText:
-          'Mot de passe de connexion mobile — laisser vide pour ne pas changer',
+          'Connexion mobile. Vide : ChangeMe123! à la création, inchangé en '
+          'modification. Obligatoire pour un compte administrateur.',
     ),
     const AdminFieldSpec(
       key: 'est_admin',
