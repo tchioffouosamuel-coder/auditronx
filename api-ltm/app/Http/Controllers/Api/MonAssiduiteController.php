@@ -36,7 +36,7 @@ class MonAssiduiteController extends Controller
 
         $datesAttendues = collect();
         for ($date = $debut->copy(); $date->lte($fin); $date->addDay()) {
-            if ($horaires->estAttendu($enseignant, $date, $emplois)) {
+            if ($horaires->absenceEvaluable($enseignant, $date, $emplois)) {
                 $datesAttendues->push($date->toDateString());
             }
         }

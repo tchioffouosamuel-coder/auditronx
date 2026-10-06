@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/enseignant.dart';
 import '../services/api_client.dart';
+import '../services/ble_service.dart';
 import '../services/offline/offline_cache.dart';
 import 'scan_screen.dart';
 
@@ -66,6 +67,10 @@ class _ProcurationScreenState extends State<ProcurationScreen> {
           type: 'admin_proxy',
           enseignantId: _selected!.id,
           motif: _motifController.text.trim(),
+          teacherLabel: BleService.formatTeacherLabel(
+            _selected!.nom,
+            _selected!.matricule,
+          ),
         ),
       ),
     );

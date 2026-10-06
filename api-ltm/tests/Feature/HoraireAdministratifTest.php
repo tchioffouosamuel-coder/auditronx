@@ -24,6 +24,13 @@ class HoraireAdministratifTest extends TestCase
 
     private const SAMEDI = '2026-10-03';
 
+    // Semaine entièrement écoulée au regard de la date figée ci-dessous : les
+    // statistiques n'évaluent que les jours survenus, une fenêtre à cheval sur
+    // « aujourd'hui » ne couvrirait plus les cinq jours ouvrés.
+    private const MERCREDI_PRECEDENT = '2026-09-23';
+
+    private const SAMEDI_PRECEDENT = '2026-09-26';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -117,12 +124,12 @@ class HoraireAdministratifTest extends TestCase
         $this->actingAsBackoffice();
         $administratif = $this->administratif();
         $enseignantSansCours = Enseignant::factory()->create(['section' => 'Sciences']);
-        $this->pointer($administratif, self::MERCREDI, '07:30');
+        $this->pointer($administratif, self::MERCREDI_PRECEDENT, '07:30');
         // Un pointage le samedi ne compte pas : jour non attendu.
-        $this->pointer($administratif, self::SAMEDI, '07:30');
+        $this->pointer($administratif, self::SAMEDI_PRECEDENT, '07:30');
 
-        // Semaine complète, du lundi 28/09 au dimanche 04/10.
-        $lignes = collect($this->getJson('/api/assiduite/stats?debut=2026-09-28&fin=2026-10-04')->assertOk()->json());
+        // Semaine complète, du lundi 21/09 au dimanche 27/09.
+        $lignes = collect($this->getJson('/api/assiduite/stats?debut=2026-09-21&fin=2026-09-27')->assertOk()->json());
 
         $ligne = $lignes->firstWhere('enseignant_id', $administratif->id);
         $this->assertSame(5, $ligne['jours_attendus']);
@@ -147,7 +154,7 @@ class HoraireAdministratifTest extends TestCase
         $retards = collect($this->getJson('/api/retards?debut='.self::MERCREDI.'&fin='.self::MERCREDI)->json());
         $this->assertSame(0, $retards->firstWhere('enseignant_id', $administratif->id)['jours_retard']);
 
-        $stats = collect($this->getJson('/api/assiduite/stats?debut=2026-09-28&fin=2026-10-04')->json());
+        $stats = collect($this->getJson('/api/assiduite/stats?debut=2026-09-21&fin=2026-09-27')->json());
         $this->assertSame(2, $stats->firstWhere('enseignant_id', $administratif->id)['jours_attendus']);
     }
 

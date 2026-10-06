@@ -388,6 +388,9 @@ class _Pastille extends StatelessWidget {
     // pour laquelle personne n'est porté absent.
     final ferie = (cellule['ferie'] as String?)?.trim();
     final estFerie = ferie != null && ferie.isNotEmpty;
+    // Un jour qui n'a pas encore eu lieu n'est pas jugeable : le porter absent
+    // ferait baisser le taux de la semaine à mesure qu'il reste des jours.
+    final aVenir = cellule['a_venir'] == true;
 
     final (fond, texte, contenu) = estFerie
         ? (AuditronColors.gold100, AuditronColors.gold600, 'FÉR')
@@ -399,6 +402,8 @@ class _Pastille extends StatelessWidget {
             AuditronColors.brand700,
             '${cellule['heure_arrivee'] ?? '✓'}',
           )
+        : aVenir
+        ? (AuditronColors.ink50, AuditronColors.ink500, '–')
         : (Colors.red.shade50, Colors.red.shade700, 'ABS');
 
     return Tooltip(
@@ -409,6 +414,8 @@ class _Pastille extends StatelessWidget {
           : present
           ? 'Arrivée ${cellule['heure_arrivee'] ?? '—'} · '
                 'Départ ${cellule['heure_depart'] ?? '—'}'
+          : aVenir
+          ? 'Jour à venir : pas encore évalué'
           : 'Attendu, aucun pointage enregistré',
       child: Padding(
         padding: const EdgeInsets.only(right: 4),

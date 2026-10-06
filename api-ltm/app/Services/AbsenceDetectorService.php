@@ -24,7 +24,7 @@ class AbsenceDetectorService
         // Attendus ce jour : enseignants ayant cours + personnel administratif
         // un jour ouvré de son horaire fixe (voir HoraireAttendu).
         Enseignant::with('emploiDuTemps')->get()
-            ->filter(fn (Enseignant $enseignant) => $this->horaires->estAttendu($enseignant, $date))
+            ->filter(fn (Enseignant $enseignant) => $this->horaires->absenceEvaluable($enseignant, $date))
             ->each(function (Enseignant $enseignant) use ($date) {
                 $aPointe = Presence::where('enseignant_id', $enseignant->id)
                     ->whereDate('date', $date->toDateString())

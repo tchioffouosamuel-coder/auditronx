@@ -35,7 +35,9 @@ class AssiduiteController extends Controller
         $lignes = $enseignants->map(function (Enseignant $enseignant) use ($presences, $debut, $fin, $horaires) {
             $datesAttendues = collect();
             for ($date = $debut->copy(); $date->lte($fin); $date->addDay()) {
-                if ($horaires->estAttendu($enseignant, $date)) {
+                // Une période qui déborde sur l'avenir (le mois en cours, par
+                // défaut) ne doit pas compter ses jours restants comme manqués.
+                if ($horaires->absenceEvaluable($enseignant, $date)) {
                     $datesAttendues->push($date->toDateString());
                 }
             }
@@ -163,9 +165,13 @@ class AssiduiteController extends Controller
             $cellules = $jours->map(function (Carbon $jour) use ($enseignant, $parDate, $horaires, &$attendus, &$presents) {
                 $presence = $parDate->get($jour->toDateString(), collect())->first();
                 $attendu = $horaires->estAttendu($enseignant, $jour, $enseignant->emploiDuTemps);
+                $aVenir = $horaires->estAVenir($jour);
                 $present = $presence?->heure_arrivee !== null;
 
-                if ($attendu) {
+                // `attendu` reste la vérité de l'emploi du temps ; seul le
+                // comptage écarte les jours à venir, pour que la grille puisse
+                // les afficher comme tels plutôt qu'en « non attendu ».
+                if ($attendu && ! $aVenir) {
                     $attendus++;
                     if ($present) {
                         $presents++;
@@ -175,6 +181,7 @@ class AssiduiteController extends Controller
                 return [
                     'date' => $jour->toDateString(),
                     'attendu' => $attendu,
+                    'a_venir' => $aVenir,
                     'present' => $present,
                     // Un férié rend `attendu` faux : sans ce libellé, la cellule
                     // serait indiscernable d'un jour sans cours.

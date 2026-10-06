@@ -122,8 +122,8 @@
                         <td>{{ $ligne['section'] ?? '—' }}</td>
                         @foreach ($ligne['jours'] as $cellule)
                             @php
-                                $classe = $cellule['ferie']
-                                    ? 'ferie'
+                                $classe = $cellule['ferie'] || $cellule['a_venir']
+                                    ? ($cellule['ferie'] ? 'ferie' : 'hors')
                                     : (! $cellule['attendu']
                                         ? 'hors'
                                         : ($cellule['present'] ? '' : 'absent'));
@@ -134,6 +134,8 @@
                                     {{ $cellule['heure_depart'] ?? '—' }}
                                 @elseif ($cellule['ferie'])
                                     FÉRIÉ
+                                @elseif ($cellule['a_venir'])
+                                    –
                                 @elseif ($cellule['attendu'])
                                     ABS
                                 @else
@@ -153,6 +155,7 @@
             <span><strong>ABS</strong> attendu, aucun pointage</span>
             <span><strong>FÉRIÉ</strong> jour férié, personne n'est attendue</span>
             <span><strong>·</strong> non attendu ce jour-là</span>
+            <span><strong>–</strong> jour à venir, pas encore évalué</span>
             <span><strong>—</strong> taux indisponible : aucun jour attendu, emploi du temps probablement absent</span>
         </div>
         <p>{{ $lignes->count() }} membre(s) du personnel</p>

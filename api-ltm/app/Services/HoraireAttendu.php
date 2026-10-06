@@ -142,4 +142,25 @@ class HoraireAttendu
     {
         return $this->plage($enseignant, $date, $emplois) !== null;
     }
+
+    /**
+     * Un jour qui n'est pas encore survenu. La comparaison se fait au jour
+     * entier : la date peut porter une heure selon son origine (paramètre de
+     * requête ou `now()`), et aujourd'hui ne doit jamais compter comme à venir.
+     */
+    public function estAVenir(Carbon $date): bool
+    {
+        return $date->copy()->startOfDay()->isFuture();
+    }
+
+    /**
+     * Seul cas où l'absence de pointage se lit comme une absence : la personne
+     * était attendue, et le jour est écoulé. Compter un jour à venir au
+     * dénominateur ferait baisser mécaniquement le taux d'une semaine ou d'un
+     * mois en cours, à proportion des jours restants.
+     */
+    public function absenceEvaluable(Enseignant $enseignant, Carbon $date, ?Collection $emplois = null): bool
+    {
+        return ! $this->estAVenir($date) && $this->estAttendu($enseignant, $date, $emplois);
+    }
 }

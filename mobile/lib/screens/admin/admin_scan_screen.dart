@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../models/enseignant.dart';
 import '../../services/admin_api_client.dart';
 import '../../services/admin_session.dart';
+import '../../services/ble_service.dart';
 import '../../services/offline/offline_cache.dart';
 import '../scan_screen.dart';
 
@@ -32,12 +33,16 @@ class _AdminSelfScanTab extends StatelessWidget {
   const _AdminSelfScanTab();
 
   void _openSelfScan(BuildContext context) {
+    // L'admin backoffice est un `User` : /me ne porte que son nom, pas de
+    // matricule — le libellé se réduit donc au nom.
+    final nom = context.read<AdminSession>().nom;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ScanScreen(
           title: 'Scanner ma présence',
           type: 'scan',
           tokenProvider: () => AdminApiClient.instance.token,
+          teacherLabel: BleService.formatTeacherLabel(nom),
         ),
       ),
     );
@@ -135,6 +140,10 @@ class _AdminProxyScanTabState extends State<_AdminProxyScanTab> {
           enseignantId: _selected!.id,
           motif: _motifController.text.trim(),
           tokenProvider: () => AdminApiClient.instance.token,
+          teacherLabel: BleService.formatTeacherLabel(
+            _selected!.nom,
+            _selected!.matricule,
+          ),
         ),
       ),
     );

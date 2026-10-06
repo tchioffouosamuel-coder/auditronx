@@ -81,7 +81,7 @@ class EnseignantController extends Controller
         $fin = Carbon::now()->endOfMonth();
         $datesAttendues = collect();
         for ($date = $debut->copy(); $date->lte($fin); $date->addDay()) {
-            if ($horaires->estAttendu($enseignant, $date)) $datesAttendues->push($date->toDateString());
+            if ($horaires->absenceEvaluable($enseignant, $date)) $datesAttendues->push($date->toDateString());
         }
         $datesPresents = $enseignant->presences()->whereBetween('date', [$debut->toDateString(), $fin->toDateString()])->whereNotNull('heure_arrivee')->pluck('date')->map(fn($date) => Carbon::parse($date)->toDateString());
         $joursAttendus = $datesAttendues->unique()->count();

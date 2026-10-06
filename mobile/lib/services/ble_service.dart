@@ -67,6 +67,17 @@ class BleService {
     }
   }
 
+  /// Libellé « NOM (MATRICULE) » joint au paquet pour le journal de la borne
+  /// (voir `teacher_label` plus bas). Tronqué à 64 caractères : la borne
+  /// coupe ses lignes de log à 240 octets et le lien BLE est déjà découpé.
+  static String? formatTeacherLabel(String? nom, [String? matricule]) {
+    final n = nom?.trim() ?? '';
+    final m = matricule?.trim() ?? '';
+    if (n.isEmpty && m.isEmpty) return null;
+    final libelle = m.isEmpty ? n : (n.isEmpty ? m : '$n ($m)');
+    return libelle.length <= 64 ? libelle : libelle.substring(0, 64);
+  }
+
   /// Transmet un pointage à la borne : cherche la borne à portée (filtrée par
   /// UUID de service), s'y connecte, envoie la requête, attend la réponse.
   /// Lève une [ApiException] si la borne est hors de portée ou a refusé le
@@ -77,6 +88,7 @@ class BleService {
     required String qrCode,
     int? enseignantId,
     String? motif,
+    String? teacherLabel,
   }) async {
     final total = Stopwatch()..start();
     final device = await _findBorne();
@@ -104,6 +116,7 @@ class BleService {
           qrCode: qrCode,
           enseignantId: enseignantId,
           motif: motif,
+          teacherLabel: teacherLabel,
         );
         // Fire-and-forget : ne doit pas retarder le retour du résultat à
         // l'écran (turnOff() peut mettre plusieurs secondes à répondre).
@@ -133,6 +146,7 @@ class BleService {
     required String qrCode,
     int? enseignantId,
     String? motif,
+    String? teacherLabel,
   }) async {
     try {
       await device.connect(timeout: const Duration(seconds: 8));
@@ -178,6 +192,12 @@ class BleService {
       final body = utf8.encode(jsonEncode({
         'type': type,
         'teacher_token': teacherToken,
+        // Lisible par un humain sur le moniteur série de la borne : le token
+        // est un secret et n'y a pas sa place, et la borne n'a aucun autre
+        // moyen de nommer qui vient de pointer. Purement indicatif, l'API
+        // continue de résoudre l'identité qui fait foi depuis le token.
+        if (teacherLabel != null && teacherLabel.isNotEmpty)
+          'teacher_label': teacherLabel,
         'payload': payload,
         'captured_at': DateTime.now().toUtc().toIso8601String(),
       }));

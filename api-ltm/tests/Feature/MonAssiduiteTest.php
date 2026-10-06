@@ -50,6 +50,10 @@ class MonAssiduiteTest extends TestCase
     {
         $enseignant = Enseignant::factory()->create(['section' => 'Industrielle']);
 
+        // Date figée en fin de mois : seuls les jours écoulés sont évalués, et
+        // un mois en cours ne compterait que ses occurrences déjà survenues.
+        $this->travelTo(Carbon::parse('2026-09-30 12:00:00'));
+
         // Un seul jour de la semaine est travaillé, donc 4 ou 5 occurrences
         // dans le mois : on compare au compte réel plutôt qu'à une constante.
         $jour = Carbon::now()->startOfMonth();

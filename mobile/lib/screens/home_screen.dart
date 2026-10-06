@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../services/ble_service.dart';
 import '../services/session.dart';
 import '../widgets/assiduite_mensuelle_card.dart';
 import '../widgets/sync_status_banner.dart';
@@ -22,10 +23,17 @@ class _HomeScreenState extends State<HomeScreen> {
   int _tab = 0;
 
   void _openSelfScan() {
+    final me = context.read<Session>().me;
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            const ScanScreen(title: 'Scanner ma présence', type: 'scan'),
+        builder: (_) => ScanScreen(
+          title: 'Scanner ma présence',
+          type: 'scan',
+          teacherLabel: BleService.formatTeacherLabel(
+            me?['nom'] as String?,
+            me?['matricule'] as String?,
+          ),
+        ),
       ),
     );
   }

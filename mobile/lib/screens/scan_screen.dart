@@ -23,6 +23,9 @@ class ScanScreen extends StatefulWidget {
   // celui de l'enseignant par défaut, mais l'admin backoffice (AdminApiClient)
   // scanne aussi par procuration avec son propre token.
   final Future<String?> Function()? tokenProvider;
+  // Nom de la personne dont la présence est pointée (l'enseignant ciblé pour
+  // une procuration), joint au paquet pour le journal de la borne.
+  final String? teacherLabel;
 
   const ScanScreen({
     super.key,
@@ -31,6 +34,7 @@ class ScanScreen extends StatefulWidget {
     this.enseignantId,
     this.motif,
     this.tokenProvider,
+    this.teacherLabel,
   });
 
   @override
@@ -93,6 +97,7 @@ class _ScanScreenState extends State<ScanScreen> {
         qrCode: code,
         enseignantId: widget.enseignantId,
         motif: widget.motif,
+        teacherLabel: widget.teacherLabel,
       );
 
       if (isPersonalScan) {

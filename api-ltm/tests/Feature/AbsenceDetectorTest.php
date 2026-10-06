@@ -29,7 +29,9 @@ class AbsenceDetectorTest extends TestCase
         }
 
         $service = app(AbsenceDetectorService::class);
-        $debut = now()->startOfDay();
+        // Trois jours ecoules : un jour a venir n'est jamais porte absent, le
+        // scenario doit donc se terminer aujourd'hui et non dans deux jours.
+        $debut = now()->startOfDay()->subDays(2);
 
         $service->detecterPour($debut->copy());
         $this->assertDatabaseHas('absence_checkpoints', ['enseignant_id' => $enseignant->id, 'absences_consecutives' => 1]);
