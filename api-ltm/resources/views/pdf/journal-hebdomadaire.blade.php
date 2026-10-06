@@ -66,6 +66,13 @@
             color: #999;
         }
 
+        /* Jour férié : personne n'est attendu, la cellule ne doit pas se lire
+           comme un oubli de pointage ni comme un jour sans cours. */
+        td.ferie {
+            background: #efe6c8;
+            color: #6b5a14;
+        }
+
         .legende {
             margin-top: 10px;
             font-size: 8px;
@@ -115,14 +122,18 @@
                         <td>{{ $ligne['section'] ?? '—' }}</td>
                         @foreach ($ligne['jours'] as $cellule)
                             @php
-                                $classe = ! $cellule['attendu']
-                                    ? 'hors'
-                                    : ($cellule['present'] ? '' : 'absent');
+                                $classe = $cellule['ferie']
+                                    ? 'ferie'
+                                    : (! $cellule['attendu']
+                                        ? 'hors'
+                                        : ($cellule['present'] ? '' : 'absent'));
                             @endphp
                             <td class="{{ $classe }}">
                                 @if ($cellule['present'])
                                     {{ $cellule['heure_arrivee'] ?? '—' }}<br>
                                     {{ $cellule['heure_depart'] ?? '—' }}
+                                @elseif ($cellule['ferie'])
+                                    FÉRIÉ
                                 @elseif ($cellule['attendu'])
                                     ABS
                                 @else
@@ -140,6 +151,7 @@
         <div class="legende">
             <span><strong>HH:MM / HH:MM</strong> arrivée et départ</span>
             <span><strong>ABS</strong> attendu, aucun pointage</span>
+            <span><strong>FÉRIÉ</strong> jour férié, personne n'est attendue</span>
             <span><strong>·</strong> non attendu ce jour-là</span>
             <span><strong>—</strong> taux indisponible : aucun jour attendu, emploi du temps probablement absent</span>
         </div>

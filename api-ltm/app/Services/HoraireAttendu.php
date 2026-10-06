@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Enseignant;
+use App\Models\Ferie;
 use App\Models\Parametre;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -33,6 +34,9 @@ class HoraireAttendu
 
     private ?array $parametres = null;
 
+    /** Libellés des jours fériés indexés par date `Y-m-d`, chargés une seule fois. */
+    private ?Collection $feries = null;
+
     /**
      * Comparaison insensible à la casse : `enseignants.section` porte des
      * variantes de saisie ("Administration" / "administration"), voir
@@ -41,6 +45,27 @@ class HoraireAttendu
     public function estAdministratif(Enseignant $enseignant): bool
     {
         return mb_strtolower(trim((string) $enseignant->section)) === self::SECTION_ADMINISTRATIVE;
+    }
+
+    /**
+     * Libellé du jour férié correspondant à cette date, ou null.
+     *
+     * Les fériés sont chargés en une fois et mémorisés : la grille
+     * hebdomadaire interroge l'horaire six fois par membre du personnel, et
+     * une requête par cellule coûterait 6 x effectif allers-retours.
+     */
+    public function ferie(Carbon $date): ?string
+    {
+        $this->feries ??= Ferie::all()->mapWithKeys(
+            fn (Ferie $ferie) => [Carbon::parse($ferie->date)->toDateString() => $ferie->libelle],
+        );
+
+        return $this->feries->get($date->toDateString());
+    }
+
+    public function estFerie(Carbon $date): bool
+    {
+        return $this->ferie($date) !== null;
     }
 
     /** @return array{jours: int[], heure_debut: string, heure_fin: string} */
@@ -79,6 +104,13 @@ class HoraireAttendu
      */
     public function plage(Enseignant $enseignant, Carbon $date, ?Collection $emplois = null): ?array
     {
+        // Un jour férié neutralise aussi bien l'horaire administratif que
+        // l'emploi du temps : personne n'est attendu, donc personne n'est
+        // absent ni en retard, et le jour sort du dénominateur des taux.
+        if ($this->estFerie($date)) {
+            return null;
+        }
+
         if ($this->estAdministratif($enseignant)) {
             $parametres = $this->parametresAdministratifs();
 

@@ -102,6 +102,7 @@ class AssiduiteController extends Controller
                 'date' => $jour->toDateString(),
                 'libelle' => ucfirst($jour->locale('fr')->translatedFormat('D')),
                 'jour_mois' => $jour->format('d/m'),
+                'ferie' => $horaires->ferie($jour),
             ]),
             'lignes' => $semaine['lignes'],
         ]);
@@ -175,6 +176,9 @@ class AssiduiteController extends Controller
                     'date' => $jour->toDateString(),
                     'attendu' => $attendu,
                     'present' => $present,
+                    // Un férié rend `attendu` faux : sans ce libellé, la cellule
+                    // serait indiscernable d'un jour sans cours.
+                    'ferie' => $horaires->ferie($jour),
                     'heure_arrivee' => $presence?->heure_arrivee?->format('H:i'),
                     'heure_depart' => $presence?->heure_depart?->format('H:i'),
                 ];

@@ -383,8 +383,15 @@ class _Pastille extends StatelessWidget {
   Widget build(BuildContext context) {
     final attendu = cellule['attendu'] == true;
     final present = cellule['present'] == true;
+    // Un jour férié rend `attendu` faux côté API : sans traitement distinct, il
+    // s'afficherait comme un jour sans cours, alors que c'est la raison même
+    // pour laquelle personne n'est porté absent.
+    final ferie = (cellule['ferie'] as String?)?.trim();
+    final estFerie = ferie != null && ferie.isNotEmpty;
 
-    final (fond, texte, contenu) = !attendu
+    final (fond, texte, contenu) = estFerie
+        ? (AuditronColors.gold100, AuditronColors.gold600, 'FÉR')
+        : !attendu
         ? (AuditronColors.ink50, AuditronColors.ink500, '·')
         : present
         ? (
@@ -395,7 +402,9 @@ class _Pastille extends StatelessWidget {
         : (Colors.red.shade50, Colors.red.shade700, 'ABS');
 
     return Tooltip(
-      message: !attendu
+      message: estFerie
+          ? 'Jour férié : $ferie'
+          : !attendu
           ? 'Non attendu ce jour-là'
           : present
           ? 'Arrivée ${cellule['heure_arrivee'] ?? '—'} · '

@@ -48,6 +48,13 @@ class RetardCalculator
      */
     public function heureDebutAttendue(Enseignant $enseignant, Carbon $date): ?string
     {
+        // Garde explicite : le chemin administratif passe par HoraireAttendu
+        // (qui écarte déjà les fériés), mais celui de l'enseignant lit
+        // l'emploi du temps en direct et ne les verrait pas.
+        if ($this->horaires->estFerie($date)) {
+            return null;
+        }
+
         if ($this->horaires->estAdministratif($enseignant)) {
             return $this->horaires->plage($enseignant, $date)['heure_debut'] ?? null;
         }
