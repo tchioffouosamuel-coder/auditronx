@@ -14,12 +14,10 @@ class DisciplineController extends Controller
 
     public function index(Request $request)
     {
-        $perPage = min(max((int) $request->query('per_page', 50), 1), 500);
-
         return response()->json(
             $this->disciplinesAccessibles($this->auteur($request))
                 ->orderBy('nom')
-                ->paginate($perPage),
+                ->get(),
         );
     }
 

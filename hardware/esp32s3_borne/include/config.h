@@ -1,0 +1,227 @@
+#pragma once
+
+// Configuration de la borne ESP32-S3 (esp32s3_borne) — port d'esp32dev_borne/
+// sur ESP32-S3. Seules les valeurs qui dépendent du matériel changent
+// (broches SD, buzzer, capacité LittleFS, version et token du device) : tout
+// ce qui touche au protocole BLE ou à l'API reste strictement identique à
+// esp32dev_borne/include/config.h, sous peine de casser l'app mobile.
+
+// ---- Nom BLE annoncé, auquel le téléphone de l'enseignant se connecte ----
+// Cosmétique : l'app mobile découvre la borne par BLE_SERVICE_UUID, pas par
+// ce nom (voir mobile/lib/services/ble_service.dart) — changez-le librement,
+// utile surtout pour distinguer plusieurs bornes au moniteur série.
+inline constexpr char BLE_DEVICE_NAME[] = "AUDITRON-BORNE-S3-01";
+
+// UUIDs du service/caractéristiques BLE — DOIVENT correspondre exactement à
+// ceux déclarés côté app mobile (mobile/lib/services/ble_service.dart), donc
+// identiques à esp32_borne/include/config.h.
+inline constexpr char BLE_SERVICE_UUID[] = "b3a1a100-2c33-4e6f-9a1e-5f6a2e6c2b01";
+inline constexpr char BLE_CHAR_SCAN_UUID[] = "b3a1a101-2c33-4e6f-9a1e-5f6a2e6c2b01";   // écriture : requête du téléphone
+inline constexpr char BLE_CHAR_RESULT_UUID[] = "b3a1a102-2c33-4e6f-9a1e-5f6a2e6c2b01"; // lecture/notify : réponse de la borne
+
+// ---- WiFi du modem/routeur qui fournit l'accès internet ----
+// Uniquement en client (WIFI_STA) : le téléphone parle en BLE, pas en WiFi local.
+// inline constexpr char STA_SSID[] = "Galaxy S22 4D30";
+// inline constexpr char STA_PASSWORD[] = "19750000";
+inline constexpr char STA_SSID[] = "Auditron";
+inline constexpr char STA_PASSWORD[] = "1234567890";
+// Puissance d'émission WiFi. Au maximum par défaut (19,5 dBm), chaque
+// émission tire un pic de courant que l'alimentation du banc de test ne tient
+// pas : la tension chute et la borne panique au moment de joindre le modem
+// (exceptions aléatoires, voir setup() dans main.cpp). Valeur reprise
+// d'esp32dev_borne/ par prudence : le DevKitC-1 régule mieux et un module
+// correctement alimenté (bloc secteur 5 V / 1 A, pas un port USB de PC)
+// supporte généralement WIFI_POWER_15dBm voire le maximum — à remonter d'un
+// cran à la fois si le modem est loin, en vérifiant au moniteur qu'aucun
+// "Brownout detector was triggered" n'apparaît.
+inline constexpr wifi_power_t STA_TX_POWER = WIFI_POWER_8_5dBm;
+// Limite de sécurité de la file. La carte SD permet de conserver beaucoup
+// plus de scans hors ligne ; LittleFS conserve une limite basse lorsqu'elle
+// sert de secours.
+// 150 et non 70 comme sur esp32dev_borne/ : la partition LittleFS fait ici
+// ~1,9 Mo (partitions_8mb.csv) contre ~900 Ko là-bas, et une ligne pèse au
+// plus quelques Ko (selfie base64 compris). Avec partitions_16mb.csv
+// (LittleFS ~7,9 Mo), cette limite peut monter à ~600.
+inline constexpr size_t MAX_QUEUE_SIZE_SD = 2000;
+inline constexpr size_t MAX_QUEUE_SIZE_LITTLEFS = 150;
+
+// ---- Protocole photo BLE (§anti-procuration) ----
+// `scanChar` reçoit désormais plusieurs écritures GATT préfixées d'un octet
+// de tag — DOIT correspondre exactement à mobile/lib/services/ble_service.dart.
+// 0x01 = chunk photo (JPEG brut, pas de base64 : encoder avant l'envoi
+// gonflerait le volume transmis sur l'air d'environ 33% pour rien — la borne
+// encode elle-même juste avant l'injection dans le paquet JSON, comme
+// esp32_borne/ le fait déjà pour sa propre caméra). 0x03 = chunk JSON
+// intermédiaire (le JSON final peut lui aussi dépasser un seul chunk : un MTU
+// négocié bas — 255o constaté sur un Itel bas de gamme, chipset MediaTek/
+// Unisoc — peut être trop court pour un JSON avec un long token/qr_code).
+// 0x02 = dernier morceau du JSON (chunk final, éventuellement vide si le JSON
+// tenait dans une seule écriture — comportement historique) : à sa réception,
+// la borne assemble le JSON complet et associe les chunks photo déjà reçus à
+// ce scan avant de répondre.
+inline constexpr uint8_t BLE_TAG_PHOTO_CHUNK = 0x01;
+inline constexpr uint8_t BLE_TAG_SCAN_FINAL = 0x02;
+inline constexpr uint8_t BLE_TAG_JSON_CHUNK = 0x03;
+
+// Plafond du JSON brut accumulé par chunks avant le tag final : bien au-delà
+// d'un scan normal (qr_code/token/motif tiennent large sous 1 Ko), protection
+// contre un buffer non borné en cas de bug/version incompatible de l'app.
+inline constexpr size_t MAX_JSON_CHUNK_BYTES = 4 * 1024;
+
+// Plafond du selfie brut (avant base64) accepté par scan. Le téléphone vise
+// ~160x120 JPEG qualité ~20 (quelques Ko) — ce plafond n'est qu'une
+// protection contre un buffer non borné côté borne en cas de bug/version
+// incompatible de l'app, pas un objectif de taille normal.
+inline constexpr size_t MAX_PHOTO_BYTES = 24 * 1024;
+
+// Fichier où la file est persistée (survit à une coupure secteur : tant qu'un
+// paquet n'a pas été confirmé par l'API, il reste sur la borne). La carte
+// micro-SD est utilisée si elle est détectée ; LittleFS sert de secours.
+inline constexpr char QUEUE_FILE[] = "/queue.jsonl";
+
+// Lecteur micro-SD en SPI. L'ESP32-S3 n'a pas de broches SPI figées (matrice
+// GPIO) : ce jeu correspond au FSPI « par défaut » des cartes S3 et évite
+// toutes les broches réservées du module — 19/20 (USB natif D-/D+), 26-32
+// (flash SPI interne), 33-37 (PSRAM octale du suffixe R8 : les câbler fait
+// planter le module au boot), 43/44 (UART0 du moniteur série), 45/46
+// (strapping), 0 (bouton BOOT).
+// Les broches d'esp32dev_borne (18/19/23/5) ne conviennent PAS : 23 n'existe
+// pas sur l'ESP32-S3 et 19 est la ligne USB D-.
+inline constexpr uint8_t SD_SCK_GPIO = 12;
+inline constexpr uint8_t SD_MISO_GPIO = 13;
+inline constexpr uint8_t SD_MOSI_GPIO = 11;
+inline constexpr uint8_t SD_CS_GPIO = 10;
+inline constexpr uint32_t SD_SPI_FREQUENCY_HZ = 10000000;
+
+// Carte qui ne répond plus en service : la file bascule sur LittleFS, et le
+// montage est retenté à cette cadence (voir superviseStorage() dans main.cpp).
+inline constexpr uint32_t SD_RETRY_INTERVAL_MS = 30000;
+
+// Durée maximale d'une connexion BLE sans pointage en attente. Un pointage
+// complet prend moins de 30 s côté app (connexion 8 s + réponse 15 s) ;
+// au-delà, le téléphone est déconnecté pour rendre la borne visible aux
+// autres (une seule connexion à la fois, voir superviseBle() dans main.cpp).
+inline constexpr uint32_t BLE_MAX_CONNECTION_MS = 60000;
+
+// Détecteur de brownout matériel. true reprend le réglage d'esp32dev_borne/ :
+// le détecteur est coupé au tout début de setup(), la borne tente de démarrer
+// même en sous-tension au lieu de boucler sur "Brownout detector was
+// triggered". C'est un pansement, pas un correctif — à repasser à false dès
+// que la borne est alimentée par un bloc secteur 5 V / 1 A correct (et non un
+// port USB de PC ou un câble fin), pour retrouver un reset propre plutôt
+// qu'une écriture flash interrompue au milieu d'un pointage.
+inline constexpr bool BROWNOUT_DETECTOR_DISABLED = true;
+
+// Buzzer actif : bip court à la réception complète d'un scan BLE.
+// GPIO 4 et non 25 comme sur esp32dev_borne/ : l'ESP32-S3 n'a pas de GPIO 25
+// (ni de DAC) — le firmware compilerait, mais rien ne sortirait du buzzer.
+inline constexpr uint8_t BUZZER_GPIO = 4;
+
+// ---- API distante ----
+inline constexpr char API_BASE_URL[] = "https://api-ltm.auditronx.com/public";
+inline constexpr char API_RELAY_SYNC_PATH[] = "/api/relay/sync";
+
+// Token Sanctum du device relay_gateway, obtenu une fois via
+// POST /api/devices/provision-relay (voir hardware/README.md) — CE module
+// doit avoir son propre token, distinct de ceux d'esp32_borne/ et
+// d'esp32dev_borne/ (chaque device relais est identifié individuellement côté
+// API).
+// À PROVISIONNER AVANT LE PREMIER FLASH, et surtout à ne pas copier depuis
+// esp32dev_borne/ : le manifest OTA est servi par device
+// (FirmwareController::manifest, filtre sur device_id). Avec le token d'une
+// borne ESP32, cette borne S3 téléchargerait un binaire xtensa-esp32 au
+// premier passage d'OTA et ne redémarrerait plus (slot invalide, retour sur
+// l'ancienne image dans le meilleur des cas).
+inline constexpr char RELAY_API_TOKEN[] = "REMPLACER_PAR_LE_TOKEN_DU_DEVICE_S3";
+
+// Plus de capacité fixe de document JSON par paquet : les documents sont
+// dimensionnés sur le contenu réel et le selfie est écrit dans la file par
+// blocs, sans passer par un document (voir processScan/appendToQueue dans
+// main.cpp). L'ancien bloc fixe de 20 Ko d'un seul tenant n'était plus
+// allouable dès que BLE et TLS avaient morcelé le tas.
+
+// Cadence de synchro : toutes les 3 s tant que la file n'est pas vide, un
+// paquet par requête (la négociation TLS consomme déjà l'essentiel de la RAM
+// libre sur cet ESP32 sans PSRAM) mais plusieurs requêtes par connexion (voir
+// API_BURST_MAX_* ci-dessous). File vide : simple lecture de la file, aucune
+// connexion réseau. Après un échec (pas d'internet, API injoignable), la
+// tentative suivante attend SYNC_RETRY_INTERVAL_MS.
+inline constexpr uint32_t SYNC_INTERVAL_MS = 3000;
+// Bornes d'une connexion gardée ouverte pour vider la file (voir ApiSession
+// dans main.cpp) : au-delà, elle est fermée et la suite attend le cycle
+// suivant — le temps de rendre la mémoire du TLS et la publicité BLE.
+inline constexpr unsigned API_BURST_MAX_PACKETS = 10;
+inline constexpr uint32_t API_BURST_MAX_MS = 15000;
+inline constexpr uint32_t SYNC_RETRY_INTERVAL_MS = 5000;
+// API injoignable (connexion impossible, pas une réponse d'erreur) : l'attente
+// double à chaque échec consécutif, de SYNC_RETRY_INTERVAL_MS jusqu'à ce
+// plafond, et vaut pour tous les appels à l'API (synchro, journaux, OTA).
+inline constexpr uint32_t API_RETRY_MAX_INTERVAL_MS = 60000;
+
+// Auto-test de connectivité lancé quand l'API ne répond pas (voir
+// diagnoseConnectivity() dans main.cpp) : au premier échec, puis au plus
+// toutes les NET_DIAG_INTERVAL_MS tant que les échecs durent.
+inline constexpr char NET_DIAG_HTTPS_URL[] = "https://www.google.com/generate_204";
+// Page volumineuse servie SANS TLS (~80 Ko) : teste la réception de trames pleines.
+inline constexpr char NET_DIAG_HTTP_LARGE_URL[] = "http://www.google.com/";
+inline constexpr size_t NET_DIAG_LARGE_BYTES = 20000;
+inline constexpr uint32_t NET_DIAG_INTERVAL_MS = 10UL * 60UL * 1000UL;
+// Délai de l'ouverture TCP seule vers l'API (voir diagnoseApiRoute()) : bien
+// plus long que HTTPS_CONNECT_TIMEOUT_MS, pour laisser passer les
+// retransmissions.
+inline constexpr int32_t NET_DIAG_TCP_TIMEOUT_MS = 20000;
+
+// ---- Délais des connexions HTTPS vers l'API ----
+// Courts à dessein : une tentative qui n'aboutit pas doit libérer vite la
+// tâche de synchro pour réessayer (SYNC_RETRY_INTERVAL_MS), au lieu de la
+// bloquer 120 s (délai de poignée de main par défaut du core).
+inline constexpr int32_t HTTPS_CONNECT_TIMEOUT_MS = 8000;
+inline constexpr unsigned long HTTPS_HANDSHAKE_TIMEOUT_S = 20;
+
+// ---- Mémoire réservée au TLS (voir reserveTlsMemory() dans main.cpp) ----
+// Deux tampons d'enregistrement mbedTLS de ~16,7 Ko + la poignée de main.
+// Avec PSRAM (-DBOARD_HAS_PSRAM), ces blocs sont alloués en mémoire externe
+// par le malloc du core et la réserve ne sert plus à rien : main.cpp la
+// désactive d'elle-même au démarrage si psramFound() (voir reserveTlsMemory()).
+// Ces tailles ne valent donc que pour un module S3 sans PSRAM.
+inline constexpr size_t TLS_RESERVE_BLOCK_SIZES[] = {17 * 1024, 17 * 1024, 10 * 1024};
+// Échecs TLS consécutifs "faute de mémoire" avant un redémarrage de secours.
+inline constexpr uint8_t TLS_MEMORY_FAILURES_BEFORE_RESTART = 6;
+// Cadence de la ligne de suivi "[mem] ..." (moniteur série et backoffice).
+inline constexpr uint32_t MEMORY_LOG_INTERVAL_MS = 10UL * 60UL * 1000UL;
+
+// ---- Moniteur série à distance (backoffice > Moniteur des bornes) ----
+// Chaque ligne imprimée sur le port série est aussi gardée dans un tampon RAM
+// et poussée vers POST /api/relay/logs. Sans internet, les lignes les plus
+// anciennes sont écrasées au-delà de LOG_BUFFER_MAX_LINES : diagnostic
+// uniquement, rien de critique n'y transite (contrairement à la file de scans).
+inline constexpr bool REMOTE_LOG_ENABLED = true;
+inline constexpr char API_RELAY_LOGS_PATH[] = "/api/relay/logs";
+// 10 s : chaque envoi ouvre puis ferme une connexion TLS (plus de keep-alive,
+// pour rendre la mémoire aux scans) — inutile d'en ouvrir une toutes les 5 s.
+inline constexpr uint32_t LOG_FLUSH_INTERVAL_MS = 10000;
+inline constexpr uint32_t LOG_RETRY_INTERVAL_MS = 30000;
+inline constexpr size_t LOG_BUFFER_MAX_LINES = 80;
+inline constexpr size_t LOG_LINE_MAX_LEN = 240;
+inline constexpr size_t LOG_BATCH_MAX_LINES = 30;
+
+inline constexpr char NTP_SERVER[] = "pool.ntp.org";
+
+// ---- Mises à jour OTA (backoffice > Mises à jour firmware) ----
+// Version de CE binaire, au format x.y.z. À incrémenter avant chaque build
+// destiné à l'OTA et à saisir à l'identique dans le backoffice lors de
+// l'upload : la borne flashe dès que la version active côté serveur diffère
+// de celle-ci (activer une version plus ancienne fait donc un rollback).
+// Repart de 1.0.0 : les binaires de cette borne S3 ne sont pas
+// interchangeables avec ceux d'esp32dev_borne/ (cible xtensa différente) et
+// ont leur propre historique côté backoffice.
+inline constexpr char FIRMWARE_VERSION[] = "1.0.0";
+inline constexpr char API_RELAY_FIRMWARE_MANIFEST_PATH[] = "/api/relay/firmware/manifest";
+// Cadence de vérification du manifest (en plus d'une vérification dès la
+// première connexion WiFi). Pas de canal push ici, contrairement au MQTT de
+// campuspass : c'est le délai max entre l'activation et la mise à jour.
+inline constexpr uint32_t OTA_CHECK_INTERVAL_MS = 10UL * 60UL * 1000UL;
+inline constexpr uint32_t OTA_CONNECT_TIMEOUT_MS = 6000;
+// Timeout d'INACTIVITÉ du téléchargement (le chrono repart à chaque paquet
+// reçu), pas un timeout global : un lien lent mais vivant va au bout.
+inline constexpr uint32_t OTA_STALL_TIMEOUT_MS = 15000;

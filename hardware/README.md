@@ -107,8 +107,30 @@ le lecteur ainsi par défaut :
 | VCC | 3.3 V |
 | GND | GND |
 
+### ESP32-S3 avec lecteur micro-SD
+
+La cible `hardware/esp32s3_borne` est le port de `esp32dev_borne` sur ESP32-S3
+(voir « Port ESP32-S3 » plus bas). Le câblage SD **change** : l'ESP32-S3 n'a pas
+de broches SPI figées, et les broches du DevKit classique n'existent pas ou sont
+réservées (GPIO23 absent, GPIO19 = USB D-).
+
+| Lecteur SD | ESP32-S3-DevKitC-1 |
+| --- | --- |
+| SCK | GPIO12 |
+| MISO | GPIO13 |
+| MOSI | GPIO11 |
+| CS | GPIO10 |
+| VCC | 3.3 V |
+| GND | GND |
+
+Broches à **ne pas** utiliser sur ce module : 19/20 (USB natif), 26-32 (flash
+SPI interne), 33-37 (PSRAM octale des modules R8 — les câbler fait planter le
+module au boot), 43/44 (UART0 du moniteur série), 45/46 (strapping), 0 (bouton
+BOOT). Le buzzer est sur **GPIO4** (l'ESP32-S3 n'a pas de GPIO25).
+
 Les broches sont modifiables dans
-`hardware/esp32dev_borne/include/config.h`. Au démarrage, le firmware affiche
+`hardware/esp32dev_borne/include/config.h` (ou
+`hardware/esp32s3_borne/include/config.h`). Au démarrage, le firmware affiche
 `[sd] carte détectée, file SD active` si la carte est montée ; sinon il garde
 LittleFS comme stockage de secours. Une file LittleFS existante est transférée
 automatiquement vers une carte SD encore vide.
@@ -200,6 +222,65 @@ pour un module **ESP32 générique (DevKit)** sans caméra ni PSRAM :
 cd hardware/esp32dev_borne && pio run -t upload
 ```
 
+## Port ESP32-S3 (`esp32s3_borne/`)
+
+Copie de `esp32dev_borne/` portée sur **ESP32-S3** : même protocole BLE, mêmes
+UUIDs, même format de file (`queue.jsonl`), même API, même OTA, même moniteur
+série à distance. L'app mobile ne voit aucune différence. Les écarts de code
+sont tous marqués d'un commentaire `[S3]` dans `src/main.cpp` et ne touchent que
+le matériel :
+
+- **Broches** : SD en SPI sur 12/13/11/10 et buzzer sur GPIO4 (voir le tableau
+  de câblage ci-dessus). Les broches d'origine (18/19/23/5 et 25) n'existent pas
+  ou sont réservées sur l'S3.
+- **PSRAM** : quand `psramFound()`, la réserve mémoire du TLS
+  (`reserveTlsMemory()`) est désactivée au démarrage — avec PSRAM, le malloc du
+  core sert les deux tampons mbedTLS de ~16,7 Ko depuis la mémoire externe, donc
+  le tas interne n'est plus le goulet et la réserve immobiliserait ~44 Ko pour
+  rien. Un module S3 **sans** PSRAM fonctionne, avec la même marge tendue que
+  `esp32dev_borne/`. La ligne `[mem]` reporte aussi la PSRAM libre.
+- **Brownout** : la désactivation du détecteur passe par
+  `BROWNOUT_DETECTOR_DISABLED` dans `include/config.h` (à `true`, comme le
+  comportement d'origine) au lieu d'un appel en dur — à repasser à `false` une
+  fois la borne alimentée par un bloc secteur 5 V / 1 A.
+- **Partitions** : `partitions_8mb.csv` (2 × 3 Mo OTA + LittleFS ~1,9 Mo) ou
+  `partitions_16mb.csv` (2 × 4 Mo OTA + LittleFS ~7,9 Mo). Le firmware pèse
+  ~1,2 Mo. `MAX_QUEUE_SIZE_LITTLEFS` passe donc de 70 à 150 (jusqu'à ~600 avec
+  la table 16 Mo).
+- **Moniteur série** : `Serial` reste sur l'UART0, donc le port USB marqué
+  « UART » du DevKitC-1 (`ARDUINO_USB_CDC_ON_BOOT=0`), celui qui survit aux
+  redémarrages de la borne. Pour le basculer sur le port « USB » natif, passer ce
+  flag à 1 dans `platformio.ini`.
+
+Deux environnements, même code — choisir selon le module :
+
+```bash
+cd hardware/esp32s3_borne
+pio run -e esp32s3_borne_n8r8 -t upload    # 8 Mo flash, PSRAM octale (N8R8)
+pio run -e esp32s3_borne_n16r8 -t upload   # 16 Mo flash, PSRAM octale (N16R8)
+```
+
+Sur un module à PSRAM **quad** (suffixe R2), remplacer dans `platformio.ini`
+`qio_opi`/`opi` par `qio_qspi`/`qspi` ; sur un module **sans** PSRAM, retirer
+`board_build.arduino.memory_type`, `board_build.psram_type` et
+`-DBOARD_HAS_PSRAM`.
+
+**Avant le premier flash**, provisionner un `RELAY_API_TOKEN` propre à cette
+borne (voir « Mise en service ») : le manifest OTA est servi par device
+(`FirmwareController::manifest` filtre sur `device_id`). Réutiliser le token
+d'une borne ESP32 ferait télécharger à l'S3 un binaire xtensa-esp32 au premier
+passage d'OTA — image refusée au mieux, borne à reflasher par USB au pire.
+Pour la même raison, `FIRMWARE_VERSION` repart de `1.0.0`.
+
+Récupération de la file depuis la flash interne (mêmes scripts, offsets et puce
+adaptés) :
+
+```bash
+powershell -ExecutionPolicy Bypass -File .ecuperer_file.ps1 -Port COM6
+# table 16 Mo :
+powershell -ExecutionPolicy Bypass -File .ecuperer_file.ps1 -Port COM6 -Offset 0x810000 -Size 0x7E0000
+```
+
 ## Fichiers
 
 ```
@@ -207,7 +288,8 @@ hardware/
   esp32_borne/      # firmware ESP32-S3 de référence (BLE + WiFi STA + caméra + file persistante + sync API)
   esp32_borne_lcm/  # même firmware, pointé sur api-lcm — Lycée Classique de Meiganga
   esp32_borne_lbm/  # même firmware, pointé sur api-lbm — Lycée Bilingue de Meiganga
-  esp32dev_borne/   # variante ESP32 générique sans caméra (BLE + WiFi STA + file persistante + sync API)
+  esp32dev_borne/   # variante ESP32 générique sans caméra (BLE + WiFi STA + file persistante + sync API + OTA)
+  esp32s3_borne/    # port ESP32-S3 d'esp32dev_borne (même code, broches/partitions/PSRAM adaptées)
 ```
 
 Les dossiers `esp32_borne_lcm/` et `esp32_borne_lbm/` sont des copies de `esp32_borne/`

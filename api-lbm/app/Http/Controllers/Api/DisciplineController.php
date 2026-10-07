@@ -10,7 +10,7 @@ class DisciplineController extends Controller
 {
     public function index()
     {
-        return response()->json(Discipline::orderBy('nom')->paginate(50));
+        return response()->json(Discipline::orderBy('nom')->get());
     }
 
     public function store(Request $request)
