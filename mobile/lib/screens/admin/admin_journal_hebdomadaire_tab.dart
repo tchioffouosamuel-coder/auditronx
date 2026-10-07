@@ -19,7 +19,9 @@ import '../../theme.dart';
 /// demandée et sert surtout à produire le PDF, qui exige le réseau de toute
 /// façon.
 class AdminJournalHebdomadaireTab extends StatefulWidget {
-  const AdminJournalHebdomadaireTab({super.key});
+  final String categorie;
+
+  const AdminJournalHebdomadaireTab({super.key, required this.categorie});
 
   @override
   State<AdminJournalHebdomadaireTab> createState() =>
@@ -54,10 +56,21 @@ class _AdminJournalHebdomadaireTabState
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(covariant AdminJournalHebdomadaireTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.categorie != oldWidget.categorie) {
+      setState(() => _future = _load());
+    }
+  }
+
   Future<Map<String, dynamic>> _load() async {
     final data = await AdminApiClient.instance.get(
       '/assiduite/journal-hebdomadaire',
-      query: {'semaine': _isoFormat.format(_lundi)},
+      query: {
+        'semaine': _isoFormat.format(_lundi),
+        'categorie': widget.categorie,
+      },
     );
 
     return Map<String, dynamic>.from(data as Map);
@@ -98,11 +111,11 @@ class _AdminJournalHebdomadaireTabState
       final semaine = _isoFormat.format(_lundi);
       final bytes = await AdminApiClient.instance.getBytes(
         '/assiduite/journal-hebdomadaire/pdf',
-        query: {'semaine': semaine},
+        query: {'semaine': semaine, 'categorie': widget.categorie},
       );
       final directory = await getTemporaryDirectory();
       final fichier = File(
-        '${directory.path}/journal-hebdomadaire-$semaine.pdf',
+        '${directory.path}/journal-hebdomadaire-${widget.categorie}-$semaine.pdf',
       );
       await fichier.writeAsBytes(bytes, flush: true);
       await Share.shareXFiles([XFile(fichier.path)]);
@@ -240,7 +253,7 @@ class _AdminJournalHebdomadaireTabState
                         padding: const EdgeInsets.all(24),
                         child: Text(
                           _recherche.isEmpty
-                              ? 'Aucun membre du personnel dans votre périmètre.'
+                              ? 'Aucun membre du personnel dans cette catégorie.'
                               : 'Aucun résultat pour cette recherche.',
                           textAlign: TextAlign.center,
                           style: const TextStyle(

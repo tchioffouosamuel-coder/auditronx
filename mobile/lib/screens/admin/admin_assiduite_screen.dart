@@ -239,6 +239,7 @@ class _JournalTab extends StatefulWidget {
 
 class _JournalTabWrapperState extends State<_JournalTab> {
   bool _parSemaine = false;
+  String _categorie = 'enseignant';
 
   @override
   Widget build(BuildContext context) {
@@ -256,10 +257,25 @@ class _JournalTabWrapperState extends State<_JournalTab> {
                 setState(() => _parSemaine = choix.first),
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'enseignant', label: Text('Enseignant')),
+              ButtonSegment(
+                value: 'administration',
+                label: Text('Administration'),
+              ),
+            ],
+            selected: {_categorie},
+            onSelectionChanged: (choix) =>
+                setState(() => _categorie = choix.first),
+          ),
+        ),
         Expanded(
           child: _parSemaine
-              ? const AdminJournalHebdomadaireTab()
-              : const _JournalDuJourTab(),
+              ? AdminJournalHebdomadaireTab(categorie: _categorie)
+              : _JournalDuJourTab(categorie: _categorie),
         ),
       ],
     );
@@ -267,7 +283,9 @@ class _JournalTabWrapperState extends State<_JournalTab> {
 }
 
 class _JournalDuJourTab extends StatefulWidget {
-  const _JournalDuJourTab();
+  final String categorie;
+
+  const _JournalDuJourTab({required this.categorie});
 
   @override
   State<_JournalDuJourTab> createState() => _JournalTabState();
@@ -291,12 +309,20 @@ class _JournalTabState extends State<_JournalDuJourTab> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(covariant _JournalDuJourTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.categorie != oldWidget.categorie) {
+      setState(() => _future = _load());
+    }
+  }
+
   Future<List<dynamic>> _load() async {
     final data = await OfflineCache.instance.readThrough(
-      'admin_assiduite_journal_${_isoDate(_date)}',
+      'admin_assiduite_journal_${widget.categorie}_${_isoDate(_date)}',
       () => AdminApiClient.instance.get(
         '/assiduite/journal',
-        query: {'date': _isoDate(_date)},
+        query: {'date': _isoDate(_date), 'categorie': widget.categorie},
       ),
     );
     return _asList(data);
@@ -313,10 +339,12 @@ class _JournalTabState extends State<_JournalDuJourTab> {
       final date = _isoDate(_date);
       final bytes = await AdminApiClient.instance.getBytes(
         '/assiduite/journal/pdf',
-        query: {'date': date},
+        query: {'date': date, 'categorie': widget.categorie},
       );
       final directory = await getTemporaryDirectory();
-      final file = File('${directory.path}/journal-presences-$date.pdf');
+      final file = File(
+        '${directory.path}/journal-presences-${widget.categorie}-$date.pdf',
+      );
       await file.writeAsBytes(bytes, flush: true);
       await Share.shareXFiles([XFile(file.path)]);
     } catch (error) {
@@ -447,7 +475,9 @@ class _JournalTabState extends State<_JournalDuJourTab> {
                 }
                 final toutes = snapshot.data ?? [];
                 if (toutes.isEmpty) {
-                  return _emptyList('Aucune présence enregistrée ce jour.');
+                  return _emptyList(
+                    'Aucune présence enregistrée dans cette catégorie ce jour.',
+                  );
                 }
                 final presences = _filtrer(toutes, _searchController, (p) {
                   final enseignant = p['enseignant'];

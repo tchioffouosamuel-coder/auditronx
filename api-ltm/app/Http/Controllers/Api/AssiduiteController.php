@@ -10,6 +10,7 @@ use App\Services\HoraireAttendu;
 use Carbon\Carbon;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 /** Assiduité & rapports (§4.2) — statistiques par section, journal, personnel inactif. */
 class AssiduiteController extends Controller
@@ -61,28 +62,28 @@ class AssiduiteController extends Controller
         return response()->json($lignes->sortByDesc('taux_assiduite')->values());
     }
 
-    /** GET /api/assiduite/journal?date=&section= — journal des présences d'un jour donné. */
-    public function journal(Request $request)
+    /** GET /api/assiduite/journal?date=&section=&categorie= — journal quotidien. */
+    public function journal(Request $request, HoraireAttendu $horaires)
     {
         $date = Carbon::parse($request->query('date', now()));
 
-        return response()->json($this->presencesDuJour($request, $date));
+        return response()->json($this->presencesDuJour($request, $date, $horaires));
     }
 
-    /** GET /api/assiduite/journal/pdf?date=&section= — exporte le journal visible en PDF. */
-    public function journalPdf(Request $request)
+    /** GET /api/assiduite/journal/pdf?date=&section=&categorie= — export PDF quotidien. */
+    public function journalPdf(Request $request, HoraireAttendu $horaires)
     {
         $date = Carbon::parse($request->query('date', now()));
         $pdf = Pdf::loadView('pdf.journal-presences', [
             'date' => $date,
-            'presences' => $this->presencesDuJour($request, $date),
+            'presences' => $this->presencesDuJour($request, $date, $horaires),
         ]);
 
         return $pdf->download("journal-presences-{$date->toDateString()}.pdf");
     }
 
     /**
-     * GET /api/assiduite/journal-hebdomadaire?semaine=&section=
+     * GET /api/assiduite/journal-hebdomadaire?semaine=&section=&categorie=
      *
      * Journal de la semaine sous forme de grille : une ligne par membre du
      * personnel, une colonne par jour. Le journal quotidien ne liste que les
@@ -110,7 +111,7 @@ class AssiduiteController extends Controller
         ]);
     }
 
-    /** GET /api/assiduite/journal-hebdomadaire/pdf?semaine=&section= */
+    /** GET /api/assiduite/journal-hebdomadaire/pdf?semaine=&section=&categorie= */
     public function journalHebdomadairePdf(Request $request, HoraireAttendu $horaires)
     {
         $semaine = $this->semaine($request, $horaires);
@@ -146,6 +147,7 @@ class AssiduiteController extends Controller
             ->with('emploiDuTemps')
             ->orderBy('nom')
             ->get();
+        $enseignants = $this->filtrerParCategorie($enseignants, $request, $horaires);
 
         // Une seule requête pour toute la semaine, indexée par enseignant puis
         // par date : une requête par cellule ferait 6 x effectif allers-retours.
@@ -211,17 +213,43 @@ class AssiduiteController extends Controller
         ];
     }
 
-    private function presencesDuJour(Request $request, Carbon $date)
+    private function presencesDuJour(Request $request, Carbon $date, HoraireAttendu $horaires)
     {
         $enseignants = $this->enseignantsAccessibles($request->user())
             ->when($request->query('section'), fn($q, $v) => $q->whereRaw('LOWER(section) = LOWER(?)', [$v]))
-            ->pluck('id');
+            ->get();
+        $enseignants = $this->filtrerParCategorie($enseignants, $request, $horaires);
 
         return Presence::with('enseignant')
             ->whereDate('date', $date->toDateString())
-            ->whereIn('enseignant_id', $enseignants)
+            ->whereIn('enseignant_id', $enseignants->pluck('id'))
             ->orderBy('heure_arrivee')
             ->get();
+    }
+
+    /**
+     * Filtre les journaux sur les deux catégories métier. Les fiches
+     * administratives sont identifiées par leur section, pas par est_admin :
+     * ce dernier indique uniquement qu'un enseignant possède un compte admin.
+     */
+    private function filtrerParCategorie(
+        Collection $enseignants,
+        Request $request,
+        HoraireAttendu $horaires,
+    ): Collection {
+        $categorie = $request->validate([
+            'categorie' => ['nullable', 'in:enseignant,administration'],
+        ])['categorie'] ?? null;
+
+        if ($categorie === null) {
+            return $enseignants;
+        }
+
+        $administration = $categorie === 'administration';
+
+        return $enseignants
+            ->filter(fn (Enseignant $enseignant) => $horaires->estAdministratif($enseignant) === $administration)
+            ->values();
     }
 
     /** GET /api/assiduite/personnel-inactif?jours=N — enseignants sans pointage depuis N jours. */

@@ -5,6 +5,7 @@ import '../../services/admin_api_client.dart';
 import '../../services/admin_session.dart';
 import '../../services/ble_service.dart';
 import '../../services/offline/offline_cache.dart';
+import '../../theme.dart';
 import '../scan_screen.dart';
 
 /// Scan depuis le dashboard back-office (§admin-mobile), compte `User` —
@@ -19,9 +20,16 @@ class AdminScanScreen extends StatelessWidget {
       length: 2,
       child: Column(
         children: [
-          const TabBar(tabs: [Tab(text: 'Ma présence'), Tab(text: 'Procuration')]),
+          const TabBar(
+            tabs: [
+              Tab(text: 'Ma présence'),
+              Tab(text: 'Procuration'),
+            ],
+          ),
           const Expanded(
-            child: TabBarView(children: [_AdminSelfScanTab(), _AdminProxyScanTab()]),
+            child: TabBarView(
+              children: [_AdminSelfScanTab(), _AdminProxyScanTab()],
+            ),
           ),
         ],
       ),
@@ -51,29 +59,191 @@ class _AdminSelfScanTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final session = context.watch<AdminSession>();
-    final hasEnseignant = session.user?['enseignant_id'] != null;
+    final rawEnseignantId = session.user?['enseignant_id'];
+    final enseignantId = rawEnseignantId is num
+        ? rawEnseignantId.toInt()
+        : int.tryParse(rawEnseignantId?.toString() ?? '');
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('Bonjour, ${session.nom}', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 24),
-            if (hasEnseignant)
-              FilledButton.icon(
-                onPressed: () => _openSelfScan(context),
-                icon: const Icon(Icons.qr_code_scanner),
-                label: const Text('Scanner ma présence'),
-                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20)),
-              )
-            else
-              const Text(
-                'Ce compte n\'est lié à aucune fiche enseignant : contactez l\'administration pour pouvoir scanner votre propre présence.',
-                textAlign: TextAlign.center,
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            children: [
+              Text(
+                'Bonjour, ${session.nom}',
+                style: Theme.of(context).textTheme.titleLarge,
               ),
-          ],
+              const SizedBox(height: 24),
+              if (enseignantId != null)
+                FilledButton.icon(
+                  onPressed: () => _openSelfScan(context),
+                  icon: const Icon(Icons.qr_code_scanner),
+                  label: const Text('Scanner ma présence'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 32,
+                      vertical: 20,
+                    ),
+                  ),
+                )
+              else
+                const Text(
+                  'Ce compte n\'est lié à aucune fiche enseignant : contactez l\'administration pour pouvoir scanner votre propre présence.',
+                  textAlign: TextAlign.center,
+                ),
+            ],
+          ),
+        ),
+        if (enseignantId != null)
+          _AdminAssiduiteCard(enseignantId: enseignantId),
+      ],
+    );
+  }
+}
+
+class _AdminAssiduiteCard extends StatefulWidget {
+  final int enseignantId;
+
+  const _AdminAssiduiteCard({required this.enseignantId});
+
+  @override
+  State<_AdminAssiduiteCard> createState() => _AdminAssiduiteCardState();
+}
+
+class _AdminAssiduiteCardState extends State<_AdminAssiduiteCard> {
+  late Future<Map<String, dynamic>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  Future<Map<String, dynamic>> _load() async {
+    final data = await OfflineCache.instance.readThrough(
+      'admin_self_assiduite_${widget.enseignantId}',
+      () => AdminApiClient.instance.get(
+        '/personnel/${widget.enseignantId}/assiduite',
+      ),
+    );
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  void _refresh() => setState(() => _future = _load());
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: FutureBuilder<Map<String, dynamic>>(
+          future: _future,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const SizedBox(
+                height: 72,
+                child: Center(
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                ),
+              );
+            }
+
+            if (snapshot.hasError || snapshot.data == null) {
+              return Row(
+                children: [
+                  const Icon(Icons.cloud_off, color: AuditronColors.ink500),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Assiduité indisponible.',
+                      style: TextStyle(color: AuditronColors.ink500),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _refresh,
+                    child: const Text('Réessayer'),
+                  ),
+                ],
+              );
+            }
+
+            final data = snapshot.data!;
+            final rateValue = data['taux_assiduite'];
+            final rate = rateValue is num
+                ? rateValue.toDouble()
+                : double.tryParse('$rateValue') ?? 0;
+            final daysExpected = data['jours_attendus'] as num? ?? 0;
+            final daysPresent = data['jours_presents'] as num? ?? 0;
+            final color = rate >= 75
+                ? AuditronColors.brand700
+                : rate >= 50
+                ? AuditronColors.gold600
+                : Colors.red.shade700;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Mon assiduité · mois en cours',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: AuditronColors.ink900,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: _refresh,
+                      icon: const Icon(Icons.refresh, size: 20),
+                      color: AuditronColors.ink500,
+                      tooltip: 'Actualiser',
+                    ),
+                  ],
+                ),
+                if (daysExpected == 0)
+                  const Text(
+                    '— · Aucun jour attendu ce mois-ci.',
+                    style: TextStyle(
+                      color: AuditronColors.ink500,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  )
+                else ...[
+                  Row(
+                    children: [
+                      Text(
+                        '${rate.toStringAsFixed(rate % 1 == 0 ? 0 : 1)} %',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w800,
+                          color: color,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        '$daysPresent / $daysExpected jours',
+                        style: const TextStyle(color: AuditronColors.ink500),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: (rate / 100).clamp(0, 1),
+                      minHeight: 8,
+                      backgroundColor: AuditronColors.ink100,
+                      valueColor: AlwaysStoppedAnimation(color),
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
         ),
       ),
     );
@@ -111,21 +281,29 @@ class _AdminProxyScanTabState extends State<_AdminProxyScanTab> {
     try {
       final data = await OfflineCache.instance.readThrough(
         'admin_personnel_search_$query',
-        () => AdminApiClient.instance.get('/personnel', query: {'q': query, 'per_page': '20'}),
+        () => AdminApiClient.instance.get(
+          '/personnel',
+          query: {'q': query, 'per_page': '20'},
+        ),
       );
-      return data is Map && data['data'] is List ? data['data'] as List<dynamic> : const [];
+      return data is Map && data['data'] is List
+          ? data['data'] as List<dynamic>
+          : const [];
     } catch (_) {
       final cached = await OfflineCache.instance.read('admin_personnel');
       final list = cached is Map && cached['data'] is List
           ? cached['data'] as List<dynamic>
           : (cached is List ? cached : const []);
       final normalized = query.trim().toLowerCase();
-      return list.where((entry) {
-        if (entry is! Map) return false;
-        return ['nom', 'matricule', 'section', 'tel'].any(
-          (key) => '${entry[key] ?? ''}'.toLowerCase().contains(normalized),
-        );
-      }).take(20).toList();
+      return list
+          .where((entry) {
+            if (entry is! Map) return false;
+            return ['nom', 'matricule', 'section', 'tel'].any(
+              (key) => '${entry[key] ?? ''}'.toLowerCase().contains(normalized),
+            );
+          })
+          .take(20)
+          .toList();
     }
   }
 
@@ -151,14 +329,17 @@ class _AdminProxyScanTabState extends State<_AdminProxyScanTab> {
 
   @override
   Widget build(BuildContext context) {
-    final canScan = _selected != null && _motifController.text.trim().isNotEmpty;
+    final canScan =
+        _selected != null && _motifController.text.trim().isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('Sélectionnez l\'enseignant concerné, puis indiquez le motif avant de scanner.'),
+          const Text(
+            'Sélectionnez l\'enseignant concerné, puis indiquez le motif avant de scanner.',
+          ),
           const SizedBox(height: 16),
           TextField(
             controller: _searchController,
@@ -179,7 +360,9 @@ class _AdminProxyScanTabState extends State<_AdminProxyScanTab> {
                   final e = _resultats[i];
                   return ListTile(
                     title: Text(e.nom),
-                    subtitle: Text('${e.matricule}${e.section != null ? ' — ${e.section}' : ''}'),
+                    subtitle: Text(
+                      '${e.matricule}${e.section != null ? ' — ${e.section}' : ''}',
+                    ),
                     onTap: () => setState(() => _selected = e),
                   );
                 },
@@ -190,13 +373,19 @@ class _AdminProxyScanTabState extends State<_AdminProxyScanTab> {
               child: ListTile(
                 title: Text(_selected!.nom),
                 subtitle: Text(_selected!.matricule),
-                trailing: IconButton(icon: const Icon(Icons.close), onPressed: () => setState(() => _selected = null)),
+                trailing: IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => setState(() => _selected = null),
+                ),
               ),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _motifController,
-              decoration: const InputDecoration(labelText: 'Motif (obligatoire)', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                labelText: 'Motif (obligatoire)',
+                border: OutlineInputBorder(),
+              ),
               onChanged: (_) => setState(() {}),
             ),
             const Spacer(),

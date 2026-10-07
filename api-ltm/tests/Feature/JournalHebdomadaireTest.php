@@ -139,6 +139,50 @@ class JournalHebdomadaireTest extends TestCase
             ->assertJsonPath('lignes.0.nom', 'PROF INDUS');
     }
 
+    public function test_le_journal_hebdomadaire_separe_enseignants_et_administration(): void
+    {
+        Enseignant::factory()->create(['nom' => 'ENSEIGNANT', 'section' => 'STT']);
+        Enseignant::factory()->create(['nom' => 'ADMINISTRATION', 'section' => 'Administration']);
+        $this->actingAsBackoffice();
+
+        $this->getJson('/api/assiduite/journal-hebdomadaire?semaine=' . $this->lundi->toDateString() . '&categorie=enseignant')
+            ->assertOk()
+            ->assertJsonCount(1, 'lignes')
+            ->assertJsonPath('lignes.0.nom', 'ENSEIGNANT');
+
+        $this->getJson('/api/assiduite/journal-hebdomadaire?semaine=' . $this->lundi->toDateString() . '&categorie=administration')
+            ->assertOk()
+            ->assertJsonCount(1, 'lignes')
+            ->assertJsonPath('lignes.0.nom', 'ADMINISTRATION');
+    }
+
+    public function test_le_journal_quotidien_separe_enseignants_et_administration(): void
+    {
+        $enseignant = Enseignant::factory()->create(['nom' => 'ENSEIGNANT', 'section' => 'STT']);
+        $administratif = Enseignant::factory()->create(['nom' => 'ADMINISTRATION', 'section' => 'Administration']);
+
+        foreach ([$enseignant, $administratif] as $personnel) {
+            Presence::create([
+                'enseignant_id' => $personnel->id,
+                'date' => $this->lundi->toDateString(),
+                'heure_arrivee' => $this->lundi->copy()->setTime(7, 55),
+                'source' => 'app_mobile',
+            ]);
+        }
+
+        $this->actingAsBackoffice();
+
+        $this->getJson('/api/assiduite/journal?date=' . $this->lundi->toDateString() . '&categorie=enseignant')
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.enseignant.nom', 'ENSEIGNANT');
+
+        $this->getJson('/api/assiduite/journal?date=' . $this->lundi->toDateString() . '&categorie=administration')
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.enseignant.nom', 'ADMINISTRATION');
+    }
+
     public function test_lexport_pdf_est_servi_et_journalise(): void
     {
         Enseignant::factory()->create();
