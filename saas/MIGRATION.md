@@ -3,7 +3,7 @@
 Écrit pour qui exécutera la bascule en production.
 
 Point de départ : cinq instances séparées (`api-ltm`, `api-lcm`, `api-lbm`,
-`api-lbgn` et `api-test`), plusieurs apps Flutter, plusieurs firmwares,
+`api-lbng` et `api-test`), plusieurs apps Flutter, plusieurs firmwares,
 autant de domaines. Point d'arrivée : ce
 dossier `saas/`, une API, un portail, une app, un firmware.
 
@@ -48,12 +48,16 @@ export ni réécriture de clés.
 
 Relevé dans les `.env` de l'hébergement (dossier `files/`) :
 
+Attention à l'orthographe de Ngaoundal : le `.env` relevé dans `files/` porte
+`lbgn`, mais la base réelle et le domaine en service sont `lbng` — c'est cette
+dernière forme qui fait foi, et le `.env` de cette instance est donc faux.
+
 | Code | Établissement | Base et utilisateur MySQL | Domaine actuel |
 |---|---|---|---|
 | `LTM` | Lycée Technique de Meiganga | `u133979320_ltm` | `api-ltm.auditronx.com` |
 | `LCM` | Lycée Classique de Meiganga | `u133979320_lcm` | — (`APP_URL` resté sur localhost) |
 | `LBM` | Lycée Bilingue de Meiganga | `u133979320_lbm` | — (`APP_URL` resté sur localhost) |
-| `LBGN` | Lycée Bilingue de Ngaoundal | `u133979320_lbgn` | `api-lbgn.auditronx.com` |
+| `LBNG` | Lycée Bilingue de Ngaoundal | `u133979320_lbng` | `api-lbng.auditronx.com` |
 | `TEST` | Lycée d'Auditron (essai) | `u133979320_test` | `api-test.auditronx.com` |
 
 Soit **quatre établissements plus un environnement d'essai**, et non trois
@@ -87,7 +91,7 @@ php artisan etablissement:create LTM "Lycée Technique de Meiganga"     --ville=
 - `--db-user` / `--db-password` : à omettre si un seul utilisateur MySQL a
   droit sur toutes les bases (serveur dédié ou VPS).
 
-À répéter pour `LCM`, `LBM`, `LBGN` et `TEST`.
+À répéter pour `LCM`, `LBM`, `LBNG` et `TEST`.
 
 Le script [`scripts/reprise-production.sh`](scripts/reprise-production.sh) fait
 les cinq déclarations, enchaîne `tenants:migrate` et contrôle qu'il lit bien
@@ -101,8 +105,8 @@ La fiche de l'établissement est créée avant que sa base soit touchée : un
 clients, et rien n'est à ressaisir. Diagnostiquer, puis réparer :
 
 ```bash
-php artisan etablissement:provision LBGN --tester
-php artisan etablissement:provision LBGN     --db-password='<nouveau mot de passe>' --base-existante --sans-amorcage
+php artisan etablissement:provision LBNG --tester
+php artisan etablissement:provision LBNG     --db-password='<nouveau mot de passe>' --base-existante --sans-amorcage
 ```
 
 Causes par ordre de fréquence : mot de passe MySQL modifié dans le panneau de
@@ -160,7 +164,7 @@ la suite :
 
 ```bash
 ls api-ltm/public/scan-photos api-lcm/public/scan-photos \
-   api-lbm/public/scan-photos api-lbgn/public/scan-photos 2>/dev/null
+   api-lbm/public/scan-photos api-lbng/public/scan-photos 2>/dev/null
 ```
 
 Si l'un de ces dossiers existe et n'est pas vide, le déplacer vers

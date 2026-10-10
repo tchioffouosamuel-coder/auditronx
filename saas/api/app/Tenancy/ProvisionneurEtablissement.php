@@ -30,12 +30,24 @@ class ProvisionneurEtablissement
      */
     private ?array $dernieresIdentifiants = null;
 
+    /**
+     * Dernière information à rapporter à l'opérateur — ce que la plateforme a
+     * délibérément laissé en place, et qu'il faudra peut-être traiter à la
+     * main.
+     */
+    private ?string $dernierMessage = null;
+
     public function __construct(private readonly TenantManager $tenants) {}
 
     /** @return array{email: string, password: string}|null */
     public function dernieresIdentifiants(): ?array
     {
         return $this->dernieresIdentifiants;
+    }
+
+    public function dernierMessage(): ?string
+    {
+        return $this->dernierMessage;
     }
 
     /**
@@ -130,7 +142,17 @@ class ProvisionneurEtablissement
     {
         $base = $this->tenants->nomBase($etablissement);
 
-        if (config('database.connections.tenant.driver') === 'sqlite') {
+        /*
+         * Une fiche jamais provisionnée ne donne aucun droit sur la base
+         * qu'elle désigne : ce peut être une base préexistante déclarée avec
+         * `--base-existante`, ou le nom d'une base saisi de travers. Supprimer
+         * la fiche ne doit alors surtout pas emporter des données que la
+         * plateforme n'a jamais créées — le cas typique étant une déclaration
+         * ratée qu'on nettoie.
+         */
+        if (! $etablissement->estProvisionne()) {
+            $this->dernierMessage = "Base « {$base} » laissée intacte : établissement jamais provisionné.";
+        } elseif (config('database.connections.tenant.driver') === 'sqlite') {
             File::delete($base);
         } else {
             $this->verifieNomDeBase($base);

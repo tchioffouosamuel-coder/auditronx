@@ -47,7 +47,11 @@ class EtablissementSupprime extends Command
         $provisionneur->supprime($etablissement);
         $etablissement->delete();
 
-        $this->info("Établissement {$code} supprimé (base, fichiers et ligne centrale).");
+        $this->info("Établissement {$code} supprimé.");
+
+        if ($message = $provisionneur->dernierMessage()) {
+            $this->warn($message);
+        }
 
         return self::SUCCESS;
     }

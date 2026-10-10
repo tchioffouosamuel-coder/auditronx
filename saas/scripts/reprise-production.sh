@@ -20,7 +20,7 @@
 # silencieuse. Ils peuvent aussi être fournis par l'environnement, pour un
 # lancement non interactif :
 #
-#     MDP_LTM=… MDP_LCM=… MDP_LBM=… MDP_LBGN=… MDP_TEST=… #         bash ../scripts/reprise-production.sh
+#     MDP_LTM=… MDP_LCM=… MDP_LBM=… MDP_LBNG=… MDP_TEST=… bash ../scripts/reprise-production.sh
 #
 # Prérequis dans le .env de l'API :
 #   - DB_CENTRAL_DATABASE / DB_USERNAME / DB_PASSWORD : la base centrale, déjà
@@ -59,7 +59,7 @@ else
     TERMINAL_DISPONIBLE=0
 fi
 
-for variable in MDP_LTM MDP_LCM MDP_LBM MDP_LBGN MDP_TEST; do
+for variable in MDP_LTM MDP_LCM MDP_LBM MDP_LBNG MDP_TEST; do
     if [ -z "${!variable:-}" ] && [ "$TERMINAL_DISPONIBLE" = 1 ]; then
         printf 'Mot de passe MySQL de %-5s : ' "${variable#MDP_}" >&2
         IFS= read -rs saisie <&3
@@ -125,7 +125,7 @@ ECHECS=""
 declarer LTM  "Lycée Technique de Meiganga"  standard "Meiganga"   u133979320_ltm  u133979320_ltm  "$MDP_LTM"
 declarer LCM  "Lycée Classique de Meiganga"  standard "Meiganga"   u133979320_lcm  u133979320_lcm  "$MDP_LCM"
 declarer LBM  "Lycée Bilingue de Meiganga"   standard "Meiganga"   u133979320_lbm  u133979320_lbm  "$MDP_LBM"
-declarer LBGN "Lycée Bilingue de Ngaoundal"  standard "Ngaoundal"  u133979320_lbgn u133979320_lbgn "$MDP_LBGN"
+declarer LBNG "Lycée Bilingue de Ngaoundal"  standard "Ngaoundal"  u133979320_lbng u133979320_lbng "$MDP_LBNG"
 
 # Environnement d'essai, conservé comme locataire pour pouvoir répéter une
 # manipulation en conditions réelles sans toucher à un vrai établissement.
