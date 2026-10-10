@@ -94,6 +94,23 @@ les cinq déclarations, enchaîne `tenants:migrate` et contrôle qu'il lit bien
 dans chaque base. Les mots de passe ne sont pas écrits dedans : il les lit dans
 l'environnement, à fournir au lancement (voir son en-tête).
 
+### Si une base refuse la connexion
+
+La fiche de l'établissement est créée avant que sa base soit touchée : un
+`Access denied` laisse donc l'établissement en `en_attente`, non servi aux
+clients, et rien n'est à ressaisir. Diagnostiquer, puis réparer :
+
+```bash
+php artisan etablissement:provision LBGN --tester
+php artisan etablissement:provision LBGN     --db-password='<nouveau mot de passe>' --base-existante --sans-amorcage
+```
+
+Causes par ordre de fréquence : mot de passe MySQL modifié dans le panneau de
+l'hébergeur depuis le `.env` d'origine, utilisateur sans privilèges sur cette
+base, base renommée. Si le `.env` de l'ancienne instance porte ce même mot de
+passe refusé, c'est que **cette instance-là ne fonctionne plus non plus** : le
+problème précède la migration.
+
 Puis mettre tous les schémas à niveau — c'est ici que LCM et LBM récupèrent les
 migrations qu'elles n'avaient jamais reçues (journal d'audit, OTA des bornes,
 horaires administratifs) :

@@ -103,6 +103,10 @@ php artisan tenants:migrate
 # Tâche planifiée unique, rejouée dans chaque établissement actif
 php artisan tenants:run "auditron:detect-absences"
 
+# Diagnostiquer / réparer les accès à la base d'un abonné
+php artisan etablissement:provision LCM --tester
+php artisan etablissement:provision LCM --db-password='…' --base-existante --sans-amorcage
+
 # Suspension pour non-paiement (réversible, non destructive)
 php artisan etablissement:statut LCM suspendu
 

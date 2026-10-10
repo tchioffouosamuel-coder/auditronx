@@ -161,8 +161,11 @@ php artisan tinker --execute='
 
 echo
 if [ -n "$ECHECS" ]; then
-    echo "⚠ Établissements non déclarés : $ECHECS" >&2
-    echo "  Les reprendre un par un, ou utiliser le portail éditeur (/plateforme)." >&2
+    echo "⚠ Établissements non repris : $ECHECS" >&2
+    echo "  Leur fiche existe mais reste en « en_attente », donc non servie." >&2
+    echo "  Diagnostiquer puis réparer, sans ressaisir le dossier :" >&2
+    echo "    php artisan etablissement:provision <CODE> --tester" >&2
+    echo "    php artisan etablissement:provision <CODE> --db-password='…' --base-existante --sans-amorcage" >&2
     exit 1
 fi
 
