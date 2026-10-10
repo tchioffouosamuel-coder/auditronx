@@ -7,7 +7,14 @@ import { useTenant } from "../context/TenantContext";
 
 export default function LoginPage() {
   const { user, login } = useAuth();
-  const { code, branding, catalogue, listePublique, choisir, changerEtablissement } = useTenant();
+  const {
+    code,
+    branding,
+    catalogue,
+    listePublique,
+    choisir,
+    changerEtablissement,
+  } = useTenant();
   const navigate = useNavigate();
   const [parametres] = useSearchParams();
   const [identifier, setIdentifier] = useState("");
@@ -36,25 +43,32 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-900 via-brand-800 to-brand-700 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl">
+    <div className="flex min-h-screen items-center justify-center bg-transparent p-4">
+      <div className="w-full max-w-md rounded-[28px] border border-brand-200/80 bg-white/80 p-7 shadow-[0_18px_50px_rgba(90,62,142,0.12)] backdrop-blur-sm">
         <div className="mb-6 flex flex-col items-center text-center">
-          <img
-            src={branding?.logo_url || "/logo.png"}
-            alt={branding?.nom || "Auditron X"}
-            className="mb-3 h-16 w-16 object-contain"
-          />
-          <h1 className="text-xl font-bold text-brand-900">{branding?.nom || "Auditron X"}</h1>
-          <p className="text-sm text-ink-500">
-            {code ? "Connexion à votre espace" : "Plateforme de gestion de présence"}
+          <div className="mb-3 flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-brand-100 ring-8 ring-brand-50">
+            <img
+              src={branding?.logo_url || "/logo.png"}
+              alt={branding?.nom || "Auditron X"}
+              className="h-10 w-10 object-contain"
+            />
+          </div>
+          <h1 className="text-4xl font-black tracking-[-0.08em] text-brand-900">
+            {branding?.nom || "Attiékoi"}
+          </h1>
+          <p className="mt-2 text-sm font-medium text-ink-500">
+            {code
+              ? "Connexion à votre espace"
+              : "Plateforme de gestion de présence"}
           </p>
         </div>
 
         {motif && (
-          <div className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{motif}</div>
+          <div className="mb-4 rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            {motif}
+          </div>
         )}
 
-        {/* Étape 1 : choisir l'établissement. Étape 2 : s'identifier. */}
         {!code ? (
           <SelecteurEtablissement
             catalogue={catalogue}
@@ -64,37 +78,41 @@ export default function LoginPage() {
         ) : (
           <form onSubmit={handleSubmit}>
             {error && (
-              <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+              <div className="mb-4 rounded-full bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-red-200">
                 {error}
               </div>
             )}
 
             <label className="mb-3 block text-sm">
-              <span className="mb-1 block font-medium text-ink-700">Email ou téléphone</span>
+              <span className="mb-1 block font-semibold text-ink-700">
+                Email ou téléphone
+              </span>
               <input
                 type="text"
                 required
                 autoComplete="username"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
-                className="w-full rounded-lg border border-ink-100 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                className="w-full rounded-xl border border-brand-200 bg-brand-50/40 px-3 py-2.5 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
               />
             </label>
 
             <label className="mb-6 block text-sm">
-              <span className="mb-1 block font-medium text-ink-700">Mot de passe</span>
+              <span className="mb-1 block font-semibold text-ink-700">
+                Mot de passe
+              </span>
               <PasswordInput
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-lg border border-ink-100 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                className="w-full rounded-xl border border-brand-200 bg-brand-50/40 px-3 py-2.5 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200"
               />
             </label>
 
             <button
               type="submit"
               disabled={submitting}
-              className="w-full rounded-lg bg-brand-700 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-800 disabled:opacity-50"
+              className="w-full rounded-full bg-gradient-to-r from-brand-700 to-brand-500 py-3 text-sm font-bold text-white shadow-[0_12px_22px_rgba(90,62,142,0.28)] transition hover:brightness-110 disabled:opacity-60"
             >
               {submitting ? "Connexion…" : "Se connecter"}
             </button>
@@ -102,15 +120,18 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={changerEtablissement}
-              className="mt-3 w-full text-center text-xs text-ink-500 underline transition hover:text-brand-700"
+              className="mt-3 w-full text-center text-xs font-medium text-ink-500 underline decoration-brand-300 underline-offset-4 transition hover:text-brand-700"
             >
               Changer d’établissement ({code})
             </button>
           </form>
         )}
 
-        <p className="mt-6 border-t border-ink-100 pt-4 text-center text-xs text-ink-400">
-          <Link to="/plateforme/connexion" className="underline hover:text-brand-700">
+        <p className="mt-6 border-t border-brand-100 pt-4 text-center text-xs text-ink-400">
+          <Link
+            to="/plateforme/connexion"
+            className="font-medium text-brand-700 underline-offset-4 hover:underline"
+          >
             Espace Auditron
           </Link>
         </p>

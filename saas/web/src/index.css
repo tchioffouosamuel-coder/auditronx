@@ -1,40 +1,56 @@
 @import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..700,0..1,0&family=Montserrat:ital,wght@0,300..900;1,300..900&display=swap");
 @import "tailwindcss";
 
-/* Identité visuelle Auditron X — palette extraite du logo (vert circuit + or). */
+/* Palette inspirée de la landing page Attiékoi : fond lilas doux, texte profond, violet et terracotta. */
 @theme {
   --font-sans: "Montserrat", ui-sans-serif, system-ui, sans-serif;
 
-  --color-brand-950: #00281a;
-  --color-brand-900: #003b27;
-  --color-brand-800: #054e34;
-  --color-brand-700: #0f6e49;
-  --color-brand-600: #16805a;
-  --color-brand-500: #23855d;
-  --color-brand-400: #4aa87e;
-  --color-brand-300: #8ccbac;
-  --color-brand-200: #c3e4d5;
-  --color-brand-100: #e2f2ea;
-  --color-brand-50: #f2f9f6;
+  --color-brand-950: #201632;
+  --color-brand-900: #2f2148;
+  --color-brand-800: #433065;
+  --color-brand-700: #5a3e8e;
+  --color-brand-600: #6d56a4;
+  --color-brand-500: #8668c3;
+  --color-brand-400: #a88cd9;
+  --color-brand-300: #cdbae9;
+  --color-brand-200: #e7dff5;
+  --color-brand-100: #f5f0ff;
+  --color-brand-50: #f9f6ff;
 
-  --color-gold-700: #a67a1f;
-  --color-gold-600: #c4972f;
-  --color-gold-500: #e0b44a;
-  --color-gold-400: #eac262;
-  --color-gold-300: #f1d38f;
-  --color-gold-100: #fbf1dc;
+  --color-gold-700: #9f5c4f;
+  --color-gold-600: #c96d4f;
+  --color-gold-500: #ea8365;
+  --color-gold-400: #f0a384;
+  --color-gold-300: #f6d1bd;
+  --color-gold-100: #fff4ee;
 
-  --color-ink-900: #16241d;
-  --color-ink-700: #33443c;
-  --color-ink-500: #5b6b63;
-  --color-ink-300: #9caaa3;
-  --color-ink-100: #e4e7e2;
-  --color-ink-50: #f7f8f5;
+  --color-ink-900: #1f1d2b;
+  --color-ink-700: #3d3a4e;
+  --color-ink-500: #5f5b6d;
+  --color-ink-300: #9a96a8;
+  --color-ink-100: #e7e0ef;
+  --color-ink-50: #f7f4fa;
+}
+
+html {
+  color-scheme: light;
 }
 
 body {
-  @apply bg-ink-50 text-ink-900;
+  @apply bg-[#f4f0fb] text-ink-900;
   font-family: var(--font-sans);
+  background-image:
+    radial-gradient(
+      circle at top left,
+      rgba(168, 140, 217, 0.22),
+      transparent 26%
+    ),
+    radial-gradient(
+      circle at bottom right,
+      rgba(234, 131, 101, 0.12),
+      transparent 22%
+    ),
+    linear-gradient(180deg, #f4f0fb 0%, #f8f5ff 100%);
 }
 
 .material-symbols-rounded {
@@ -45,7 +61,11 @@ body {
   font-size: 24px;
   font-style: normal;
   font-weight: 500;
-  font-variation-settings: "FILL" 0, "wght" 500, "GRAD" 0, "opsz" 24;
+  font-variation-settings:
+    "FILL" 0,
+    "wght" 500,
+    "GRAD" 0,
+    "opsz" 24;
   line-height: 1;
   letter-spacing: 0;
   text-transform: none;

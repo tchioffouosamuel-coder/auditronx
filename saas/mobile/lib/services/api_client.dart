@@ -22,7 +22,7 @@ class ApiClient {
   ///   flutter run --dart-define=AUDITRON_API_URL=http://10.0.2.2:8000/api
   static const String baseUrl = String.fromEnvironment(
     'AUDITRON_API_URL',
-    defaultValue: 'https://api.auditronx.com/public/api',
+    defaultValue: 'https://api.auditronx.com/api',
   );
 
   /// En-tête qui désigne l'établissement courant (voir [etablissement]).

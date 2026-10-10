@@ -90,7 +90,7 @@ inline constexpr uint8_t BUZZER_GPIO = 25;
 // ---- API distante ----
 // URL unique, identique pour toutes les bornes de tous les établissements
 // abonnés : un seul firmware, et plus une variante par client à recompiler.
-inline constexpr char API_BASE_URL[] = "https://api.auditronx.com/public";
+inline constexpr char API_BASE_URL[] = "https://api.auditronx.com";
 inline constexpr char API_RELAY_SYNC_PATH[] = "/api/relay/sync";
 
 // Établissement auquel cette borne appartient, envoyé dans l'en-tête

@@ -203,7 +203,7 @@ Un seul build pour tous les établissements :
 ```bash
 cd saas/web
 npm install
-# .env.production : VITE_API_BASE_URL=https://api.auditronx.com/public/api
+# .env.production : VITE_API_BASE_URL=https://api.auditronx.com/api
 npm run build
 ```
 
@@ -243,7 +243,7 @@ Un seul firmware. Par borne, avant compilation
   le boîtier ;
 - `RELAY_API_TOKEN` — inchangé : le device relais existe déjà dans la base de
   son établissement, qui est la même qu'avant ;
-- `API_BASE_URL` est désormais commun (`https://api.auditronx.com/public`).
+- `API_BASE_URL` est désormais commun (`https://api.auditronx.com`).
 
 La bascule se fait borne par borne, par OTA, sans toucher aux autres.
 

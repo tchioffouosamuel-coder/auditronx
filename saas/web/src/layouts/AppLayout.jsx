@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
-import { useTenant } from '../context/TenantContext'
+import { useEffect, useState } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { useTenant } from "../context/TenantContext";
 
 /**
  * Le journal d'audit sert à contrôler les rôles restreints : l'API le réserve
@@ -10,61 +10,61 @@ import { useTenant } from '../context/TenantContext'
  * ne pas proposer une page qui répondrait 403.
  */
 function aAccesTotal(user) {
-  const accreditation = user?.accreditation
+  const accreditation = user?.accreditation;
 
-  if (!accreditation) return true
+  if (!accreditation) return true;
 
-  return accreditation.groupe === '*' && !accreditation.exclut_administration
+  return accreditation.groupe === "*" && !accreditation.exclut_administration;
 }
 
 const NAV_SECTIONS = [
   {
-    title: 'Vue d’ensemble',
-    links: [{ to: '/', label: 'Tableau de bord', end: true }],
+    title: "Vue d’ensemble",
+    links: [{ to: "/", label: "Tableau de bord", end: true }],
   },
   {
-    title: 'Personnel & structure',
+    title: "Personnel & structure",
     links: [
-      { to: '/personnel', label: 'Personnel' },
-      { to: '/classes', label: 'Classes' },
-      { to: '/disciplines', label: 'Disciplines' },
-      { to: '/emplois', label: 'Emplois du temps' },
-      { to: '/accreditations', label: 'Accréditations', visible: aAccesTotal },
+      { to: "/personnel", label: "Personnel" },
+      { to: "/classes", label: "Classes" },
+      { to: "/disciplines", label: "Disciplines" },
+      { to: "/emplois", label: "Emplois du temps" },
+      { to: "/accreditations", label: "Accréditations", visible: aAccesTotal },
     ],
   },
   {
-    title: 'Présence',
+    title: "Présence",
     links: [
-      { to: '/retards', label: 'Retards & bilans' },
-      { to: '/assiduite', label: 'Assiduité & rapports' },
-      { to: '/validation', label: 'Validation des présences' },
-      { to: '/signalements', label: 'Signalements' },
-      { to: '/feries', label: 'Jours fériés' },
-      { to: '/alertes', label: 'Alertes d’absences' },
+      { to: "/retards", label: "Retards & bilans" },
+      { to: "/assiduite", label: "Assiduité & rapports" },
+      { to: "/validation", label: "Validation des présences" },
+      { to: "/signalements", label: "Signalements" },
+      { to: "/feries", label: "Jours fériés" },
+      { to: "/alertes", label: "Alertes d’absences" },
     ],
   },
   {
-    title: 'Pédagogie',
+    title: "Pédagogie",
     links: [
-      { to: '/cahier-texte', label: 'Cahier de texte' },
-      { to: '/fiche-progression', label: 'Fiche de progression' },
+      { to: "/cahier-texte", label: "Cahier de texte" },
+      { to: "/fiche-progression", label: "Fiche de progression" },
     ],
   },
   {
-    title: 'Administration',
+    title: "Administration",
     links: [
-      { to: '/appareils', label: 'Appareils & points d’accès' },
-      { to: '/moniteur-bornes', label: 'Moniteur des bornes' },
-      { to: '/firmwares', label: 'Mises à jour firmware' },
-      { to: '/journal-audit', label: 'Journal d’audit', visible: aAccesTotal },
-      { to: '/configuration', label: 'Configuration' },
+      { to: "/appareils", label: "Appareils & points d’accès" },
+      { to: "/moniteur-bornes", label: "Moniteur des bornes" },
+      { to: "/firmwares", label: "Mises à jour firmware" },
+      { to: "/journal-audit", label: "Journal d’audit", visible: aAccesTotal },
+      { to: "/configuration", label: "Configuration" },
     ],
   },
-]
+];
 
 function SidebarContent({ onNavigate }) {
-  const { user, logout } = useAuth()
-  const { code, branding, changerEtablissement } = useTenant()
+  const { user, logout } = useAuth();
+  const { code, branding, changerEtablissement } = useTenant();
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-gradient-to-b from-brand-950 via-brand-900 to-brand-800 text-brand-50">
@@ -81,13 +81,13 @@ function SidebarContent({ onNavigate }) {
       */}
       <div className="relative z-10 flex items-center gap-2 border-b border-white/10 px-5 py-4">
         <img
-          src={branding?.logo_url || '/logo.png'}
-          alt={branding?.nom || 'Auditron X'}
+          src={branding?.logo_url || "/logo.png"}
+          alt={branding?.nom || "Auditron X"}
           className="h-9 w-9 object-contain drop-shadow"
         />
         <div className="min-w-0">
           <div className="truncate text-base font-bold text-white">
-            {branding?.nom_court || branding?.nom || 'Auditron X'}
+            {branding?.nom_court || branding?.nom || "Auditron X"}
           </div>
           <button
             type="button"
@@ -95,7 +95,7 @@ function SidebarContent({ onNavigate }) {
             title="Changer d’établissement"
             className="text-xs text-brand-200 underline-offset-2 transition hover:text-white hover:underline"
           >
-            {code || 'Backoffice'} · changer
+            {code || "Backoffice"} · changer
           </button>
         </div>
       </div>
@@ -109,22 +109,22 @@ function SidebarContent({ onNavigate }) {
             {section.links
               .filter((link) => !link.visible || link.visible(user))
               .map((link) => (
-              <NavLink
-                key={link.to}
-                to={link.to}
-                end={link.end}
-                onClick={onNavigate}
-                className={({ isActive }) =>
-                  `block rounded-lg px-2.5 py-2 text-sm font-medium transition ${
-                    isActive
-                      ? 'bg-white/15 text-white shadow-sm backdrop-blur-sm'
-                      : 'text-brand-100 hover:bg-white/10 hover:text-white'
-                  }`
-                }
-              >
-                {link.label}
-              </NavLink>
-            ))}
+                <NavLink
+                  key={link.to}
+                  to={link.to}
+                  end={link.end}
+                  onClick={onNavigate}
+                  className={({ isActive }) =>
+                    `block rounded-lg px-2.5 py-2 text-sm font-medium transition ${
+                      isActive
+                        ? "bg-white/15 text-white shadow-sm backdrop-blur-sm"
+                        : "text-brand-100 hover:bg-white/10 hover:text-white"
+                    }`
+                  }
+                >
+                  {link.label}
+                </NavLink>
+              ))}
           </div>
         ))}
       </nav>
@@ -132,15 +132,17 @@ function SidebarContent({ onNavigate }) {
       <div className="relative z-10 border-t border-white/10 px-4 py-3">
         <div className="mb-2 flex items-center gap-2">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gold-500/90 text-sm font-semibold text-brand-950">
-            {user?.name?.[0]?.toUpperCase() ?? '?'}
+            {user?.name?.[0]?.toUpperCase() ?? "?"}
           </div>
           <div className="min-w-0">
-            <div className="truncate text-sm font-medium text-white">{user?.name}</div>
+            <div className="truncate text-sm font-medium text-white">
+              {user?.name}
+            </div>
             <div className="truncate text-xs text-brand-200">{user?.email}</div>
           </div>
         </div>
         <div className="mb-3 inline-block rounded-full bg-gold-500/20 px-2 py-0.5 text-xs font-medium text-gold-300">
-          {user?.accreditation?.label ?? 'Aucune accréditation'}
+          {user?.accreditation?.label ?? "Aucune accréditation"}
         </div>
         <button
           onClick={logout}
@@ -150,55 +152,81 @@ function SidebarContent({ onNavigate }) {
         </button>
       </div>
     </div>
-  )
+  );
 }
 
 export default function AppLayout() {
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const location = useLocation()
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const location = useLocation();
 
   // Referme le tiroir mobile à chaque changement de route (navigation via NavLink
   // le fait déjà via onNavigate, mais aussi le retour navigateur/deep-link).
-  useEffect(() => setMobileOpen(false), [location.pathname])
+  useEffect(() => setMobileOpen(false), [location.pathname]);
 
   return (
-    <div className="min-h-screen bg-ink-50 md:flex">
-      {/* Barre mobile : logo + bouton menu, cachée en desktop où la sidebar est toujours visible. */}
-      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-ink-100 bg-white px-4 py-3 md:hidden">
+    <div className="min-h-screen md:flex">
+      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-ink-100/80 bg-white/80 px-4 py-3 backdrop-blur md:hidden">
         <div className="flex items-center gap-2">
-          <img src="/logo.png" alt="Auditron X" className="h-8 w-8" />
-          <span className="text-base font-bold text-brand-900">Auditron X</span>
+          <img
+            src="/logo.png"
+            alt="Auditron X"
+            className="h-8 w-8 rounded-lg object-cover"
+          />
+          <span className="text-base font-extrabold tracking-[-0.06em] text-brand-900">
+            Attiékoi
+          </span>
         </div>
         <button
           onClick={() => setMobileOpen(true)}
           aria-label="Ouvrir le menu"
-          className="rounded-lg p-2 text-ink-700 hover:bg-ink-50"
+          className="rounded-lg p-2 text-ink-700 hover:bg-brand-100"
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-6 w-6">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            className="h-6 w-6"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M4 6h16M4 12h16M4 18h16"
+            />
           </svg>
         </button>
       </header>
 
-      {/* Sidebar desktop : toujours visible à partir de md. */}
-      <aside className="hidden w-64 shrink-0 border-r border-brand-950/20 md:block">
+      <aside className="hidden w-72 shrink-0 border-r border-brand-200/80 bg-white/75 shadow-[0_0_0_1px_rgba(91,62,142,0.04)] backdrop-blur-sm md:block">
         <div className="sticky top-0 h-screen">
           <SidebarContent />
         </div>
       </aside>
 
-      {/* Tiroir mobile : overlay + panneau glissant, uniquement sous md. */}
       {mobileOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setMobileOpen(false)} />
+          <div
+            className="absolute inset-0 bg-brand-950/25"
+            onClick={() => setMobileOpen(false)}
+          />
           <div className="absolute inset-y-0 left-0 w-72 max-w-[85vw] shadow-xl">
             <button
               onClick={() => setMobileOpen(false)}
               aria-label="Fermer le menu"
               className="absolute top-3 right-3 z-20 rounded-lg p-2 text-brand-100 hover:bg-white/10 hover:text-white"
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-6 w-6">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M18 6L6 18" />
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="h-6 w-6"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M6 6l12 12M18 6L6 18"
+                />
               </svg>
             </button>
             <SidebarContent onNavigate={() => setMobileOpen(false)} />
@@ -207,7 +235,6 @@ export default function AppLayout() {
       )}
 
       <main className="relative min-w-0 flex-1 overflow-hidden p-4 sm:p-6 lg:p-8">
-        {/* Watermark : logo en filigrane, centré dans la surface de contenu. */}
         <img
           src="/logo.png"
           alt=""
@@ -219,5 +246,5 @@ export default function AppLayout() {
         </div>
       </main>
     </div>
-  )
+  );
 }

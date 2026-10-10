@@ -17,20 +17,24 @@ export default function PlateformeLayout() {
   const { compte, deconnexion } = usePlatformAuth();
 
   return (
-    <div className="min-h-screen bg-ink-50">
-      <header className="bg-ink-900 text-ink-50">
+    <div className="min-h-screen bg-transparent">
+      <header className="border-b border-brand-200 bg-white/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-4 px-4 py-3">
-          <span className="font-bold">Auditron · Plateforme</span>
+          <span className="text-lg font-black tracking-[-0.06em] text-brand-900">
+            Attiékoi · Plateforme
+          </span>
 
-          <nav className="flex flex-1 flex-wrap gap-1">
+          <nav className="flex flex-1 flex-wrap gap-2">
             {LIENS.map((lien) => (
               <NavLink
                 key={lien.to}
                 to={lien.to}
                 end={lien.end}
                 className={({ isActive }) =>
-                  `rounded-lg px-3 py-1.5 text-sm transition ${
-                    isActive ? "bg-ink-700 font-semibold" : "hover:bg-ink-800"
+                  `rounded-full px-3 py-1.5 text-sm font-medium transition ${
+                    isActive
+                      ? "bg-brand-100 text-brand-900 shadow-sm"
+                      : "text-ink-700 hover:bg-brand-50"
                   }`
                 }
               >
@@ -40,13 +44,13 @@ export default function PlateformeLayout() {
           </nav>
 
           <div className="flex items-center gap-3 text-sm">
-            <span className="text-ink-300">
+            <span className="text-ink-500">
               {compte?.name} · {compte?.role}
             </span>
             <button
               type="button"
               onClick={deconnexion}
-              className="rounded-lg border border-ink-600 px-3 py-1.5 transition hover:bg-ink-800"
+              className="rounded-full border border-brand-200 bg-brand-50 px-3 py-1.5 font-medium text-brand-800 transition hover:bg-brand-100"
             >
               Déconnexion
             </button>
