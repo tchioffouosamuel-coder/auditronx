@@ -14,12 +14,13 @@
 #
 # Usage, depuis saas/api :
 #
-#     read -rsp 'Mot de passe LTM  : ' MDP_LTM  && echo && export MDP_LTM
-#     read -rsp 'Mot de passe LCM  : ' MDP_LCM  && echo && export MDP_LCM
-#     read -rsp 'Mot de passe LBM  : ' MDP_LBM  && echo && export MDP_LBM
-#     read -rsp 'Mot de passe LBGN : ' MDP_LBGN && echo && export MDP_LBGN
-#     read -rsp 'Mot de passe TEST : ' MDP_TEST && echo && export MDP_TEST
 #     bash ../scripts/reprise-production.sh
+#
+# Le script demande lui-même les cinq mots de passe MySQL, en lecture
+# silencieuse. Ils peuvent aussi être fournis par l'environnement, pour un
+# lancement non interactif :
+#
+#     MDP_LTM=… MDP_LCM=… MDP_LBM=… MDP_LBGN=… MDP_TEST=… #         bash ../scripts/reprise-production.sh
 #
 # Prérequis dans le .env de l'API :
 #   - DB_CENTRAL_DATABASE / DB_USERNAME / DB_PASSWORD : la base centrale, déjà
@@ -40,10 +41,36 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
+# Les mots de passe manquants sont demandés ici, un par un, en lecture
+# silencieuse depuis le terminal.
+#
+# C'est volontairement le script qui les demande, et non l'opérateur qui
+# enchaîne cinq `read` : coller plusieurs `read` d'affilée fait avaler la ligne
+# suivante comme réponse de la précédente, et on se retrouve avec des mots de
+# passe décalés — ou visibles à l'écran.
+#
+# Le terminal est ouvert sur un descripteur dédié, et seulement s'il répond :
+# `[ -r /dev/tty ]` est vrai dans certains environnements où la lecture échoue
+# quand même, ce qui afficherait une invite à laquelle personne ne peut
+# répondre.
+if { exec 3< /dev/tty; } 2>/dev/null; then
+    TERMINAL_DISPONIBLE=1
+else
+    TERMINAL_DISPONIBLE=0
+fi
+
 for variable in MDP_LTM MDP_LCM MDP_LBM MDP_LBGN MDP_TEST; do
+    if [ -z "${!variable:-}" ] && [ "$TERMINAL_DISPONIBLE" = 1 ]; then
+        printf 'Mot de passe MySQL de %-5s : ' "${variable#MDP_}" >&2
+        IFS= read -rs saisie <&3
+        echo >&2
+        export "$variable=$saisie"
+        unset saisie
+    fi
+
     if [ -z "${!variable:-}" ]; then
-        echo "✗ Variable $variable absente de l'environnement." >&2
-        echo "  Voir l'en-tête de ce script pour la fournir sans l'écrire en clair." >&2
+        echo "✗ Mot de passe de ${variable#MDP_} absent, et pas de terminal pour le demander." >&2
+        echo "  Fournir $variable dans l'environnement (voir l'en-tête de ce script)." >&2
         exit 1
     fi
 done
@@ -55,6 +82,8 @@ if ! php artisan tinker --execute='App\Models\Central\Etablissement::count();' >
     echo "  Lancer d'abord : php artisan central:migrate --seed" >&2
     exit 1
 fi
+
+[ "$TERMINAL_DISPONIBLE" = 1 ] && exec 3<&-
 
 echo "→ Base centrale joignable."
 echo
