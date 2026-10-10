@@ -65,6 +65,19 @@ return [
     ],
 
     /*
+     * Documentation d'API (Scramble, servie sur `/docs/api`).
+     *
+     * Hors environnement local, Scramble refuse l'accès par défaut — d'où le
+     * 403 en production. L'ouvrir est un choix délibéré : la page expose la
+     * liste complète des routes, leurs paramètres et leurs réponses. Ce n'est
+     * pas un secret (l'authentification reste exigée pour toute donnée), mais
+     * ça facilite le travail de qui cherche une faille, donc ça se décide.
+     */
+    'docs' => [
+        'exposees' => env('AUDITRON_DOCS_PUBLIC', false),
+    ],
+
+    /*
      * Provisioning : la création d'un établissement crée sa base. Sur un
      * hébergement mutualisé où l'utilisateur SQL n'a pas le droit `CREATE
      * DATABASE`, passer à false et créer la base à la main (cPanel) avant de

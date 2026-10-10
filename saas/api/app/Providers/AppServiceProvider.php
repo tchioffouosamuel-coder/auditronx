@@ -6,6 +6,8 @@ use App\Models\Enseignant;
 use App\Observers\AnnuaireObserver;
 use App\Observers\AuditObserver;
 use App\Tenancy\TenantManager;
+use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -38,5 +40,19 @@ class AppServiceProvider extends ServiceProvider
 
         // Index central « numéro → établissement » (§multi-établissement).
         Enseignant::observe(AnnuaireObserver::class);
+
+        /*
+         * Documentation d'API (Scramble, `/docs/api`). Son intergiciel refuse
+         * l'accès hors environnement local, sauf si cette autorisation le
+         * permet — c'est l'explication du 403 rencontré en production.
+         *
+         * Le paramètre est nullable à dessein : la page de documentation est
+         * consultée depuis un navigateur, sans jeton Bearer, donc toujours
+         * par un visiteur non authentifié.
+         */
+        Gate::define(
+            'viewApiDocs',
+            fn (?Authenticatable $utilisateur = null) => (bool) config('auditron.docs.exposees')
+        );
     }
 }
