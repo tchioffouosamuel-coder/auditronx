@@ -50,7 +50,7 @@ function TeacherPicker({ value, onChange }) {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Nom ou matricule…"
-        className="w-64 rounded-md border border-ink-100 px-3 py-1 text-sm"
+        className="field w-64 py-2"
       />
       {query.trim().length >= 2 && results.length > 0 && (
         <div className="absolute z-20 mt-1 w-64 rounded-md border border-ink-100 bg-white shadow-lg">
@@ -145,7 +145,7 @@ export default function RelayQueueImport() {
 
   return (
     <div>
-      <div className="mb-4 rounded-lg border border-ink-100 bg-white p-4">
+      <div className="mb-4 card p-4">
         <p className="mb-3 text-sm text-ink-700">
           Récupérez le fichier <span className="font-mono">queue.jsonl</span> à la racine de la carte micro-SD
           de la borne, puis déposez-le ici. Les pointages déjà enregistrés sont ignorés : réimporter le même
@@ -162,7 +162,7 @@ export default function RelayQueueImport() {
           <button
             onClick={() => send(true)}
             disabled={!file || busy}
-            className="rounded-md border border-ink-100 px-3 py-1.5 text-sm text-ink-700 hover:bg-ink-50 disabled:opacity-50"
+            className="btn-secondary"
           >
             {busy && !result ? "Analyse…" : "Analyser"}
           </button>
@@ -170,7 +170,7 @@ export default function RelayQueueImport() {
             <button
               onClick={() => send(false)}
               disabled={busy}
-              className="rounded-md bg-brand-700 px-3 py-1.5 text-sm text-white hover:bg-brand-800 disabled:opacity-50"
+              className="btn-primary"
             >
               {busy ? "Import en cours…" : `Importer ${pendingCount} pointage(s)`}
             </button>

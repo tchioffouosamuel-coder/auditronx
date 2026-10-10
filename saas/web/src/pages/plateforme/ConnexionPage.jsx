@@ -52,7 +52,7 @@ export default function ConnexionPage() {
             autoComplete="username"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-lg border border-ink-100 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+            className="field w-full"
           />
         </label>
 
@@ -62,14 +62,14 @@ export default function ConnexionPage() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-lg border border-ink-100 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+            className="field w-full"
           />
         </label>
 
         <button
           type="submit"
           disabled={enCours}
-          className="w-full rounded-lg bg-ink-900 py-2.5 text-sm font-semibold text-white transition hover:bg-ink-800 disabled:opacity-50"
+          className="btn w-full bg-ink-900 py-2.5 text-white hover:bg-ink-800"
         >
           {enCours ? "Connexion…" : "Se connecter"}
         </button>

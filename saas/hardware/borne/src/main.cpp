@@ -234,6 +234,344 @@ private:
 static RemoteLogger g_log;
 
 // ---------------------------------------------------------------------------
+// Identité de la borne : établissement, token API, WiFi du site.
+//
+// Lue en NVS et non compilée dans le binaire (voir le long commentaire de
+// config.h) : une seule image sert toute la flotte, de tous les
+// établissements, et activer un firmware sur la mauvaise ligne du backoffice
+// ne peut plus repointer une borne vers la base d'un autre lycée.
+//
+// Chargée une fois au démarrage et jamais relue : le tenant part dans chaque
+// en-tête HTTP et le SSID est passé au pilote WiFi, les relire à chaud
+// ferait travailler la borne sur deux identités dans la même session. Un
+// `set` demande donc un `reboot`.
+// ---------------------------------------------------------------------------
+
+struct BorneIdentity
+{
+    String tenant;
+    String token;
+    String ssid;
+    String wifiPassword;
+    String label;
+};
+
+static BorneIdentity g_identity;
+// Les trois valeurs sans lesquelles la borne ne peut rien faire d'utile sont
+// présentes. Le label n'en fait pas partie : il est cosmétique.
+static bool g_provisioned = false;
+
+/** Token tronqué pour l'affichage : il ne doit jamais être réimprimé en
+ * clair, ni au moniteur série local, ni dans le moniteur à distance du
+ * backoffice qui recopie les mêmes lignes. */
+static String maskedToken(const String &token)
+{
+    if (token.isEmpty())
+        return "(vide)";
+
+    const int separator = token.indexOf('|');
+    const String prefix = separator > 0 ? token.substring(0, separator + 1) : token.substring(0, 2);
+
+    return prefix + "…(" + String(token.length()) + " caractères)";
+}
+
+static bool identityIsComplete(const BorneIdentity &identity)
+{
+    return !identity.tenant.isEmpty() && !identity.token.isEmpty() && !identity.ssid.isEmpty();
+}
+
+static BorneIdentity identityRead()
+{
+    Preferences prefs;
+    BorneIdentity identity;
+
+    // Lecture seule : une NVS absente (borne neuve, partition effacée) ne doit
+    // pas être créée ici — l'état d'usine est une information, pas une panne.
+    if (!prefs.begin(NVS_IDENTITY_NAMESPACE, true))
+        return identity;
+
+    identity.tenant = prefs.getString(NVS_KEY_TENANT, "");
+    identity.token = prefs.getString(NVS_KEY_TOKEN, "");
+    identity.ssid = prefs.getString(NVS_KEY_SSID, "");
+    identity.wifiPassword = prefs.getString(NVS_KEY_WIFI_PASSWORD, "");
+    identity.label = prefs.getString(NVS_KEY_LABEL, "");
+    prefs.end();
+
+    return identity;
+}
+
+static bool identityWriteField(const char *key, const String &value)
+{
+    Preferences prefs;
+    if (!prefs.begin(NVS_IDENTITY_NAMESPACE, false))
+        return false;
+
+    // putString renvoie le nombre d'octets écrits, donc 0 pour une chaîne
+    // vide : sans la seconde clause, un réseau WiFi ouvert (mot de passe
+    // vide) passerait pour un échec d'écriture.
+    const bool ok = prefs.putString(key, value) > 0 || value.isEmpty();
+    prefs.end();
+
+    return ok;
+}
+
+static void identityClear()
+{
+    Preferences prefs;
+    if (!prefs.begin(NVS_IDENTITY_NAMESPACE, false))
+        return;
+
+    prefs.clear();
+    prefs.end();
+}
+
+/**
+ * Recopie les graines de config.h en NVS, uniquement si la NVS est vide.
+ *
+ * C'est le chemin de bascule des bornes déjà scellées, qui tournent avec une
+ * identité compilée : leur livrer un binaire neutre les rendrait muettes.
+ * La condition « NVS vide » est essentielle — sans elle, un OTA d'un binaire
+ * encore porteur de graines écraserait l'identité d'une borne provisionnée et
+ * la repointerait sur l'établissement de la graine.
+ */
+static bool identitySeedIfEmpty(BorneIdentity &identity)
+{
+    if (identityIsComplete(identity))
+        return false;
+
+    BorneIdentity seed;
+    seed.tenant = PROVISION_SEED_TENANT;
+    seed.token = PROVISION_SEED_TOKEN;
+    seed.ssid = PROVISION_SEED_SSID;
+    seed.wifiPassword = PROVISION_SEED_WIFI_PASSWORD;
+
+    if (!identityIsComplete(seed))
+        return false;
+
+    identityWriteField(NVS_KEY_TENANT, seed.tenant);
+    identityWriteField(NVS_KEY_TOKEN, seed.token);
+    identityWriteField(NVS_KEY_SSID, seed.ssid);
+    identityWriteField(NVS_KEY_WIFI_PASSWORD, seed.wifiPassword);
+
+    identity = identityRead();
+    g_log.printf("[identite] graines de config.h recopiees en NVS (etablissement %s)\n", identity.tenant.c_str());
+
+    return true;
+}
+
+/** Nom BLE annoncé : le label s'il est renseigné, le défaut de config.h sinon. */
+static const char *bleDeviceName()
+{
+    return g_identity.label.isEmpty() ? BLE_DEFAULT_LABEL : g_identity.label.c_str();
+}
+
+/** Charge l'identité au démarrage et renseigne g_provisioned. */
+static void identitySetup()
+{
+    g_identity = identityRead();
+    identitySeedIfEmpty(g_identity);
+    g_provisioned = identityIsComplete(g_identity);
+
+    if (!g_provisioned)
+        return;
+
+    // Quel établissement cette borne croit-elle servir ? La question n'avait
+    // aucune réponse observable : le code était compilé, invisible une fois
+    // le boîtier fermé. La ligne part aussi au moniteur à distance du
+    // backoffice, où elle sert de contrôle après chaque OTA.
+    g_log.printf("[identite] etablissement=%s, borne=%s, token=%s\n",
+                 g_identity.tenant.c_str(), bleDeviceName(), maskedToken(g_identity.token).c_str());
+}
+
+// ---------------------------------------------------------------------------
+// Console de mise en service, sur le port série.
+//
+// Volontairement réduite à l'essentiel : la mise en service est déjà un acte
+// physique (boîtier ouvert, USB branché). Un portail d'appairage WiFi serait
+// plus confortable sur site, mais il demanderait un serveur HTTP et un mode
+// AP, et cet ESP32 est sans PSRAM — config.h documente déjà la pression
+// mémoire du TLS. À reprendre si la flotte grandit.
+// ---------------------------------------------------------------------------
+
+static String g_serialLine;
+
+static void printProvisioningHelp()
+{
+    Serial.println(F("[console] commandes :"));
+    Serial.println(F("  set tenant <CODE>     code de l'etablissement (en-tete X-Tenant)"));
+    Serial.println(F("  set token <TOKEN>     token Sanctum du device relay_gateway"));
+    Serial.println(F("  set ssid <SSID>       reseau WiFi du site"));
+    Serial.println(F("  set wifi <MOTDEPASSE> mot de passe du reseau"));
+    Serial.println(F("  set label <NOM>       nom BLE annonce (facultatif)"));
+    Serial.println(F("  show                  identite enregistree (token masque)"));
+    Serial.println(F("  clear                 efface l'identite (avant de deplacer la borne)"));
+    Serial.println(F("  reboot                redemarre pour appliquer"));
+}
+
+static void printProvisioningState()
+{
+    const BorneIdentity stored = identityRead();
+
+    Serial.println(F("[console] identite enregistree :"));
+    Serial.printf("  tenant : %s\n", stored.tenant.isEmpty() ? "(vide)" : stored.tenant.c_str());
+    Serial.printf("  token  : %s\n", maskedToken(stored.token).c_str());
+    Serial.printf("  ssid   : %s\n", stored.ssid.isEmpty() ? "(vide)" : stored.ssid.c_str());
+    Serial.printf("  wifi   : %s\n", stored.wifiPassword.isEmpty() ? "(vide)" : "(renseigne)");
+    Serial.printf("  label  : %s\n", stored.label.isEmpty() ? BLE_DEFAULT_LABEL : stored.label.c_str());
+    Serial.printf("  etat   : %s\n", identityIsComplete(stored) ? "complete" : "INCOMPLETE (tenant, token et ssid sont requis)");
+
+    if (identityIsComplete(stored) && !g_provisioned)
+        Serial.println(F("  (identite complete mais pas encore active : faites 'reboot')"));
+}
+
+/** `set <cle> <valeur>` — la valeur est tout le reste de la ligne, pour
+ * accepter les SSID et mots de passe contenant des espaces. Les espaces de
+ * début et de fin sont retirés : un mot de passe qui en comporte doit être
+ * saisi autrement (rarissime, et indiscernable d'une faute de frappe ici). */
+static void executeSetCommand(const String &arguments)
+{
+    const int separator = arguments.indexOf(' ');
+    if (separator <= 0)
+    {
+        Serial.println(F("[console] usage : set <tenant|token|ssid|wifi|label> <valeur>"));
+        return;
+    }
+
+    const String key = arguments.substring(0, separator);
+    String value = arguments.substring(separator + 1);
+    value.trim();
+
+    if (value.isEmpty())
+    {
+        Serial.println(F("[console] valeur vide : utilisez 'clear' pour effacer l'identite"));
+        return;
+    }
+
+    const char *nvsKey = nullptr;
+    if (key == "tenant")
+        nvsKey = NVS_KEY_TENANT;
+    else if (key == "token")
+        nvsKey = NVS_KEY_TOKEN;
+    else if (key == "ssid")
+        nvsKey = NVS_KEY_SSID;
+    else if (key == "wifi")
+        nvsKey = NVS_KEY_WIFI_PASSWORD;
+    else if (key == "label")
+        nvsKey = NVS_KEY_LABEL;
+
+    if (!nvsKey)
+    {
+        Serial.printf("[console] cle inconnue : %s\n", key.c_str());
+        printProvisioningHelp();
+        return;
+    }
+
+    if (!identityWriteField(nvsKey, value))
+    {
+        Serial.println(F("[console] ECHEC d'ecriture en NVS"));
+        return;
+    }
+
+    // Ni le token ni le mot de passe ne sont réimprimés, même en
+    // confirmation de saisie : la ligne resterait dans le scrollback du
+    // terminal de celui qui provisionne.
+    const bool secret = (key == "token" || key == "wifi");
+    Serial.printf("[console] %s enregistre : %s\n", key.c_str(), secret ? "(valeur masquee)" : value.c_str());
+    Serial.println(F("[console] 'reboot' pour appliquer"));
+}
+
+static void executeProvisioningCommand(String line)
+{
+    line.trim();
+    if (line.isEmpty())
+        return;
+
+    const int separator = line.indexOf(' ');
+    const String command = separator > 0 ? line.substring(0, separator) : line;
+    const String arguments = separator > 0 ? line.substring(separator + 1) : String();
+
+    if (command == "set")
+        executeSetCommand(arguments);
+    else if (command == "show")
+        printProvisioningState();
+    else if (command == "help" || command == "?")
+        printProvisioningHelp();
+    else if (command == "clear")
+    {
+        identityClear();
+        Serial.println(F("[console] identite effacee, 'reboot' pour repasser en etat d'usine"));
+    }
+    else if (command == "reboot")
+    {
+        Serial.println(F("[console] redemarrage..."));
+        delay(200);
+        ESP.restart();
+    }
+    else
+    {
+        Serial.printf("[console] commande inconnue : %s\n", command.c_str());
+        printProvisioningHelp();
+    }
+}
+
+/** Appelée depuis loop(), y compris en état d'usine — c'est la seule voie de
+ * mise en service, elle ne doit dépendre de rien d'autre. */
+static void handleProvisioningConsole()
+{
+    while (Serial.available() > 0)
+    {
+        const char c = (char)Serial.read();
+        if (c == '\r')
+            continue;
+
+        if (c != '\n')
+        {
+            // Plafond du tampon : une ligne plus longue qu'un token Sanctum
+            // avec sa marge ne peut venir que d'un collage accidentel.
+            if (g_serialLine.length() < 256)
+                g_serialLine += c;
+            continue;
+        }
+
+        const String line = g_serialLine;
+        g_serialLine = "";
+        executeProvisioningCommand(line);
+    }
+}
+
+/** État d'usine : la borne n'a ni BLE ni réseau, seul le port série répond. */
+static void announceFactoryState()
+{
+    static uint32_t lastPrompt = 0;
+    static bool first = true;
+
+    if (!first && millis() - lastPrompt < PROVISION_PROMPT_INTERVAL_MS)
+        return;
+    lastPrompt = millis();
+
+    Serial.println();
+    Serial.println(F("[identite] BORNE NON PROVISIONNEE — hors service"));
+    Serial.println(F("[identite] ni BLE ni reseau : aucun pointage n'est accepte"));
+    printProvisioningState();
+
+    if (first)
+    {
+        first = false;
+        printProvisioningHelp();
+
+        // Trois bips au premier passage seulement : un technicien sur site
+        // sans ordinateur doit pouvoir distinguer une borne hors service
+        // d'une borne morte, sans que l'établissement subisse un bip
+        // permanent toutes les quinze secondes.
+        for (int i = 0; i < 3; i++)
+        {
+            beepBuzzer();
+            delay(180);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Carte SD qui décroche en service (alimentation, faux contact) : le pilote
 // échoue alors à chaque accès ("sdSelectCard(): Select Failed") et, sans
 // repli, tout pointage est refusé au téléphone faute de pouvoir l'écrire. La
@@ -981,8 +1319,8 @@ static int apiPost(ApiSession &session, const char *path, const String &body, ui
     http.addHeader("Content-Type", "application/json");
     if (acceptJson)
         http.addHeader("Accept", "application/json");
-    http.addHeader("Authorization", String("Bearer ") + RELAY_API_TOKEN);
-    http.addHeader(TENANT_HEADER, TENANT_CODE);
+    http.addHeader("Authorization", String("Bearer ") + g_identity.token);
+    http.addHeader(TENANT_HEADER, g_identity.tenant);
     http.setTimeout(timeoutMs);
     // Pointeur + taille : POST(String) prend son argument par valeur et
     // dupliquerait le paquet (10 Ko avec selfie) pendant la connexion.
@@ -1175,8 +1513,12 @@ static bool flushRemoteLogs(ApiSession *openSession)
 // Mises à jour OTA — même principe que campuspass_hardware (OtaManager) :
 // manifest -> téléchargement en flux -> SHA256 vérifié avant d'activer le
 // nouveau slot -> redémarrage. Différences : manifest et binaire servis par
-// l'API authentifiée (le binaire contient RELAY_API_TOKEN, il ne peut pas
-// être public), et vérification périodique faute de canal push (MQTT).
+// l'API authentifiée, et vérification périodique faute de canal push (MQTT).
+//
+// Le binaire ne porte plus l'identité de la borne (elle est en NVS, voir
+// identitySetup()) : la même image peut donc être servie à toute la flotte.
+// Côté API, `firmwares` reste rattachée à un device — c'est désormais un
+// mécanisme de déploiement progressif, plus une contrainte technique.
 // ---------------------------------------------------------------------------
 
 static bool g_otaAppValidated = false;
@@ -1216,8 +1558,8 @@ static bool fetchOtaManifest(OtaManifest &out)
     http.begin(apiClient(), String(API_BASE_URL) + API_RELAY_FIRMWARE_MANIFEST_PATH);
     http.setReuse(false); // voir syncWithApi() : libère les tampons TLS entre deux requêtes
     http.addHeader("Accept", "application/json");
-    http.addHeader("Authorization", String("Bearer ") + RELAY_API_TOKEN);
-    http.addHeader(TENANT_HEADER, TENANT_CODE);
+    http.addHeader("Authorization", String("Bearer ") + g_identity.token);
+    http.addHeader(TENANT_HEADER, g_identity.tenant);
     http.addHeader("X-Firmware-Version", FIRMWARE_VERSION);
 
     const int code = http.GET();
@@ -1261,8 +1603,8 @@ static OtaResult downloadAndFlash(const OtaManifest &m)
     http.setTimeout(OTA_STALL_TIMEOUT_MS);
     http.begin(apiClient(), m.url);
     http.setReuse(false); // voir syncWithApi() : libère les tampons TLS entre deux requêtes
-    http.addHeader("Authorization", String("Bearer ") + RELAY_API_TOKEN);
-    http.addHeader(TENANT_HEADER, TENANT_CODE);
+    http.addHeader("Authorization", String("Bearer ") + g_identity.token);
+    http.addHeader(TENANT_HEADER, g_identity.tenant);
 
     const int code = http.GET();
     if (code != 200)
@@ -2002,7 +2344,7 @@ static void processPendingBleScan()
 
 static void setupBle()
 {
-    NimBLEDevice::init(BLE_DEVICE_NAME);
+    NimBLEDevice::init(bleDeviceName());
 
     // TX power par défaut de NimBLE-Arduino (~+9dbm) trop élevée pour
     // l'alimentation USB de ce banc de test : le pic de courant du démarrage
@@ -2027,7 +2369,7 @@ static void setupBle()
     g_ble_address = NimBLEDevice::getAddress().toString().c_str();
 
     // Un paquet d'advertising BLE "legacy" ne fait que 31 octets : le nom
-    // (BLE_DEVICE_NAME) + l'UUID de service 128-bit ne tiennent pas ensemble
+    // (bleDeviceName()) + l'UUID de service 128-bit ne tiennent pas ensemble
     // dans ce budget. Laissé au comportement par défaut de NimBLE, l'UUID de
     // service se retrouve alors relégué dans le scan response — or certains
     // téléphones bas de gamme (chipsets MediaTek/Unisoc, ex. Transsion
@@ -2042,7 +2384,7 @@ static void setupBle()
     advData.setCompleteServices(NimBLEUUID(BLE_SERVICE_UUID));
 
     NimBLEAdvertisementData scanResponseData;
-    scanResponseData.setName(BLE_DEVICE_NAME);
+    scanResponseData.setName(bleDeviceName());
 
     NimBLEAdvertising *advertising = NimBLEDevice::getAdvertising();
     advertising->setAdvertisementData(advData);
@@ -2089,7 +2431,7 @@ static void connectWifiIfNeeded()
     lastAttempt = millis();
 
     g_log.println("[wifi] tentative de connexion au modem...");
-    WiFi.begin(STA_SSID, STA_PASSWORD);
+    WiFi.begin(g_identity.ssid.c_str(), g_identity.wifiPassword.c_str());
 }
 
 static void onWifiConnected()
@@ -2131,6 +2473,10 @@ void setup()
     g_log.printf("[boot] firmware %s, cause du reset=%d (1=mise sous tension, 3=redémarrage logiciel, 4=panic, 5-7=watchdog, 9=brownout)\n",
                  FIRMWARE_VERSION, (int)esp_reset_reason());
 
+    // Avant tout le reste : sans identité, il n'y a ni établissement à qui
+    // envoyer les pointages ni WiFi auquel se connecter.
+    identitySetup();
+
     setupStorage();
     recoverQueueRewrite();
     g_log.printf("[queue] %u paquet(s) en attente au démarrage\n", (unsigned)queueLength());
@@ -2146,6 +2492,24 @@ void setup()
     // test, à vérifier si le problème persiste.
     delay(1000);
 
+    /*
+      État d'usine : ni BLE ni WiFi, et pas de tâche de synchro.
+      La file locale est montée (les pointages d'avant un `clear` sont
+      conservés et repartiront une fois la borne reprovisionnée), mais rien
+      n'est mis en service.
+
+      Ne pas démarrer le BLE est délibéré : une borne visible accepterait des
+      pointages et répondrait « queued » au téléphone de l'enseignant, qui
+      croirait avoir pointé. Mieux vaut une borne introuvable — ça se remarque
+      et ça se répare — qu'une borne qui accuse réception sans savoir où
+      envoyer.
+    */
+    if (!g_provisioned)
+    {
+        g_log.println("[identite] aucune identite en NVS : borne hors service, provisionnez-la au moniteur serie");
+        return;
+    }
+
     // WiFi en client uniquement : le téléphone parle en BLE, plus besoin du
     // rôle AP (voir setupBle() ci-dessous). Mode réglé ici (pas encore de
     // trafic radio significatif) mais WiFi.begin() est décalé après l'init
@@ -2157,7 +2521,7 @@ void setup()
 
     delay(1500);
     g_log.println("[wifi] tentative de connexion au modem...");
-    WiFi.begin(STA_SSID, STA_PASSWORD);
+    WiFi.begin(g_identity.ssid.c_str(), g_identity.wifiPassword.c_str());
     // Conservée par le pilote pour les reconnexions (connectWifiIfNeeded()).
     WiFi.setTxPower(STA_TX_POWER);
 
@@ -2173,6 +2537,17 @@ void setup()
 
 void loop()
 {
+    // Toujours en premier, et avant le filtre d'état d'usine : la console est
+    // la seule voie de mise en service, elle ne doit dépendre de rien.
+    handleProvisioningConsole();
+
+    if (!g_provisioned)
+    {
+        announceFactoryState();
+        delay(50);
+        return;
+    }
+
     processPendingBleScan();
     superviseBle();
 

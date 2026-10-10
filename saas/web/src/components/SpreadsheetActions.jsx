@@ -62,7 +62,7 @@ export default function SpreadsheetActions({ entity, label, onImported }) {
         type="button"
         disabled={busy}
         onClick={() => downloadFile(`/spreadsheet/${entity}/template`, `${entity}-modele.xlsx`)}
-        className="rounded-md border border-ink-100 bg-white px-3 py-1.5 text-sm text-ink-700 hover:bg-ink-50 disabled:opacity-50"
+        className="btn-secondary"
       >
         Télécharger le modèle
       </button>
@@ -70,7 +70,7 @@ export default function SpreadsheetActions({ entity, label, onImported }) {
         type="button"
         disabled={busy}
         onClick={() => downloadFile(`/spreadsheet/${entity}/export`, `${entity}-export.xlsx`)}
-        className="rounded-md border border-ink-100 bg-white px-3 py-1.5 text-sm text-ink-700 hover:bg-ink-50 disabled:opacity-50"
+        className="btn-secondary"
       >
         Exporter en XLSX
       </button>
@@ -78,7 +78,7 @@ export default function SpreadsheetActions({ entity, label, onImported }) {
         type="button"
         disabled={busy}
         onClick={() => fileInputRef.current?.click()}
-        className="rounded-md border border-brand-700 bg-brand-700 px-3 py-1.5 text-sm text-white hover:bg-brand-800 disabled:opacity-50"
+        className="btn-primary"
       >
         Importer un fichier {label ?? entity} (XLSX)
       </button>

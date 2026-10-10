@@ -92,7 +92,7 @@ export default function FirmwaresPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-lg font-semibold text-ink-900">Mises à jour firmware (OTA)</h1>
+      <h1 className="page-title mb-4">Mises à jour firmware (OTA)</h1>
 
       <h2 className="mb-2 text-sm font-semibold text-ink-700">Bornes</h2>
       <div className="mb-6">
@@ -126,14 +126,14 @@ export default function FirmwaresPage() {
       </div>
 
       <h2 className="mb-2 text-sm font-semibold text-ink-700">Envoyer un firmware</h2>
-      <form onSubmit={upload} className="mb-6 flex flex-wrap items-end gap-4 rounded-lg border border-ink-100 bg-white p-4">
+      <form onSubmit={upload} className="card mb-6 flex flex-wrap items-end gap-4 p-4">
         <label className="text-sm">
           <span className="mb-1 block text-ink-700">Borne</span>
           <select
             required
             value={form.device_id}
             onChange={(e) => setForm({ ...form, device_id: e.target.value })}
-            className="rounded-md border border-ink-100 px-3 py-1.5"
+            className="field py-2"
           >
             <option value="">Choisir…</option>
             {devices.map((d) => (
@@ -151,7 +151,7 @@ export default function FirmwaresPage() {
             placeholder="ex. 1.1.0"
             value={form.version}
             onChange={(e) => setForm({ ...form, version: e.target.value })}
-            className="w-32 rounded-md border border-ink-100 px-3 py-1.5"
+            className="field w-32 py-2"
           />
         </label>
         <label className="min-w-64 flex-1 text-sm">
@@ -159,7 +159,7 @@ export default function FirmwaresPage() {
           <input
             value={form.release_notes}
             onChange={(e) => setForm({ ...form, release_notes: e.target.value })}
-            className="w-full rounded-md border border-ink-100 px-3 py-1.5"
+            className="field py-2"
           />
         </label>
         <label className="text-sm">
@@ -176,7 +176,7 @@ export default function FirmwaresPage() {
         <button
           type="submit"
           disabled={uploading}
-          className="rounded-md bg-brand-700 px-3 py-1.5 text-sm text-white hover:bg-brand-800 disabled:opacity-50"
+          className="btn-primary"
         >
           {uploading ? "Envoi…" : "Envoyer"}
         </button>

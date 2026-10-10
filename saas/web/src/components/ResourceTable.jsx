@@ -1,18 +1,20 @@
 import { useEffect, useState } from 'react'
 import Select from 'react-select'
 import api from '../lib/api'
-import { confirmAction } from '../lib/swal'
+import { confirmAction, notify } from '../lib/swal'
 import DataTable from './DataTable'
 import Modal from './Modal'
 import PasswordInput from './PasswordInput'
 
+/** Styles react-select alignés sur l'utilitaire `.field` (cf. index.css). */
 const SELECT_STYLES = {
   control: (base, state) => ({
     ...base,
-    minHeight: '2.5rem',
-    borderColor: state.isFocused ? 'var(--color-brand-500)' : 'var(--color-ink-100)',
-    boxShadow: state.isFocused ? '0 0 0 2px var(--color-brand-100)' : 'none',
-    '&:hover': { borderColor: 'var(--color-brand-500)' },
+    minHeight: '2.75rem',
+    borderRadius: '0.75rem',
+    borderColor: state.isFocused ? 'var(--color-brand-500)' : 'var(--color-brand-200)',
+    boxShadow: 'none',
+    '&:hover': { borderColor: 'var(--color-brand-300)' },
   }),
   option: (base, state) => ({
     ...base,
@@ -23,7 +25,14 @@ const SELECT_STYLES = {
         : 'white',
     color: state.isSelected ? 'white' : 'var(--color-ink-900)',
   }),
-  menu: (base) => ({ ...base, zIndex: 50 }),
+  menu: (base) => ({
+    ...base,
+    zIndex: 50,
+    borderRadius: '0.75rem',
+    overflow: 'hidden',
+    border: '1px solid var(--color-brand-200)',
+  }),
+  placeholder: (base) => ({ ...base, color: 'var(--color-ink-300)' }),
 }
 
 /** Garde-fou : plafonne le nombre d'allers-retours si l'API pagine à l'infini. */
@@ -60,6 +69,14 @@ async function fetchAllPages(url) {
   return all
 }
 
+function Icone({ nom, className = '' }) {
+  return (
+    <span aria-hidden="true" className={`material-symbols-rounded text-[18px] ${className}`}>
+      {nom}
+    </span>
+  )
+}
+
 /**
  * Table CRUD générique pilotée par un schéma de champs — évite de réécrire le
  * même boilerplate (liste, création, édition, suppression) pour chaque module
@@ -69,13 +86,23 @@ async function fetchAllPages(url) {
  *              optionLabel?, required? }]
  * `columns`: [{ key, label, render?(row) }] — par défaut dérivées de `fields`.
  */
-export default function ResourceTable({ title, resource, fields, columns, idKey = 'id', extraRowActions }) {
+export default function ResourceTable({
+  title,
+  subtitle,
+  createLabel = 'Nouveau',
+  resource,
+  fields,
+  columns,
+  idKey = 'id',
+  extraRowActions,
+}) {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [editing, setEditing] = useState(null) // null = fermé, {} = création, {...} = édition
   const [formValues, setFormValues] = useState({})
   const [formErrors, setFormErrors] = useState({})
+  const [enregistrement, setEnregistrement] = useState(false)
   const [optionsByField, setOptionsByField] = useState({})
 
   const displayColumns = columns ?? fields.map((f) => ({ key: f.key, label: f.label }))
@@ -122,13 +149,29 @@ export default function ResourceTable({ title, resource, fields, columns, idKey 
 
   async function handleDelete(row) {
     if (!(await confirmAction('Confirmer la suppression ?', { confirmText: 'Supprimer' }))) return
-    await api.delete(`${resource}/${row[idKey]}`)
+
+    /*
+      La suppression partait sans `catch` : un refus de l'API (contrainte de
+      clé étrangère, droits insuffisants) ne laissait aucune trace à l'écran,
+      la ligne restait là et on recliquait sans comprendre.
+    */
+    try {
+      await api.delete(`${resource}/${row[idKey]}`)
+    } catch (err) {
+      notify(
+        err.response?.data?.message ?? 'Suppression impossible. La ligne est peut-être utilisée ailleurs.',
+        { title: 'Échec de la suppression', icon: 'error' },
+      )
+      return
+    }
+
     load()
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
     setFormErrors({})
+    setEnregistrement(true)
     try {
       if (editing[idKey]) {
         await api.put(`${resource}/${editing[idKey]}`, formValues)
@@ -138,23 +181,53 @@ export default function ResourceTable({ title, resource, fields, columns, idKey 
       setEditing(null)
       load()
     } catch (err) {
-      setFormErrors(err.response?.data?.errors ?? {})
+      const erreurs = err.response?.data?.errors ?? {}
+      setFormErrors(erreurs)
+
+      // Une erreur sans détail par champ (409, 500, réseau) n'affichait rien :
+      // le formulaire semblait simplement ne pas réagir au clic.
+      if (Object.keys(erreurs).length === 0) {
+        notify(err.response?.data?.message ?? "L'enregistrement a échoué.", {
+          title: 'Échec',
+          icon: 'error',
+        })
+      }
+    } finally {
+      setEnregistrement(false)
     }
   }
 
   return (
     <div>
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        {title && <h1 className="text-lg font-semibold text-ink-900">{title}</h1>}
-        <button
-          onClick={openCreate}
-          className="rounded-md bg-brand-700 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-brand-800 sm:ml-auto"
-        >
-          + Nouveau
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        {title && (
+          <div>
+            <h1 className="page-title">{title}</h1>
+            {subtitle && <p className="page-subtitle">{subtitle}</p>}
+          </div>
+        )}
+        <button onClick={openCreate} className="btn-primary sm:ml-auto">
+          <Icone nom="add" />
+          {createLabel}
         </button>
       </div>
 
-      {error && <div className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
+      {error && (
+        <div
+          role="alert"
+          className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700"
+        >
+          <span className="flex items-center gap-2">
+            <Icone nom="cloud_off" />
+            {error}
+          </span>
+          {/* Un rechargement à portée de clic : sinon la seule issue est de
+              recharger la page entière et de reperdre le contexte. */}
+          <button type="button" onClick={load} className="btn-secondary px-2.5 py-1 text-xs">
+            Réessayer
+          </button>
+        </div>
+      )}
 
       <DataTable
         columns={displayColumns}
@@ -162,35 +235,64 @@ export default function ResourceTable({ title, resource, fields, columns, idKey 
         idKey={idKey}
         loading={loading}
         renderActions={(row) => (
-          <>
+          <span className="inline-flex items-center gap-1">
             {extraRowActions?.(row)}
-            <button onClick={() => openEdit(row)} className="mr-3 text-ink-500 hover:text-ink-900">
-              Éditer
+            {/*
+              « Éditer » / « Suppr. » étaient deux libellés texte collés l'un à
+              l'autre : cible tactile étroite et risque de cliquer la
+              suppression en visant l'édition. Boutons icônes espacés, avec
+              libellé accessible et couleur distincte pour l'action destructive.
+            */}
+            <button
+              onClick={() => openEdit(row)}
+              aria-label="Éditer"
+              title="Éditer"
+              className="rounded-lg p-1.5 text-ink-400 transition hover:bg-brand-50 hover:text-brand-700"
+            >
+              <Icone nom="edit" />
             </button>
-            <button onClick={() => handleDelete(row)} className="text-red-500 hover:text-red-700">
-              Suppr.
+            <button
+              onClick={() => handleDelete(row)}
+              aria-label="Supprimer"
+              title="Supprimer"
+              className="rounded-lg p-1.5 text-ink-400 transition hover:bg-red-50 hover:text-red-600"
+            >
+              <Icone nom="delete" />
             </button>
-          </>
+          </span>
         )}
       />
 
       {editing && (
-        <Modal title={editing[idKey] ? 'Modifier' : 'Créer'} onClose={() => setEditing(null)}>
+        <Modal
+          title={editing[idKey] ? 'Modifier' : 'Créer'}
+          onClose={() => setEditing(null)}
+        >
           <form onSubmit={handleSubmit}>
             {fields.map((f) =>
               f.type === 'checkbox' ? (
-                <label key={f.key} className="mb-3 flex items-center gap-2 text-sm">
+                <label
+                  key={f.key}
+                  className="mb-3 flex cursor-pointer items-center gap-2 text-sm"
+                >
                   <input
                     type="checkbox"
                     checked={!!formValues[f.key]}
                     onChange={(e) => setFormValues((v) => ({ ...v, [f.key]: e.target.checked }))}
-                    className="h-4 w-4 rounded border-ink-100 text-brand-700 focus:ring-brand-500"
+                    className="h-4 w-4 rounded border-brand-200 text-brand-700 accent-brand-700"
                   />
-                  <span className="text-ink-700">{f.label}</span>
+                  <span className="font-medium text-ink-700">{f.label}</span>
                 </label>
               ) : (
                 <label key={f.key} className="mb-3 block text-sm">
-                  <span className="mb-1 block text-ink-700">{f.label}</span>
+                  <span className="field-label">
+                    {f.label}
+                    {f.required && (
+                      <span aria-hidden="true" className="ml-0.5 text-gold-600">
+                        *
+                      </span>
+                    )}
+                  </span>
                   {f.type === 'select' ? (
                     (() => {
                       const rawOptions = f.options ?? optionsByField[f.key] ?? []
@@ -218,32 +320,55 @@ export default function ResourceTable({ title, resource, fields, columns, idKey 
                     <PasswordInput
                       required={f.required}
                       placeholder={f.placeholder}
+                      aria-invalid={formErrors[f.key] ? true : undefined}
                       value={formValues[f.key] ?? ''}
                       onChange={(e) => setFormValues((v) => ({ ...v, [f.key]: e.target.value }))}
-                      className="w-full rounded-md border border-ink-100 px-3 py-2 focus:border-brand-500 focus:outline-none"
+                      className="field w-full"
                     />
                   ) : (
                     <input
                       type={f.type ?? 'text'}
                       required={f.required}
                       placeholder={f.placeholder}
+                      aria-invalid={formErrors[f.key] ? true : undefined}
                       value={formValues[f.key] ?? ''}
                       onChange={(e) => setFormValues((v) => ({ ...v, [f.key]: e.target.value }))}
-                      className="w-full rounded-md border border-ink-100 px-3 py-2 focus:border-brand-500 focus:outline-none"
+                      className={`field ${formErrors[f.key] ? 'border-red-300' : ''}`}
                     />
                   )}
                   {formErrors[f.key] && (
-                    <span className="mt-1 block text-xs text-red-600">{formErrors[f.key][0]}</span>
+                    <span className="mt-1 flex items-center gap-1 text-xs font-medium text-red-600">
+                      <Icone nom="error" className="text-[14px]" />
+                      {formErrors[f.key][0]}
+                    </span>
                   )}
                 </label>
               ),
             )}
-            <button
-              type="submit"
-              className="mt-2 w-full rounded-md bg-brand-700 py-2 text-sm font-medium text-white hover:bg-brand-800"
-            >
-              Enregistrer
-            </button>
+
+            <div className="mt-5 flex gap-2 border-t border-ink-100 pt-4">
+              <button
+                type="button"
+                onClick={() => setEditing(null)}
+                className="btn-secondary flex-1"
+              >
+                Annuler
+              </button>
+              {/*
+                Le bouton n'avait aucun état d'envoi : sur une connexion lente
+                rien ne bougeait après le clic, et un second clic créait un
+                doublon.
+              */}
+              <button type="submit" disabled={enregistrement} className="btn-primary flex-1">
+                {enregistrement && (
+                  <span
+                    aria-hidden="true"
+                    className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
+                  />
+                )}
+                {enregistrement ? 'Enregistrement…' : 'Enregistrer'}
+              </button>
+            </div>
           </form>
         </Modal>
       )}

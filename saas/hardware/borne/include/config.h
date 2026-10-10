@@ -2,9 +2,13 @@
 
 // ---- Nom BLE annoncé, auquel le téléphone de l'enseignant se connecte ----
 // Cosmétique : l'app mobile découvre la borne par BLE_SERVICE_UUID, pas par
-// ce nom (voir mobile/lib/services/ble_service.dart) — changez-le librement,
-// utile surtout pour distinguer plusieurs bornes au moniteur série.
-inline constexpr char BLE_DEVICE_NAME[] = "AUDITRON-BORNE-02";
+// ce nom (voir mobile/lib/services/ble_service.dart) — utile surtout pour
+// distinguer plusieurs bornes au moniteur série.
+//
+// Ce n'est plus que la valeur par défaut : le nom réel est celui enregistré
+// en NVS (`set label ...`, voir « Identité de la borne » plus bas), pour que
+// le même binaire puisse servir des bornes portant des noms différents.
+inline constexpr char BLE_DEFAULT_LABEL[] = "AUDITRON-BORNE";
 
 // UUIDs du service/caractéristiques BLE — DOIVENT correspondre exactement à
 // ceux déclarés côté app mobile (mobile/lib/services/ble_service.dart), donc
@@ -14,11 +18,10 @@ inline constexpr char BLE_CHAR_SCAN_UUID[] = "b3a1a101-2c33-4e6f-9a1e-5f6a2e6c2b
 inline constexpr char BLE_CHAR_RESULT_UUID[] = "b3a1a102-2c33-4e6f-9a1e-5f6a2e6c2b01"; // lecture/notify : réponse de la borne
 
 // ---- WiFi du modem/routeur qui fournit l'accès internet ----
-// Uniquement en client (WIFI_STA) : le téléphone parle en BLE, pas en WiFi local.
-// inline constexpr char STA_SSID[] = "Galaxy S22 4D30";
-// inline constexpr char STA_PASSWORD[] = "19750000";
-inline constexpr char STA_SSID[] = "Auditron";
-inline constexpr char STA_PASSWORD[] = "1234567890";
+// Uniquement en client (WIFI_STA) : le téléphone parle en BLE, pas en WiFi
+// local. Le SSID et le mot de passe ne sont plus ici mais en NVS, avec le
+// reste de l'identité de la borne (voir « Identité de la borne » plus bas).
+//
 // Puissance d'émission WiFi. Au maximum par défaut (19,5 dBm), chaque
 // émission tire un pic de courant que l'alimentation de ce banc ne tient
 // pas : la tension chute et la borne panique au moment de joindre le modem
@@ -93,23 +96,82 @@ inline constexpr uint8_t BUZZER_GPIO = 25;
 inline constexpr char API_BASE_URL[] = "https://api.auditronx.com";
 inline constexpr char API_RELAY_SYNC_PATH[] = "/api/relay/sync";
 
-// Établissement auquel cette borne appartient, envoyé dans l'en-tête
-// `X-Tenant` de chaque requête : c'est lui qui désigne la base de données où
-// les pointages sont écrits. À renseigner à la mise en service, en même temps
-// que RELAY_API_TOKEN (lui aussi propre à l'établissement, puisque le device
-// relais est créé dans sa base).
-//
-// ATTENTION : un code erroné fait écrire les pointages d'un lycée dans la
-// base d'un autre, ou renvoie un 404 « Établissement inconnu » que rien
-// n'indique sur la borne. Vérifier le code avant de sceller le boîtier.
 inline constexpr char TENANT_HEADER[] = "X-Tenant";
-inline constexpr char TENANT_CODE[] = "LTM"; // TODO: code de l'établissement
 
-// Token Sanctum du device relay_gateway, obtenu une fois via
-// POST /api/devices/provision-relay (voir hardware/README.md) — CE module
-// doit avoir son propre token, distinct de celui d'esp32_borne/ (chaque
-// device relais est identifié individuellement côté API).
-inline constexpr char RELAY_API_TOKEN[] = "167|6HwTUlNz7oa8Hp7OsIegkOHsuIaURGZxFmlWd0R53b153502";
+// ===========================================================================
+// Identité de la borne — EN NVS, PLUS DANS LE BINAIRE
+// ===========================================================================
+//
+// Quatre valeurs sont propres à chaque borne :
+//
+//   tenant   code de l'établissement, envoyé dans l'en-tête `X-Tenant` : il
+//            désigne la base où les pointages sont écrits ;
+//   token    token Sanctum du device `relay_gateway`, obtenu une fois via
+//            POST /api/devices/provision-relay — chaque borne a le sien,
+//            puisque chaque device relais est identifié individuellement ;
+//   ssid     + mot de passe du WiFi du site ;
+//   label    nom BLE annoncé (cosmétique).
+//
+// Elles vivaient ici, donc dans le binaire. Conséquence : un `.bin` ne
+// servait qu'à UNE borne — c'est écrit noir sur blanc dans la migration
+// `firmwares` côté API (« le même .bin ne peut donc pas servir à deux
+// bornes ») — il fallait une compilation et un téléversement par borne, et un
+// binaire activé sur la mauvaise ligne du backoffice repointait
+// silencieusement une borne vers la base d'un autre établissement, après
+// scellement du boîtier et à distance.
+//
+// Lues en NVS, la même image sert toute la flotte, de tous les
+// établissements. La mise en service se fait au moniteur série :
+//
+//     set tenant LTM
+//     set token 167|xxxxxxxx…
+//     set ssid Mon Reseau
+//     set wifi motdepasse
+//     set label AUDITRON-BORNE-02
+//     show
+//     reboot
+//
+// Tant que tenant, token et ssid ne sont pas tous renseignés, la borne reste
+// en « état d'usine » : ni BLE ni réseau, et elle le dit sur le port série.
+// Une borne muette se remarque et se répare ; une borne qui écrit dans la
+// mauvaise base, non.
+//
+// `clear` efface l'identité (à faire avant de déplacer une borne d'un
+// établissement à un autre), `help` liste les commandes.
+
+inline constexpr char NVS_IDENTITY_NAMESPACE[] = "borne";
+inline constexpr char NVS_KEY_TENANT[] = "tenant";
+inline constexpr char NVS_KEY_TOKEN[] = "token";
+inline constexpr char NVS_KEY_SSID[] = "ssid";
+inline constexpr char NVS_KEY_WIFI_PASSWORD[] = "wifipass";
+inline constexpr char NVS_KEY_LABEL[] = "label";
+
+// Cadence du rappel imprimé sur le port série en état d'usine.
+inline constexpr uint32_t PROVISION_PROMPT_INTERVAL_MS = 15000;
+
+// ---- Graines de transition (laisser vides sur un binaire neuf) ----
+//
+// Écrites en NVS au premier démarrage, et UNIQUEMENT si la NVS est vide :
+// jamais par-dessus une borne déjà provisionnée, sans quoi un OTA
+// repointerait la flotte sur l'établissement de la graine.
+//
+// Elles n'existent que pour la bascule des bornes déjà scellées. Celles-ci
+// tournent avec une identité compilée : leur livrer directement un binaire
+// neutre les rendrait muettes et imposerait une visite sur site (le rollback
+// automatique du bootloader n'est pas activé dans ce build, voir
+// platformio.ini — rien ne les ramènerait au firmware précédent). Le passage
+// se fait donc en deux temps :
+//
+//   1. une dernière compilation par borne, graines renseignées : au premier
+//      démarrage la borne recopie son identité en NVS et continue de tourner ;
+//   2. à partir de la version suivante, graines vides : un seul binaire
+//      neutre pour toute la flotte, les bornes ayant déjà leur NVS.
+//
+// Une fois la flotte passée, ces quatre constantes peuvent disparaître.
+inline constexpr char PROVISION_SEED_TENANT[] = "";
+inline constexpr char PROVISION_SEED_TOKEN[] = "";
+inline constexpr char PROVISION_SEED_SSID[] = "";
+inline constexpr char PROVISION_SEED_WIFI_PASSWORD[] = "";
 
 // Plus de capacité fixe de document JSON par paquet : les documents sont
 // dimensionnés sur le contenu réel et le selfie est écrit dans la file par
@@ -185,7 +247,7 @@ inline constexpr char NTP_SERVER[] = "pool.ntp.org";
 // destiné à l'OTA et à saisir à l'identique dans le backoffice lors de
 // l'upload : la borne flashe dès que la version active côté serveur diffère
 // de celle-ci (activer une version plus ancienne fait donc un rollback).
-inline constexpr char FIRMWARE_VERSION[] = "1.0.8";
+inline constexpr char FIRMWARE_VERSION[] = "1.0.9";
 inline constexpr char API_RELAY_FIRMWARE_MANIFEST_PATH[] = "/api/relay/firmware/manifest";
 // Cadence de vérification du manifest (en plus d'une vérification dès la
 // première connexion WiFi). Pas de canal push ici, contrairement au MQTT de

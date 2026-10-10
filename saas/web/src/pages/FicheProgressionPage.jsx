@@ -46,7 +46,7 @@ export default function FicheProgressionPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-lg font-semibold text-ink-900">
+      <h1 className="page-title mb-4">
         Fiche de progression
       </h1>
 

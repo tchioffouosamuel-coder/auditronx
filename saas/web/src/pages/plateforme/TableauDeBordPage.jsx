@@ -4,7 +4,7 @@ import apiCentral from "../../lib/apiCentral";
 
 function Tuile({ libelle, valeur, detail }) {
   return (
-    <div className="rounded-xl border border-ink-100 bg-white p-4">
+    <div className="card p-4">
       <p className="text-xs uppercase tracking-wide text-ink-500">{libelle}</p>
       <p className="mt-1 text-2xl font-bold text-ink-900">{valeur}</p>
       {detail && <p className="text-xs text-ink-500">{detail}</p>}
@@ -47,7 +47,7 @@ export default function TableauDeBordPage() {
         />
       </div>
 
-      <section className="rounded-xl border border-ink-100 bg-white">
+      <section className="card">
         <h2 className="border-b border-ink-100 px-4 py-3 font-semibold text-ink-900">
           Usage par établissement
         </h2>

@@ -126,15 +126,15 @@ export default function MoniteurBornesPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-lg font-semibold text-ink-900">Moniteur série des bornes</h1>
+      <h1 className="page-title mb-4">Moniteur série des bornes</h1>
 
-      <div className="mb-4 flex flex-wrap items-end gap-4 rounded-lg border border-ink-100 bg-white p-4">
+      <div className="mb-4 flex flex-wrap items-end gap-4 card p-4">
         <label className="text-sm">
           <span className="mb-1 block text-ink-700">Borne</span>
           <select
             value={deviceId}
             onChange={(e) => selectDevice(e.target.value)}
-            className="rounded-md border border-ink-100 px-3 py-1.5"
+            className="field py-2"
           >
             {devices.length === 0 && <option value="">Aucune borne active</option>}
             {devices.map((d) => (
@@ -151,7 +151,7 @@ export default function MoniteurBornesPage() {
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder="ex. [sync], échec…"
-            className="rounded-md border border-ink-100 px-3 py-1.5"
+            className="field py-2"
           />
         </label>
         <label className="flex items-center gap-2 pb-2 text-sm text-ink-700">
@@ -173,7 +173,7 @@ export default function MoniteurBornesPage() {
           <button
             onClick={() => setPaused((p) => !p)}
             disabled={!deviceId}
-            className="rounded-md border border-ink-100 px-3 py-1.5 text-sm text-ink-700 hover:bg-ink-50 disabled:opacity-50"
+            className="btn-secondary"
           >
             {paused ? "Reprendre" : "Pause"}
           </button>

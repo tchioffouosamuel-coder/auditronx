@@ -36,16 +36,16 @@ export default function RetardsPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-lg font-semibold text-ink-900">Retards & bilans</h1>
+      <h1 className="page-title mb-4">Retards & bilans</h1>
 
-      <div className="mb-6 flex flex-wrap items-end gap-4 rounded-lg border border-ink-100 bg-white p-4">
+      <div className="card mb-6 flex flex-wrap items-end gap-4 p-4">
         <label className="text-sm">
           <span className="mb-1 block text-ink-700">Début</span>
-          <input type="date" value={debut} onChange={(e) => setDebut(e.target.value)} className="rounded-md border border-ink-100 px-3 py-1.5" />
+          <input type="date" value={debut} onChange={(e) => setDebut(e.target.value)} className="field py-2" />
         </label>
         <label className="text-sm">
           <span className="mb-1 block text-ink-700">Fin</span>
-          <input type="date" value={fin} onChange={(e) => setFin(e.target.value)} className="rounded-md border border-ink-100 px-3 py-1.5" />
+          <input type="date" value={fin} onChange={(e) => setFin(e.target.value)} className="field py-2" />
         </label>
         <label className="text-sm">
           <span className="mb-1 block text-ink-700">Tolérance (minutes)</span>
@@ -54,14 +54,14 @@ export default function RetardsPage() {
               type="number"
               value={tolerance}
               onChange={(e) => setTolerance(e.target.value)}
-              className="w-24 rounded-md border border-ink-100 px-3 py-1.5"
+              className="field w-24 py-2"
             />
-            <button onClick={saveTolerance} className="rounded-md border border-ink-100 px-3 py-1.5 text-ink-700 hover:bg-ink-50">
+            <button onClick={saveTolerance} className="btn-secondary">
               Enregistrer
             </button>
           </div>
         </label>
-        <button onClick={downloadBilanCumule} className="ml-auto rounded-md bg-brand-700 px-3 py-1.5 text-sm text-white hover:bg-brand-800">
+        <button onClick={downloadBilanCumule} className="btn-primary ml-auto">
           Télécharger le bilan cumulé (PDF)
         </button>
       </div>

@@ -243,7 +243,7 @@ export default function JournalAuditPage() {
 
   return (
     <div>
-      <h1 className="mb-1 text-lg font-semibold text-ink-900">Journal d’audit</h1>
+      <h1 className="page-title mb-1">Journal d’audit</h1>
       <p className="mb-4 max-w-3xl text-sm text-ink-500">
         Trace de toutes les actions ayant modifié les données, ainsi que des exports et des
         tentatives refusées. Le journal est en lecture seule : il ne peut être ni modifié ni purgé
@@ -257,7 +257,7 @@ export default function JournalAuditPage() {
             type="date"
             value={debut}
             onChange={(e) => setDebut(e.target.value)}
-            className="rounded-md border border-ink-100 px-3 py-1.5 focus:border-brand-500 focus:outline-none"
+            className="field py-2"
           />
         </label>
         <label className="text-sm">
@@ -266,12 +266,12 @@ export default function JournalAuditPage() {
             type="date"
             value={fin}
             onChange={(e) => setFin(e.target.value)}
-            className="rounded-md border border-ink-100 px-3 py-1.5 focus:border-brand-500 focus:outline-none"
+            className="field py-2"
           />
         </label>
       </div>
 
-      {error && <div className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
+      {error && <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</div>}
 
       <DataTable
         loading={loading}

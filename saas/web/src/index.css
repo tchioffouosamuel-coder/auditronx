@@ -1,7 +1,7 @@
 @import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..700,0..1,0&family=Montserrat:ital,wght@0,300..900;1,300..900&display=swap");
 @import "tailwindcss";
 
-/* Palette inspirée de la landing page Attiékoi : fond lilas doux, texte profond, violet et terracotta. */
+/* Identité Auditron : fond lilas doux, texte profond, violet et terracotta. */
 @theme {
   --font-sans: "Montserrat", ui-sans-serif, system-ui, sans-serif;
 
@@ -22,14 +22,33 @@
   --color-gold-500: #ea8365;
   --color-gold-400: #f0a384;
   --color-gold-300: #f6d1bd;
+  --color-gold-200: #fbe4d8;
   --color-gold-100: #fff4ee;
 
+  /*
+    Échelle d'encre complète. Les paliers 200/400/600/800 étaient déjà utilisés
+    dans les pages (text-ink-800, border-ink-200, …) sans être déclarés ici :
+    Tailwind 4 ne génère que les utilitaires dont le jeton existe, ces classes
+    ne produisaient donc aucune couleur et le texte retombait silencieusement
+    sur la couleur héritée.
+  */
   --color-ink-900: #1f1d2b;
+  --color-ink-800: #2e2b3c;
   --color-ink-700: #3d3a4e;
+  --color-ink-600: #4e4a5e;
   --color-ink-500: #5f5b6d;
+  --color-ink-400: #7c7889;
   --color-ink-300: #9a96a8;
+  --color-ink-200: #cdc8d7;
   --color-ink-100: #e7e0ef;
   --color-ink-50: #f7f4fa;
+
+  /* Ombres portées teintées violet plutôt que le gris neutre par défaut. */
+  --shadow-card:
+    0 1px 2px rgba(32, 22, 50, 0.04), 0 8px 24px -12px rgba(90, 62, 142, 0.18);
+  --shadow-card-hover:
+    0 1px 2px rgba(32, 22, 50, 0.05), 0 14px 34px -14px rgba(90, 62, 142, 0.26);
+  --shadow-float: 0 18px 50px rgba(90, 62, 142, 0.16);
 }
 
 html {
@@ -39,6 +58,7 @@ html {
 body {
   @apply bg-[#f4f0fb] text-ink-900;
   font-family: var(--font-sans);
+  background-attachment: fixed;
   background-image:
     radial-gradient(
       circle at top left,
@@ -51,6 +71,87 @@ body {
       transparent 22%
     ),
     linear-gradient(180deg, #f4f0fb 0%, #f8f5ff 100%);
+}
+
+/*
+  Anneau de focus homogène sur toute l'application. Chaque écran redéfinissait
+  son propre `focus:ring-*` quand il ne l'oubliait pas, ce qui rendait la
+  navigation au clavier illisible par endroits. On le pose une fois, visible
+  uniquement au clavier.
+*/
+:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--color-brand-200);
+  color: var(--color-brand-950);
+}
+
+/*
+  Primitives partagées, déclarées en `@utility` et non en `@layer components` :
+  en Tailwind 4, `@apply` ne reconnaît que les utilitaires enregistrés, donc
+  seule cette forme permet de composer (`@apply btn` dans `.btn-primary`).
+  Chaque écran rhabillait jusqu'ici ses champs et ses boutons à la main, d'où
+  des rayons, des bordures et des états de focus qui ne concordaient pas d'une
+  page à l'autre.
+*/
+
+/* Surface standard des cartes, sections et tableaux. */
+@utility card {
+  @apply rounded-2xl border border-brand-200/70 bg-white/90 shadow-card backdrop-blur-sm;
+}
+
+@utility card-interactive {
+  @apply card transition duration-200 hover:-translate-y-0.5 hover:shadow-card-hover;
+}
+
+/* En-tête de page : un titre de même poids d'un écran à l'autre. */
+@utility page-title {
+  @apply text-xl font-bold tracking-tight text-ink-900 sm:text-2xl;
+}
+
+@utility page-subtitle {
+  @apply mt-0.5 text-sm text-ink-500;
+}
+
+@utility section-title {
+  @apply text-sm font-semibold tracking-tight text-ink-700;
+}
+
+@utility field-label {
+  @apply mb-1 block text-sm font-semibold text-ink-700;
+}
+
+/*
+  Sans `w-full` : ce champ sert aussi bien aux formulaires pleine largeur
+  qu'aux filtres compacts d'une barre d'outils. La largeur reste donc du
+  ressort de l'appelant.
+*/
+@utility field {
+  @apply rounded-xl border border-brand-200 bg-white px-3 py-2.5 text-sm text-ink-900 transition placeholder:text-ink-300 hover:border-brand-300 focus:border-brand-500;
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-55;
+}
+
+@utility btn-primary {
+  @apply btn bg-gradient-to-r from-brand-700 to-brand-500 text-white shadow-[0_10px_20px_-8px_rgba(90,62,142,0.6)] hover:brightness-110 active:brightness-95;
+}
+
+@utility btn-secondary {
+  @apply btn border border-brand-200 bg-white text-brand-800 hover:border-brand-300 hover:bg-brand-50;
+}
+
+@utility btn-ghost {
+  @apply btn text-ink-600 hover:bg-brand-50 hover:text-brand-800;
+}
+
+/* Pastilles d'état (présent / absent / retard …). */
+@utility badge {
+  @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold;
 }
 
 .material-symbols-rounded {
@@ -72,6 +173,9 @@ body {
   white-space: nowrap;
   word-wrap: normal;
   direction: ltr;
+  /* Une icône ne doit jamais rétrécir dans un flex ni être sélectionnable. */
+  flex-shrink: 0;
+  user-select: none;
 }
 
 .qr-loader {
@@ -162,7 +266,36 @@ body {
   }
 }
 
-/* Scrollbar de la sidebar (fond vert foncé) : fine et discrète plutôt que le
+/* Ouverture du tiroir de navigation mobile. */
+@keyframes drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-drawer-in {
+  animation: drawer-in 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.animate-fade-in {
+  animation: fade-in 0.18s ease-out;
+}
+
+/* Scrollbar de la sidebar (fond violet foncé) : fine et discrète plutôt que le
    défaut clair du navigateur qui tranche sur le dégradé. */
 .sidebar-scroll {
   scrollbar-width: thin;
@@ -184,4 +317,19 @@ body {
 
 .sidebar-scroll::-webkit-scrollbar-thumb:hover {
   background-color: var(--color-brand-300);
+}
+
+/*
+  Respect de la préférence système : les animations décoratives (scan du
+  loader, ouverture du tiroir) sont inutiles voire gênantes pour les personnes
+  sensibles au mouvement.
+*/
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

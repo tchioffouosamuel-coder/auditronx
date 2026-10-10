@@ -94,7 +94,7 @@ export default function JournalHebdomadaire() {
         <button
           type="button"
           onClick={() => setSemaine((s) => decalerSemaine(s, -1))}
-          className="rounded-md border border-ink-100 bg-white px-3 py-1.5 text-sm hover:bg-ink-50"
+          className="btn-secondary"
         >
           ← Semaine précédente
         </button>
@@ -102,19 +102,19 @@ export default function JournalHebdomadaire() {
           type="date"
           value={semaine}
           onChange={(e) => setSemaine(lundiDe(e.target.value))}
-          className="rounded-md border border-ink-100 px-3 py-1.5 text-sm"
+          className="field py-2"
         />
         <button
           type="button"
           onClick={() => setSemaine((s) => decalerSemaine(s, 1))}
-          className="rounded-md border border-ink-100 bg-white px-3 py-1.5 text-sm hover:bg-ink-50"
+          className="btn-secondary"
         >
           Semaine suivante →
         </button>
         <button
           type="button"
           onClick={() => setSemaine(lundiDe(todayIso()))}
-          className="rounded-md border border-ink-100 bg-white px-3 py-1.5 text-sm hover:bg-ink-50"
+          className="btn-secondary"
         >
           Cette semaine
         </button>
@@ -127,7 +127,7 @@ export default function JournalHebdomadaire() {
               `journal-hebdomadaire-${semaine}.pdf`,
             )
           }
-          className="ml-auto rounded-md bg-brand-700 px-3 py-1.5 text-sm text-white hover:bg-brand-800"
+          className="btn-primary ml-auto"
         >
           Télécharger la semaine en PDF
         </button>
@@ -139,7 +139,7 @@ export default function JournalHebdomadaire() {
           value={recherche}
           onChange={(e) => setRecherche(e.target.value)}
           placeholder="Nom, matricule, section…"
-          className="w-full max-w-xs rounded-md border border-ink-100 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+          className="field w-full max-w-xs py-2"
         />
         {!loading && donnees && (
           <span className="text-xs text-ink-300">
@@ -150,10 +150,10 @@ export default function JournalHebdomadaire() {
       </div>
 
       {erreur && (
-        <div className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</div>
+        <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{erreur}</div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-ink-100 bg-white shadow-sm">
+      <div className="overflow-x-auto card">
         <table className="min-w-full divide-y divide-ink-100 text-sm">
           <thead className="bg-ink-50">
             <tr>

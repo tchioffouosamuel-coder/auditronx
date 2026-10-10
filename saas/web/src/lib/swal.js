@@ -4,8 +4,11 @@ import Swal from 'sweetalert2'
 // que le thème par défaut de SweetAlert2 — remplace les window.confirm/alert
 // natifs (moches et non personnalisables) dans tout le backoffice.
 const swal = Swal.mixin({
-  confirmButtonColor: '#0f6e49', // --color-brand-700
-  cancelButtonColor: '#94a3b8',
+  // Le commentaire annonçait --color-brand-700, mais la valeur était restée
+  // sur le vert d'une palette abandonnée : les boutons de confirmation
+  // tranchaient en vert au milieu d'une interface violette.
+  confirmButtonColor: '#5a3e8e', // --color-brand-700
+  cancelButtonColor: '#9a96a8', // --color-ink-300
   buttonsStyling: true,
 })
 

@@ -16,7 +16,7 @@ export default function AlertesPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-lg font-semibold text-ink-900">Alertes d’absences répétées</h1>
+      <h1 className="page-title mb-4">Alertes d’absences répétées</h1>
       <DataTable
         loading={loading}
         emptyMessage="Aucune alerte."

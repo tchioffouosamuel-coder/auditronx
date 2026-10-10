@@ -112,7 +112,7 @@ export default function EtablissementsPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-lg font-semibold text-ink-900">
+        <h1 className="page-title">
           Établissements abonnés ({etablissements.length})
         </h1>
 
@@ -120,7 +120,7 @@ export default function EtablissementsPage() {
           <button
             type="button"
             onClick={() => setCreation({})}
-            className="rounded-lg bg-ink-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-ink-800"
+            className="btn bg-ink-900 text-white hover:bg-ink-800"
           >
             Ouvrir un établissement
           </button>
@@ -128,10 +128,10 @@ export default function EtablissementsPage() {
       </div>
 
       {erreur && (
-        <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</div>
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{erreur}</div>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-ink-100 bg-white">
+      <div className="overflow-x-auto card">
         <table className="w-full text-sm">
           <thead className="bg-ink-50 text-left text-xs uppercase text-ink-500">
             <tr>
@@ -191,7 +191,7 @@ export default function EtablissementsPage() {
                         type="button"
                         disabled={enCours}
                         onClick={() => migrer(etablissement)}
-                        className="rounded border border-ink-200 px-2 py-1 hover:bg-ink-50"
+                        className="btn-secondary px-2 py-1 text-xs"
                       >
                         Migrer
                       </button>
@@ -222,7 +222,7 @@ export default function EtablissementsPage() {
                   required={champ.requis}
                   value={creation[champ.key] ?? ""}
                   onChange={(e) => setCreation({ ...creation, [champ.key]: e.target.value })}
-                  className="w-full rounded-lg border border-ink-100 px-3 py-2"
+                  className="field w-full"
                 />
               </label>
             ))}
@@ -235,7 +235,7 @@ export default function EtablissementsPage() {
             <button
               type="submit"
               disabled={enCours}
-              className="w-full rounded-lg bg-ink-900 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              className="btn w-full bg-ink-900 text-white hover:bg-ink-800"
             >
               {enCours ? "Provisioning…" : "Créer et provisionner"}
             </button>
@@ -279,14 +279,14 @@ export default function EtablissementsPage() {
                 type="text"
                 value={confirmation}
                 onChange={(e) => setConfirmation(e.target.value)}
-                className="w-full rounded-lg border border-ink-100 px-3 py-2 uppercase"
+                className="field w-full uppercase"
               />
             </label>
 
             <button
               type="submit"
               disabled={enCours || confirmation.toUpperCase() !== suppression.code}
-              className="w-full rounded-lg bg-red-700 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              className="btn w-full bg-red-700 text-white hover:bg-red-800"
             >
               Supprimer définitivement
             </button>

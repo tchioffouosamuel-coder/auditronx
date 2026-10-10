@@ -9,7 +9,9 @@ Thumbs.db
 # versionnables dans les sous-projets.
 **/.env
 **/.env.*
-!**/.env.example
+# Les modèles (.env.example, .env.production.example, …) restent versionnables :
+# ils ne contiennent que des clés sans valeur.
+!**/.env*.example
 
 # Dépendances et sorties de compilation générées localement.
 **/node_modules/

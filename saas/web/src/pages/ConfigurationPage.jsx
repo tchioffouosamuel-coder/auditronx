@@ -50,12 +50,12 @@ export default function ConfigurationPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-lg font-semibold text-ink-900">Configuration</h1>
+      <h1 className="page-title mb-4">Configuration</h1>
 
       {loading ? (
         <LoadingState />
       ) : (
-        <form onSubmit={save} className="max-w-2xl rounded-lg border border-ink-100 bg-white p-4 sm:p-6">
+        <form onSubmit={save} className="max-w-2xl card p-4 sm:p-6">
           <h2 className="text-sm font-medium text-ink-900">Horaires du personnel administratif</h2>
           <p className="mt-1 mb-4 text-sm text-ink-500">
             Le personnel de la section « Administration » n’est pas évalué selon un emploi du temps : il est attendu
@@ -83,7 +83,7 @@ export default function ConfigurationPage() {
                 required
                 value={heureDebut}
                 onChange={(e) => setHeureDebut(e.target.value)}
-                className="rounded-md border border-ink-100 px-3 py-1.5"
+                className="field py-2"
               />
             </label>
             <label className="text-sm">
@@ -93,7 +93,7 @@ export default function ConfigurationPage() {
                 required
                 value={heureFin}
                 onChange={(e) => setHeureFin(e.target.value)}
-                className="rounded-md border border-ink-100 px-3 py-1.5"
+                className="field py-2"
               />
             </label>
           </div>
@@ -101,7 +101,7 @@ export default function ConfigurationPage() {
           <button
             type="submit"
             disabled={saving || jours.length === 0}
-            className="rounded-md bg-brand-700 px-3 py-1.5 text-sm text-white hover:bg-brand-800 disabled:opacity-50"
+            className="btn-primary"
           >
             {saving ? 'Enregistrement…' : 'Enregistrer'}
           </button>

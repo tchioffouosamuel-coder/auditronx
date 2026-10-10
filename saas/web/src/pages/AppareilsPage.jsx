@@ -139,26 +139,43 @@ export default function AppareilsPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-lg font-semibold text-ink-900">
-        Appareils & points d’accès
-      </h1>
+      <h1 className="page-title mb-1">Appareils &amp; points d’accès</h1>
+      <p className="page-subtitle mb-4">
+        Lecteurs, bornes Bluetooth et points QR installés dans
+        l’établissement.
+      </p>
 
-      <div className="mb-4 flex gap-2">
+      {/*
+        Vrai `tablist` ARIA : c’étaient quatre boutons indépendants, sans lien
+        annoncé avec le panneau affiché ni indication de l’onglet courant pour
+        un lecteur d’écran.
+      */}
+      <div
+        role="tablist"
+        aria-label="Catégories d’appareils"
+        className="mb-4 flex flex-wrap gap-1.5 rounded-2xl border border-brand-200/70 bg-white/70 p-1.5 backdrop-blur-sm"
+      >
         {[
-          ["devices", "Devices"],
-          ["access-points", "Bornes (BLE)"],
-          ["qr-points", "Points QR"],
-          ["import-queue", "Import file borne"],
-        ].map(([key, label]) => (
+          ["devices", "Devices", "smartphone"],
+          ["access-points", "Bornes (BLE)", "bluetooth"],
+          ["qr-points", "Points QR", "qr_code_2"],
+          ["import-queue", "Import file borne", "upload_file"],
+        ].map(([key, label, icone]) => (
           <button
             key={key}
+            role="tab"
+            type="button"
+            aria-selected={tab === key}
             onClick={() => setTab(key)}
-            className={`rounded-md px-3 py-1.5 text-sm ${
+            className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-semibold transition ${
               tab === key
-                ? "bg-brand-700 text-white"
-                : "bg-white text-ink-700 border border-ink-100"
+                ? "bg-gradient-to-r from-brand-700 to-brand-500 text-white shadow-sm"
+                : "text-ink-600 hover:bg-brand-50 hover:text-brand-800"
             }`}
           >
+            <span aria-hidden="true" className="material-symbols-rounded text-[18px]">
+              {icone}
+            </span>
             {label}
           </button>
         ))}
@@ -199,9 +216,13 @@ export default function AppareilsPage() {
           extraRowActions={(row) => (
             <button
               onClick={() => printQrCode({ value: row.code, label: row.label })}
-              className="mr-3 text-brand-700 hover:text-brand-900"
+              aria-label="Imprimer le QR code"
+              title="Imprimer le QR code"
+              className="rounded-lg p-1.5 text-ink-400 transition hover:bg-brand-50 hover:text-brand-700"
             >
-              QR / Imprimer
+              <span aria-hidden="true" className="material-symbols-rounded text-[18px]">
+                print
+              </span>
             </button>
           )}
         />

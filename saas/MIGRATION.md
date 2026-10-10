@@ -235,15 +235,81 @@ professeurs.
 
 ## 5. Bornes
 
-Un seul firmware. Par borne, avant compilation
-(`hardware/borne/include/config.h`) :
+Un seul firmware, et depuis la version 1.0.9 un seul **binaire** : l'identité
+de la borne n'est plus compilée mais lue en NVS. `API_BASE_URL` est commun
+(`https://api.auditronx.com`), le reste se saisit à la mise en service.
 
-- `TENANT_CODE` — code de l'établissement. **Un code erroné fait écrire les
-  pointages d'un lycée dans la base d'un autre.** À vérifier avant de sceller
-  le boîtier ;
-- `RELAY_API_TOKEN` — inchangé : le device relais existe déjà dans la base de
-  son établissement, qui est la même qu'avant ;
-- `API_BASE_URL` est désormais commun (`https://api.auditronx.com`).
+### Mise en service d'une borne neuve
+
+Au moniteur série (115200 bauds), boîtier ouvert :
+
+```
+set tenant LTM
+set token 167|xxxxxxxx…
+set ssid Mon Reseau
+set wifi motdepasse
+set label AUDITRON-BORNE-02
+show
+reboot
+```
+
+- `tenant` — code de l'établissement, envoyé en `X-Tenant` : il désigne la
+  base où les pointages sont écrits ;
+- `token` — token Sanctum du device `relay_gateway`, obtenu une fois via
+  `POST /api/devices/provision-relay` ; propre à chaque borne ;
+- `label` est facultatif (cosmétique, nom BLE annoncé).
+
+Tant que `tenant`, `token` et `ssid` ne sont pas tous les trois renseignés, la
+borne reste en **état d'usine** : ni BLE ni réseau, un rappel toutes les 15 s
+sur le port série et trois bips au démarrage. Ne pas démarrer le BLE est
+délibéré — une borne visible accepterait des pointages et répondrait
+« queued » au téléphone, qui croirait avoir pointé. Une borne introuvable se
+remarque et se répare ; une borne qui accuse réception sans savoir où envoyer,
+non.
+
+`show` affiche l'identité enregistrée (token et mot de passe masqués),
+`clear` l'efface — à faire avant de déplacer une borne d'un établissement à un
+autre, qui ne demande plus aucune recompilation. Le token et le mot de passe
+ne sont jamais réimprimés, pas même en confirmation de saisie : la ligne
+resterait dans le scrollback du terminal.
+
+Au démarrage, la borne journalise `[identite] etablissement=LTM, borne=…` —
+ligne également visible dans le moniteur à distance du backoffice, où elle
+sert de contrôle après chaque OTA. La question « quel établissement cette
+borne croit-elle servir ? » n'avait aucune réponse observable auparavant.
+
+### Bascule des bornes déjà scellées
+
+Ces bornes tournent avec une identité compilée et une NVS vide : leur livrer
+directement le binaire neutre les rendrait muettes et imposerait une visite
+sur site. Le rollback automatique du bootloader n'est pas activé dans ce build
+(voir `platformio.ini`), rien ne les ramènerait au firmware précédent. En deux
+temps, donc :
+
+1. **une dernière compilation par borne**, avec les `PROVISION_SEED_*` de
+   `config.h` renseignés. Au premier démarrage la borne recopie son identité
+   en NVS et continue de tourner sans interruption. Les graines ne sont
+   écrites **que si la NVS est vide** — jamais par-dessus une borne déjà
+   provisionnée, sans quoi un OTA repointerait la flotte sur l'établissement
+   de la graine ;
+2. **à partir de la version suivante**, graines vides : un seul binaire pour
+   toute la flotte, de tous les établissements.
+
+Une fois la flotte passée, les quatre constantes `PROVISION_SEED_*` peuvent
+disparaître.
+
+### Ce que ça change côté API
+
+Rien n'est à migrer, mais `firmwares.device_id` n'est plus une contrainte
+technique. Le commentaire de la migration (« le même `.bin` ne peut donc pas
+servir à deux bornes ») ne vaut plus : le rattachement à un device devient un
+mécanisme de **déploiement progressif** — une borne pilote d'abord, la flotte
+ensuite. Rien n'oblige à le changer maintenant.
+
+Reste ouvert : `FirmwareController::store()` ne valide que l'extension et la
+taille du `.bin`, et l'admin choisit `device_id` dans une liste. Avec un
+binaire neutre, se tromper de ligne n'a plus de conséquence sur l'identité de
+la borne — c'était le risque principal, il est refermé.
 
 La bascule se fait borne par borne, par OTA, sans toucher aux autres.
 

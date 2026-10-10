@@ -65,7 +65,7 @@ export default function SelecteurEtablissement({ catalogue, listePublique, onCho
       </div>
 
       {message && (
-        <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{message}</div>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">{message}</div>
       )}
 
       {listePublique && (
@@ -78,25 +78,25 @@ export default function SelecteurEtablissement({ catalogue, listePublique, onCho
               setRecherche(e.target.value);
               setResultatsTel(null);
             }}
-            className="w-full rounded-lg border border-ink-100 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+            className="field w-full"
           />
 
-          <ul className="max-h-56 space-y-1 overflow-y-auto">
+          <ul className="max-h-60 space-y-1.5 overflow-y-auto">
             {propositions.map((etablissement) => (
               <li key={etablissement.code}>
                 <button
                   type="button"
                   onClick={() => onChoisir(etablissement.code, etablissement)}
-                  className="flex w-full items-center gap-3 rounded-lg border border-ink-100 px-3 py-2 text-left transition hover:border-brand-400 hover:bg-brand-50"
+                  className="flex w-full items-center gap-3 rounded-xl border border-ink-100 bg-white px-3 py-2.5 text-left transition hover:border-brand-400 hover:bg-brand-50 hover:shadow-card"
                 >
                   {etablissement.logo_url ? (
                     <img
                       src={etablissement.logo_url}
                       alt=""
-                      className="h-8 w-8 rounded object-contain"
+                      className="h-9 w-9 shrink-0 rounded-lg object-contain"
                     />
                   ) : (
-                    <span className="flex h-8 w-8 items-center justify-center rounded bg-brand-100 text-xs font-bold text-brand-800">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-xs font-bold text-brand-800">
                       {etablissement.code.slice(0, 3)}
                     </span>
                   )}
@@ -128,19 +128,19 @@ export default function SelecteurEtablissement({ catalogue, listePublique, onCho
         className="space-y-2 border-t border-ink-100 pt-4"
       >
         <label className="block text-sm">
-          <span className="mb-1 block font-medium text-ink-700">Code de l’établissement</span>
+          <span className="field-label">Code de l’établissement</span>
           <input
             type="text"
             placeholder="ex. LTM"
             value={codeSaisi}
             onChange={(e) => setCodeSaisi(e.target.value)}
-            className="w-full rounded-lg border border-ink-100 px-3 py-2 uppercase focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+            className="field w-full uppercase tracking-widest"
           />
         </label>
         <button
           type="submit"
           disabled={!normaliserCode(codeSaisi)}
-          className="w-full rounded-lg bg-brand-700 py-2 text-sm font-semibold text-white transition hover:bg-brand-800 disabled:opacity-50"
+          className="btn-primary w-full"
         >
           Continuer
         </button>
@@ -148,7 +148,7 @@ export default function SelecteurEtablissement({ catalogue, listePublique, onCho
 
       <form onSubmit={chercherParTelephone} className="space-y-2 border-t border-ink-100 pt-4">
         <label className="block text-sm">
-          <span className="mb-1 block font-medium text-ink-700">
+          <span className="field-label">
             Code oublié ? Retrouvez-le avec votre numéro
           </span>
           <input
@@ -156,13 +156,13 @@ export default function SelecteurEtablissement({ catalogue, listePublique, onCho
             placeholder="ex. 699 00 11 22"
             value={tel}
             onChange={(e) => setTel(e.target.value)}
-            className="w-full rounded-lg border border-ink-100 px-3 py-2 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+            className="field w-full"
           />
         </label>
         <button
           type="submit"
           disabled={enCours || tel.trim().length < 6}
-          className="w-full rounded-lg border border-brand-200 py-2 text-sm font-semibold text-brand-800 transition hover:bg-brand-50 disabled:opacity-50"
+          className="btn-secondary w-full"
         >
           {enCours ? "Recherche…" : "Rechercher"}
         </button>

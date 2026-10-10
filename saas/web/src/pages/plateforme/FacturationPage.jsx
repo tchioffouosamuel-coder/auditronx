@@ -85,10 +85,10 @@ export default function FacturationPage() {
   return (
     <div className="space-y-6">
       {erreur && (
-        <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{erreur}</div>
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{erreur}</div>
       )}
 
-      <section className="rounded-xl border border-ink-100 bg-white">
+      <section className="card">
         <h2 className="border-b border-ink-100 px-4 py-3 font-semibold text-ink-900">Offres</h2>
         <div className="grid gap-3 p-4 sm:grid-cols-3">
           {donnees.plans.map((plan) => (
@@ -106,7 +106,7 @@ export default function FacturationPage() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-ink-100 bg-white">
+      <section className="card">
         <div className="flex items-center justify-between border-b border-ink-100 px-4 py-3">
           <h2 className="font-semibold text-ink-900">Abonnements</h2>
           {estSuperAdmin && (
@@ -145,7 +145,7 @@ export default function FacturationPage() {
                       <button
                         type="button"
                         onClick={() => renouveler(abonnement)}
-                        className="rounded border border-ink-200 px-2 py-1 text-xs hover:bg-ink-50"
+                        className="btn-secondary px-2 py-1 text-xs"
                       >
                         Renouveler
                       </button>
@@ -158,7 +158,7 @@ export default function FacturationPage() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-ink-100 bg-white">
+      <section className="card">
         <div className="flex items-center justify-between border-b border-ink-100 px-4 py-3">
           <h2 className="font-semibold text-ink-900">Factures</h2>
           {estSuperAdmin && (
@@ -240,7 +240,7 @@ export default function FacturationPage() {
                 type="date"
                 value={souscription.debut_le ?? ""}
                 onChange={(e) => setSouscription({ ...souscription, debut_le: e.target.value })}
-                className="w-full rounded-lg border border-ink-100 px-3 py-2"
+                className="field w-full"
               />
             </label>
 
@@ -250,14 +250,14 @@ export default function FacturationPage() {
                 type="date"
                 value={souscription.fin_le ?? ""}
                 onChange={(e) => setSouscription({ ...souscription, fin_le: e.target.value })}
-                className="w-full rounded-lg border border-ink-100 px-3 py-2"
+                className="field w-full"
               />
             </label>
 
             <button
               type="submit"
               disabled={enCours}
-              className="w-full rounded-lg bg-ink-900 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              className="btn w-full bg-ink-900 text-white hover:bg-ink-800"
             >
               Souscrire
             </button>
@@ -283,7 +283,7 @@ export default function FacturationPage() {
                 required
                 value={emission.montant ?? ""}
                 onChange={(e) => setEmission({ ...emission, montant: e.target.value })}
-                className="w-full rounded-lg border border-ink-100 px-3 py-2"
+                className="field w-full"
               />
             </label>
 
@@ -293,14 +293,14 @@ export default function FacturationPage() {
                 type="date"
                 value={emission.echeance_le ?? ""}
                 onChange={(e) => setEmission({ ...emission, echeance_le: e.target.value })}
-                className="w-full rounded-lg border border-ink-100 px-3 py-2"
+                className="field w-full"
               />
             </label>
 
             <button
               type="submit"
               disabled={enCours}
-              className="w-full rounded-lg bg-ink-900 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              className="btn w-full bg-ink-900 text-white hover:bg-ink-800"
             >
               Émettre
             </button>
@@ -319,7 +319,7 @@ function SelectChamp({ label, valeur, options, onChange }) {
         required
         value={valeur ?? ""}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-ink-100 px-3 py-2"
+        className="field w-full"
       >
         <option value="">—</option>
         {options.map((option) => (

@@ -26,8 +26,8 @@ export default function ValidationPage() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-ink-900">Validation des présences</h1>
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-md border border-ink-100 px-3 py-1.5 text-sm" />
+        <h1 className="page-title">Validation des présences</h1>
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="field py-2" />
       </div>
 
       <DataTable

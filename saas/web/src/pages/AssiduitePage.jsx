@@ -95,7 +95,7 @@ function JournalDuJour() {
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          className="rounded-md border border-ink-100 px-3 py-1.5 text-sm"
+          className="field py-2"
         />
         <button
           type="button"
@@ -105,7 +105,7 @@ function JournalDuJour() {
               `journal-presences-${date}.pdf`,
             )
           }
-          className="rounded-md bg-brand-700 px-3 py-1.5 text-sm text-white hover:bg-brand-800"
+          className="btn-primary"
         >
           Exporter le journal en PDF
         </button>
@@ -223,7 +223,7 @@ function PersonnelInactifTab() {
           type="number"
           value={jours}
           onChange={(e) => setJours(e.target.value)}
-          className="w-16 rounded-md border border-ink-100 px-2 py-1"
+          className="field w-16 px-2 py-1.5"
         />{" "}
         jours
       </label>
@@ -251,14 +251,14 @@ export default function AssiduitePage() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-ink-900">
+        <h1 className="page-title">
           Assiduité & rapports
         </h1>
         <button
           onClick={() =>
             downloadFile("/statistiques/export-zip", "bilans-retards.zip")
           }
-          className="rounded-md bg-brand-700 px-3 py-1.5 text-sm text-white hover:bg-brand-800"
+          className="btn-primary"
         >
           Export ZIP (bilans PDF)
         </button>
