@@ -1,0 +1,292 @@
+import { useEffect, useState } from "react";
+import DataTable from "../components/DataTable";
+import JournalHebdomadaire from "../components/JournalHebdomadaire";
+import Modal from "../components/Modal";
+import api from "../lib/api";
+import { formatTime, todayIso } from "../lib/datetime";
+import { downloadFile } from "../lib/download";
+
+function StatsTab() {
+  const [lignes, setLignes] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api
+      .get("/assiduite/stats")
+      .then(({ data }) => setLignes(Array.isArray(data) ? data : []))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <DataTable
+      loading={loading}
+      rows={lignes}
+      idKey="enseignant_id"
+      columns={[
+        { key: "nom", label: "Nom" },
+        { key: "section", label: "Section" },
+        { key: "jours_presents", label: "Jours présents" },
+        {
+          key: "jours_attendus",
+          label: "Jours attendus selon l’emploi du temps",
+        },
+        {
+          key: "taux_assiduite",
+          label: "Taux",
+          render: (l) => `${l.taux_assiduite}%`,
+          sortValue: (l) => l.taux_assiduite,
+        },
+      ]}
+    />
+  );
+}
+
+function JournalTab() {
+  // Deux périodes dans le même onglet : le journal du jour reste la vue par
+  // défaut (consultation courante), la grille hebdomadaire sert aux bilans et
+  // à l'archivage papier.
+  const [periode, setPeriode] = useState("jour");
+
+  return (
+    <div>
+      <div className="mb-3 inline-flex rounded-md border border-ink-100 bg-white p-0.5">
+        {[
+          ["jour", "Par jour"],
+          ["semaine", "Par semaine"],
+        ].map(([cle, libelle]) => (
+          <button
+            key={cle}
+            type="button"
+            onClick={() => setPeriode(cle)}
+            className={`rounded px-3 py-1 text-sm transition ${
+              periode === cle
+                ? "bg-brand-700 text-white"
+                : "text-ink-700 hover:bg-ink-50"
+            }`}
+          >
+            {libelle}
+          </button>
+        ))}
+      </div>
+
+      {periode === "jour" ? <JournalDuJour /> : <JournalHebdomadaire />}
+    </div>
+  );
+}
+
+function JournalDuJour() {
+  const [date, setDate] = useState(todayIso);
+  const [presences, setPresences] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [photoPreview, setPhotoPreview] = useState(null);
+
+  useEffect(() => {
+    setLoading(true);
+    api
+      .get("/assiduite/journal", { params: { date } })
+      .then(({ data }) => setPresences(Array.isArray(data) ? data : []))
+      .finally(() => setLoading(false));
+  }, [date]);
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center gap-3">
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="rounded-md border border-ink-100 px-3 py-1.5 text-sm"
+        />
+        <button
+          type="button"
+          onClick={() =>
+            downloadFile(
+              `/assiduite/journal/pdf?date=${date}`,
+              `journal-presences-${date}.pdf`,
+            )
+          }
+          className="rounded-md bg-brand-700 px-3 py-1.5 text-sm text-white hover:bg-brand-800"
+        >
+          Exporter le journal en PDF
+        </button>
+      </div>
+      <DataTable
+        loading={loading}
+        rows={presences}
+        columns={[
+          {
+            key: "enseignant",
+            label: "Enseignant",
+            render: (p) => p.enseignant?.nom,
+            sortValue: (p) => p.enseignant?.nom,
+          },
+          {
+            key: "heure_arrivee",
+            label: "Arrivée",
+            render: (p) =>
+              p.heure_arrivee
+                ? formatTime(p.heure_arrivee)
+                : "—",
+            sortValue: (p) => p.heure_arrivee ?? "",
+          },
+          {
+            key: "heure_depart",
+            label: "Départ",
+            render: (p) =>
+              p.heure_depart
+                ? formatTime(p.heure_depart)
+                : "—",
+            sortValue: (p) => p.heure_depart ?? "",
+          },
+          { key: "source", label: "Source" },
+          {
+            key: "photo",
+            label: "Photo (§hardware)",
+            sortable: false,
+            render: (p) => (
+              <div className="flex gap-2">
+                {p.photo_url_arrivee && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPhotoPreview({
+                        url: p.photo_url_arrivee,
+                        title: "Photo à l'arrivée",
+                      })
+                    }
+                    title="Photo à l'arrivée"
+                  >
+                    <img
+                      src={p.photo_url_arrivee}
+                      alt="Photo arrivée"
+                      className="h-10 w-10 rounded-md border border-ink-100 object-cover transition hover:scale-150 hover:shadow-md"
+                    />
+                  </button>
+                )}
+                {p.photo_url_depart && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPhotoPreview({
+                        url: p.photo_url_depart,
+                        title: "Photo au départ",
+                      })
+                    }
+                    title="Photo au départ"
+                  >
+                    <img
+                      src={p.photo_url_depart}
+                      alt="Photo départ"
+                      className="h-10 w-10 rounded-md border border-ink-100 object-cover transition hover:scale-150 hover:shadow-md"
+                    />
+                  </button>
+                )}
+                {!p.photo_url_arrivee && !p.photo_url_depart && (
+                  <span className="text-ink-300">—</span>
+                )}
+              </div>
+            ),
+          },
+        ]}
+      />
+      {photoPreview && (
+        <Modal title={photoPreview.title} onClose={() => setPhotoPreview(null)}>
+          <img
+            src={photoPreview.url}
+            alt={photoPreview.title}
+            className="max-h-[75vh] w-full rounded-md object-contain"
+          />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function PersonnelInactifTab() {
+  const [jours, setJours] = useState(7);
+  const [inactifs, setInactifs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    api
+      .get("/assiduite/personnel-inactif", { params: { jours } })
+      .then(({ data }) => setInactifs(Array.isArray(data) ? data : []))
+      .finally(() => setLoading(false));
+  }, [jours]);
+
+  return (
+    <div>
+      <label className="mb-3 block text-sm">
+        Inactifs depuis plus de{" "}
+        <input
+          type="number"
+          value={jours}
+          onChange={(e) => setJours(e.target.value)}
+          className="w-16 rounded-md border border-ink-100 px-2 py-1"
+        />{" "}
+        jours
+      </label>
+      <DataTable
+        loading={loading}
+        rows={inactifs}
+        idKey="enseignant_id"
+        columns={[
+          { key: "nom", label: "Nom" },
+          { key: "section", label: "Section" },
+          {
+            key: "derniere_presence",
+            label: "Dernière présence",
+            render: (i) => i.derniere_presence ?? "Jamais",
+          },
+        ]}
+      />
+    </div>
+  );
+}
+
+export default function AssiduitePage() {
+  const [tab, setTab] = useState("stats");
+
+  return (
+    <div>
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-lg font-semibold text-ink-900">
+          Assiduité & rapports
+        </h1>
+        <button
+          onClick={() =>
+            downloadFile("/statistiques/export-zip", "bilans-retards.zip")
+          }
+          className="rounded-md bg-brand-700 px-3 py-1.5 text-sm text-white hover:bg-brand-800"
+        >
+          Export ZIP (bilans PDF)
+        </button>
+      </div>
+
+      <div className="mb-4 flex gap-2">
+        {[
+          ["stats", "Statistiques"],
+          ["journal", "Journal des présences"],
+          ["inactif", "Personnel inactif"],
+        ].map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`rounded-md px-3 py-1.5 text-sm ${
+              tab === key
+                ? "bg-brand-700 text-white"
+                : "bg-white text-ink-700 border border-ink-100"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "stats" && <StatsTab />}
+      {tab === "journal" && <JournalTab />}
+      {tab === "inactif" && <PersonnelInactifTab />}
+    </div>
+  );
+}

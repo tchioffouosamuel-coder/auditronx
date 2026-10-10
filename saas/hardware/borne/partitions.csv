@@ -1,0 +1,14 @@
+# Table de partitions OTA pour ESP32 DevKit 4 Mo (esp32dev_borne).
+# Deux slots applicatifs de 1,5 Mo (le firmware pèse ~1,31 Mo : default.csv
+# et ses slots de 1,25 Mo sont trop petits) + LittleFS ~900 Ko pour la file
+# de secours sans carte SD (huge_app.csv en offrait ~960 Ko, sans OTA).
+# Changer de table de partitions impose UN flash USB ; les mises à jour
+# suivantes peuvent se faire par OTA. "spiffs" (LittleFS) garde volontairement
+# l'offset et la taille de huge_app.csv : la file en attente est conservée.
+# Name,     Type, SubType,  Offset,   Size
+nvs,        data, nvs,      0x9000,   0x5000
+otadata,    data, ota,      0xe000,   0x2000
+app0,       app,  ota_0,    0x10000,  0x180000
+app1,       app,  ota_1,    0x190000, 0x180000
+spiffs,     data, spiffs,   0x310000, 0xE0000
+coredump,   data, coredump, 0x3F0000, 0x10000

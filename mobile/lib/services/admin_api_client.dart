@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'secure_storage_safe.dart';
@@ -157,13 +158,30 @@ class AdminApiClient {
     Future<http.Response> Function() request,
   ) async {
     try {
+      final results = await Connectivity().checkConnectivity();
+      if (results.contains(ConnectivityResult.none)) {
+        throw ApiException(
+          "Pas de connexion internet. Vérifiez votre réseau et réessayez.",
+          0,
+        );
+      }
       return await request().timeout(const Duration(seconds: 20));
+    } on ApiException {
+      rethrow;
     } on TimeoutException {
       throw ApiException(
         "Connexion au serveur trop lente. L'action sera synchronisée dès que possible.",
         0,
       );
     } on SocketException {
+      final hasConnection = !((await Connectivity().checkConnectivity())
+          .contains(ConnectivityResult.none));
+      if (hasConnection) {
+        throw ApiException(
+          "Le serveur est temporairement inaccessible. Vérifiez votre connexion et réessayez.",
+          0,
+        );
+      }
       throw ApiException(
         "Pas de connexion internet. Vérifiez votre réseau et réessayez.",
         0,
@@ -174,6 +192,14 @@ class AdminApiClient {
         0,
       );
     } on http.ClientException {
+      final hasConnection = !((await Connectivity().checkConnectivity())
+          .contains(ConnectivityResult.none));
+      if (hasConnection) {
+        throw ApiException(
+          "Le serveur est temporairement inaccessible. Vérifiez votre connexion et réessayez.",
+          0,
+        );
+      }
       throw ApiException(
         "Impossible de contacter le serveur. Vérifiez votre connexion et réessayez.",
         0,

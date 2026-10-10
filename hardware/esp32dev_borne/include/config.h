@@ -88,14 +88,14 @@ inline constexpr uint32_t BLE_MAX_CONNECTION_MS = 60000;
 inline constexpr uint8_t BUZZER_GPIO = 25;
 
 // ---- API distante ----
-inline constexpr char API_BASE_URL[] = "https://api-ltm.auditronx.com/public";
+inline constexpr char API_BASE_URL[] = "https://api-test.auditronx.com/public";
 inline constexpr char API_RELAY_SYNC_PATH[] = "/api/relay/sync";
 
 // Token Sanctum du device relay_gateway, obtenu une fois via
 // POST /api/devices/provision-relay (voir hardware/README.md) — CE module
 // doit avoir son propre token, distinct de celui d'esp32_borne/ (chaque
 // device relais est identifié individuellement côté API).
-inline constexpr char RELAY_API_TOKEN[] = "76|nJRGTR5elU6Cg6kqXpYexMnZMKlVMTNrOLJAY8wfc653073d";
+inline constexpr char RELAY_API_TOKEN[] = "167|6HwTUlNz7oa8Hp7OsIegkOHsuIaURGZxFmlWd0R53b153502";
 
 // Plus de capacité fixe de document JSON par paquet : les documents sont
 // dimensionnés sur le contenu réel et le selfie est écrit dans la file par

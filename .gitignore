@@ -41,3 +41,6 @@ Thumbs.db
 **/*.p12
 **/*.jks
 **/*.keystore
+
+# Relevés de configuration des instances (contiennent des mots de passe).
+saas/files/

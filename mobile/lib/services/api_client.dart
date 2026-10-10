@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -13,7 +14,7 @@ class ApiClient {
   ApiClient._();
   static final ApiClient instance = ApiClient._();
 
-  static const String baseUrl = 'https://api.auditronx.com/public/api';
+  static const String baseUrl = 'https://api-ltm.auditronx.com/public/api';
 
   final _storage = const FlutterSecureStorage();
   static const _tokenKey = 'auditron_token';
@@ -34,7 +35,10 @@ class ApiClient {
       _cachedToken ??= await _storage.readOrNull(_tokenKey);
   Future<String?> get deviceUuid => _storage.readOrNull(_deviceUuidKey);
 
-  Future<void> saveSession({required String token, required String deviceUuid}) async {
+  Future<void> saveSession({
+    required String token,
+    required String deviceUuid,
+  }) async {
     _cachedToken = token;
     await _storage.write(key: _tokenKey, value: token);
     await _storage.write(key: _deviceUuidKey, value: deviceUuid);
@@ -55,6 +59,11 @@ class ApiClient {
       'Content-Type': 'application/json',
       if (t != null) 'Authorization': 'Bearer $t',
     };
+  }
+
+  Future<bool> hasConnectivity() async {
+    final results = await Connectivity().checkConnectivity();
+    return !results.contains(ConnectivityResult.none);
   }
 
   Future<dynamic> get(String path, {Map<String, String>? query}) async {
@@ -86,26 +95,66 @@ class ApiClient {
   /// TLS...) en [ApiException] — sans ça, ces erreurs remontent comme des
   /// exceptions non gérées (SocketException...) que les écrans n'attrapent
   /// pas puisqu'ils ne catchent que ApiException.
-  Future<http.Response> _guarded(Future<http.Response> Function() request) async {
+  Future<http.Response> _guarded(
+    Future<http.Response> Function() request,
+  ) async {
     try {
+      if (!await hasConnectivity()) {
+        throw ApiException(
+          "Pas de connexion internet. Vérifiez votre réseau et réessayez.",
+          0,
+        );
+      }
       return await request().timeout(const Duration(seconds: 20));
+    } on ApiException {
+      rethrow;
     } on TimeoutException {
-      throw ApiException("Connexion au serveur trop lente. L'action sera synchronisée dès que possible.", 0);
+      throw ApiException(
+        "Connexion au serveur trop lente. L'action sera synchronisée dès que possible.",
+        0,
+      );
     } on SocketException {
-      throw ApiException("Pas de connexion internet. Vérifiez votre réseau et réessayez.", 0);
+      if (await hasConnectivity()) {
+        throw ApiException(
+          "Le serveur est temporairement inaccessible. Vérifiez votre connexion et réessayez.",
+          0,
+        );
+      }
+      throw ApiException(
+        "Pas de connexion internet. Vérifiez votre réseau et réessayez.",
+        0,
+      );
     } on HttpException {
-      throw ApiException("Le serveur n'a pas répondu correctement. Réessayez.", 0);
+      throw ApiException(
+        "Le serveur n'a pas répondu correctement. Réessayez.",
+        0,
+      );
     } on http.ClientException {
-      throw ApiException("Impossible de contacter le serveur. Vérifiez votre connexion et réessayez.", 0);
+      if (await hasConnectivity()) {
+        throw ApiException(
+          "Le serveur est temporairement inaccessible. Vérifiez votre connexion et réessayez.",
+          0,
+        );
+      }
+      throw ApiException(
+        "Impossible de contacter le serveur. Vérifiez votre connexion et réessayez.",
+        0,
+      );
     }
   }
 
-  dynamic _decode(http.Response response, String request, Map<String, String> headers) {
+  dynamic _decode(
+    http.Response response,
+    String request,
+    Map<String, String> headers,
+  ) {
     final body = response.body.isEmpty ? null : jsonDecode(response.body);
 
     if (response.statusCode == 401) {
       final tokenSent = headers.containsKey('Authorization');
-      debugPrint('[api] 401 sur $request (token ${tokenSent ? 'envoyé' : 'absent'})');
+      debugPrint(
+        '[api] 401 sur $request (token ${tokenSent ? 'envoyé' : 'absent'})',
+      );
       clearSession();
       onSessionExpired?.call();
       throw ApiException(
@@ -120,7 +169,11 @@ class ApiClient {
       final message = body is Map && body['message'] != null
           ? body['message'] as String
           : 'Une erreur est survenue.';
-      throw ApiException(message, response.statusCode, errors: body is Map ? body['errors'] : null);
+      throw ApiException(
+        message,
+        response.statusCode,
+        errors: body is Map ? body['errors'] : null,
+      );
     }
 
     return body;
