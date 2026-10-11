@@ -8,6 +8,7 @@ use Illuminate\Console\Command;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
+use Symfony\Component\Console\Terminal;
 use Throwable;
 
 /**
@@ -41,9 +42,11 @@ class EtablissementIdentifiants extends Command
         {code? : Code de l\'établissement (inutile avec --tous)}
         {--username= : Utilisateur MySQL (inchangé si absent)}
         {--password= : Mot de passe en clair — déconseillé, il reste dans l\'historique du shell}
+        {--password-file= : Lire le mot de passe dans ce fichier (1re ligne) plutôt qu’au clavier}
         {--tous : Parcourir tous les établissements}
         {--tester : Ne rien écrire : tester les identifiants déjà enregistrés}
-        {--forcer : Enregistrer même si la connexion échoue}';
+        {--forcer : Enregistrer même si la connexion échoue}
+        {--visible : Autoriser la saisie en clair quand le masquage est impossible}';
 
     protected $description = 'Teste et remplace les identifiants MySQL de la base d’un établissement.';
 
@@ -89,7 +92,10 @@ class EtablissementIdentifiants extends Command
     /** @return \Illuminate\Support\Collection<int, Etablissement> */
     private function etablissements()
     {
-        if ($this->option('tous')) {
+        // `--tester` sans code porte sur toute la plateforme : c'est un bilan,
+        // pas une modification, et exiger `--tous` en plus n'apportait rien
+        // qu'un refus déroutant.
+        if ($this->option('tous') || ($this->option('tester') && ! $this->argument('code'))) {
             $tous = Etablissement::orderBy('code')->get();
 
             if ($tous->isEmpty()) {
@@ -154,14 +160,13 @@ class EtablissementIdentifiants extends Command
     private function remplace(Etablissement $etablissement, TenantManager $tenants): void
     {
         $username = $this->option('username') ?: $this->usernameEffectif($etablissement);
-        $motDePasse = $this->option('password');
+        $motDePasse = $this->motDePasseFourni();
 
-        if ($motDePasse === null || $motDePasse === '') {
-            // Saisie masquée : ni dans l'historique du shell, ni à l'écran.
-            $motDePasse = (string) $this->secret("  Mot de passe MySQL de {$username} (vide = ignorer)");
+        if ($motDePasse === null) {
+            $motDePasse = $this->demandeMotDePasse($username);
         }
 
-        if ($motDePasse === '') {
+        if ($motDePasse === null || $motDePasse === '') {
             $this->line('  ignoré.');
 
             return;
@@ -202,6 +207,81 @@ class EtablissementIdentifiants extends Command
         if (! $joignable) {
             $this->warn('  … mais la connexion échoue : --forcer a été utilisé.');
         }
+    }
+
+    /**
+     * Mot de passe passé en option, s'il y en a un. `null` = rien de fourni,
+     * il faudra le demander.
+     */
+    private function motDePasseFourni(): ?string
+    {
+        $fichier = $this->option('password-file');
+
+        if ($fichier) {
+            if (! is_readable($fichier)) {
+                $this->echecs++;
+                $this->error("  fichier illisible : {$fichier}");
+
+                return '';
+            }
+
+            // Première ligne seulement : un éditeur ajoute volontiers un saut
+            // de ligne final, qui ferait un mot de passe faux de justesse.
+            $lignes = file($fichier, FILE_IGNORE_NEW_LINES);
+
+            return trim($lignes[0] ?? '');
+        }
+
+        $direct = $this->option('password');
+
+        return $direct === null || $direct === '' ? null : $direct;
+    }
+
+    /**
+     * Demande le mot de passe au clavier, masqué.
+     *
+     * Et refuse de le demander quand le masquage est impossible. Symfony
+     * masque la saisie via `stty`, qu'il appelle avec `shell_exec` ; sur un
+     * hébergement mutualisé où cette fonction est désactivée, il retombe
+     * **silencieusement** sur une saisie en clair. Le mot de passe s'affiche
+     * alors à l'écran et reste dans l'historique du terminal, exactement ce
+     * que cette commande était censée éviter.
+     *
+     * On échoue donc fermé : --password-file est la bonne réponse, --visible
+     * la dérogation explicite.
+     */
+    private function demandeMotDePasse(string $username): ?string
+    {
+        if (! $this->peutMasquerLaSaisie() && ! $this->option('visible')) {
+            $this->echecs++;
+            $this->error('  saisie masquée impossible sur ce système (stty indisponible,');
+            $this->error('  shell_exec probablement désactivé). Rien n’a été demandé.');
+            $this->line('  → mettez le mot de passe dans un fichier :');
+            $this->line('      printf %s \'MotDePasse\' > /tmp/mdp && chmod 600 /tmp/mdp');
+            $this->line('      php artisan etablissement:identifiants ' . $this->argument('code')
+                . ' --password-file=/tmp/mdp && rm -f /tmp/mdp');
+            $this->line('  → ou --visible pour saisir en clair en connaissance de cause.');
+
+            return null;
+        }
+
+        return (string) $this->secret("  Mot de passe MySQL de {$username} (vide = ignorer)");
+    }
+
+    /** Le terminal permet-il réellement de masquer une saisie ? */
+    private function peutMasquerLaSaisie(): bool
+    {
+        if (! function_exists('shell_exec')) {
+            return false;
+        }
+
+        // Sous Windows, Symfony passe par un binaire dédié (hiddeninput.exe)
+        // plutôt que par stty.
+        if (DIRECTORY_SEPARATOR === '\\') {
+            return true;
+        }
+
+        return Terminal::hasSttyAvailable();
     }
 
     /**

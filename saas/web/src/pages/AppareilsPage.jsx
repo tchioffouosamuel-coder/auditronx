@@ -1,15 +1,28 @@
 import { useEffect, useState } from "react";
 import DataTable from "../components/DataTable";
+import MiseEnServiceBorne from "../components/MiseEnServiceBorne";
+import Modal from "../components/Modal";
 import RelayQueueImport from "../components/RelayQueueImport";
 import ResourceTable from "../components/ResourceTable";
 import api from "../lib/api";
 import { formatDateTime } from "../lib/datetime";
 import { printQrCode } from "../lib/printQrCode";
-import swal, { confirmAction } from "../lib/swal";
+import { confirmAction, notify } from "../lib/swal";
+
+function Icone({ nom, className = "" }) {
+  return (
+    <span aria-hidden="true" className={`material-symbols-rounded text-[18px] ${className}`}>
+      {nom}
+    </span>
+  );
+}
 
 function DevicesTable() {
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Formulaire de déclaration d'une borne, puis fiche de mise en service.
+  const [creation, setCreation] = useState(null);
+  const [miseEnService, setMiseEnService] = useState(null);
 
   function load() {
     setLoading(true);
@@ -51,33 +64,69 @@ function DevicesTable() {
       return;
 
     const { data } = await api.post(`/devices/${device.id}/rotate-token`);
-    await swal.fire({
-      title: "Nouveau token",
-      html: '<p class="mb-3 text-left text-sm">Copiez ce token maintenant. Il ne sera plus affiché ensuite.</p>',
-      input: "text",
-      inputValue: data.token,
-      inputReadOnly: true,
-      showCancelButton: true,
-      confirmButtonText: "Copier",
-      cancelButtonText: "Fermer",
-      preConfirm: async () => {
-        await navigator.clipboard.writeText(data.token);
-      },
-    });
+
+    // Un token nu ne suffit pas : il doit repartir dans la NVS de la borne
+    // avec le bon code d'établissement. On rouvre donc la fiche complète.
+    setMiseEnService({ device: data.device ?? device, token: data.token });
     load();
   }
 
+  async function declarer(event) {
+    event.preventDefault();
+
+    const uuid = creation.device_uuid.trim();
+
+    if (!uuid) return;
+
+    setCreation((c) => ({ ...c, envoi: true }));
+
+    try {
+      const { data } = await api.post("/devices/provision-relay", {
+        device_uuid: uuid,
+        label: creation.label.trim() || null,
+      });
+
+      setCreation(null);
+      setMiseEnService({ device: data.device, token: data.token });
+      load();
+    } catch (err) {
+      // 422 le plus souvent : un identifiant déjà pris. Le message de l'API
+      // est plus précis que tout ce qu'on pourrait deviner ici.
+      const erreurs = err.response?.data?.errors;
+      notify(
+        erreurs ? Object.values(erreurs).flat().join(" ") : "Déclaration impossible.",
+        { title: "Échec", icon: "error" },
+      );
+      setCreation((c) => ({ ...c, envoi: false }));
+    }
+  }
+
   return (
-    <DataTable
+    <>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-ink-500">
+          Bornes relais déclarées dans cet établissement.
+        </p>
+        <button
+          type="button"
+          onClick={() => setCreation({ device_uuid: "", label: "", envoi: false })}
+          className="btn-primary"
+        >
+          <Icone nom="add" />
+          Déclarer une borne
+        </button>
+      </div>
+
+      <DataTable
       loading={loading}
-      emptyMessage="Aucun device."
+      emptyMessage="Aucune borne déclarée."
       rows={devices}
       columns={[
         {
-          key: "teacher",
-          label: "Enseignant",
-          render: (d) => d.teacher?.nom ?? "—",
-          sortValue: (d) => d.teacher?.nom ?? "",
+          key: "label",
+          label: "Borne",
+          render: (d) => d.label || <span className="text-ink-300">—</span>,
+          sortValue: (d) => d.label ?? "",
         },
         {
           key: "device_uuid",
@@ -130,7 +179,80 @@ function DevicesTable() {
           </div>
         )
       }
-    />
+      />
+
+      {creation && (
+        <Modal title="Déclarer une borne" onClose={() => setCreation(null)}>
+          <form onSubmit={declarer}>
+            <label className="mb-3 block text-sm">
+              <span className="field-label">
+                Identifiant technique
+                <span aria-hidden="true" className="ml-0.5 text-gold-600">
+                  *
+                </span>
+              </span>
+              <input
+                type="text"
+                required
+                autoFocus
+                value={creation.device_uuid}
+                onChange={(e) =>
+                  setCreation((c) => ({ ...c, device_uuid: e.target.value }))
+                }
+                placeholder="ex. borne-ltm-02"
+                className="field w-full font-mono"
+              />
+              <span className="mt-1 block text-xs text-ink-400">
+                Unique dans cet établissement, et définitif : il nomme le token.
+              </span>
+            </label>
+
+            <label className="mb-3 block text-sm">
+              <span className="field-label">Emplacement</span>
+              <input
+                type="text"
+                value={creation.label}
+                onChange={(e) => setCreation((c) => ({ ...c, label: e.target.value }))}
+                placeholder="ex. Entrée principale"
+                className="field w-full"
+              />
+              <span className="mt-1 block text-xs text-ink-400">
+                Facultatif, mais une liste d’identifiants techniques ne dit pas
+                où se trouve la borne qu’on s’apprête à révoquer.
+              </span>
+            </label>
+
+            <div className="mt-5 flex gap-2 border-t border-ink-100 pt-4">
+              <button
+                type="button"
+                onClick={() => setCreation(null)}
+                className="btn-secondary flex-1"
+              >
+                Annuler
+              </button>
+              <button type="submit" disabled={creation.envoi} className="btn-primary flex-1">
+                {creation.envoi && (
+                  <span
+                    aria-hidden="true"
+                    className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
+                  />
+                )}
+                {creation.envoi ? "Déclaration…" : "Déclarer"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {miseEnService && (
+        <Modal title="Mise en service de la borne" onClose={() => setMiseEnService(null)}>
+          <MiseEnServiceBorne
+            device={miseEnService.device}
+            token={miseEnService.token}
+          />
+        </Modal>
+      )}
+    </>
   );
 }
 

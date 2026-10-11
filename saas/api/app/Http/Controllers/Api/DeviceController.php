@@ -141,6 +141,7 @@ class DeviceController extends Controller
         $device = Device::create([
             'device_uuid' => $data['device_uuid'],
             'device_type' => 'relay_gateway',
+            'label' => $data['label'] ?? null,
             'activated_at' => now(),
         ]);
 

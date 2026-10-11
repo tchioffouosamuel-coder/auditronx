@@ -64,6 +64,58 @@ class DeviceActivationFlowTest extends TestCase
         $this->assertNull($relay->fresh()->revoked_at);
     }
 
+    /**
+     * Les trois routes d'administration des appareils ne vérifiaient que
+     * `auth:sanctum`. Or un enseignant s'authentifie aussi par token depuis
+     * l'app mobile, et aucune des trois ne contrôlait à qui appartient le
+     * device visé : n'importe quel compte authentifié pouvait révoquer les
+     * appareils des autres, faire tourner le token d'une borne — qui n'a alors
+     * plus qu'un token invalide en NVS et demande une visite sur site — ou se
+     * créer un device `relay_gateway`.
+     */
+    public function test_un_enseignant_ne_peut_pas_administrer_les_appareils(): void
+    {
+        $enseignant = Enseignant::factory()->create();
+        $relay = Device::factory()->create([
+            'device_type' => 'relay_gateway',
+            'device_uuid' => 'borne-a-proteger',
+        ]);
+
+        $this->actingAs($enseignant)
+            ->postJson('/api/devices/provision-relay', ['device_uuid' => 'borne-pirate'])
+            ->assertForbidden();
+
+        $this->actingAs($enseignant)
+            ->postJson("/api/devices/{$relay->id}/rotate-token")
+            ->assertForbidden();
+
+        $this->actingAs($enseignant)
+            ->postJson("/api/devices/{$relay->id}/revoke")
+            ->assertForbidden();
+
+        $this->assertDatabaseMissing('devices', ['device_uuid' => 'borne-pirate']);
+        $this->assertNull($relay->fresh()->revoked_at);
+    }
+
+    public function test_un_admin_declare_une_borne_avec_son_emplacement(): void
+    {
+        $admin = User::factory()->create();
+
+        $response = $this->actingAs($admin)->postJson('/api/devices/provision-relay', [
+            'device_uuid' => 'borne-ltm-02',
+            'label' => 'Entrée principale',
+        ]);
+
+        $response->assertCreated()->assertJsonStructure(['token', 'device']);
+
+        // Le libellé était validé puis perdu, faute de colonne en base.
+        $this->assertDatabaseHas('devices', [
+            'device_uuid' => 'borne-ltm-02',
+            'device_type' => 'relay_gateway',
+            'label' => 'Entrée principale',
+        ]);
+    }
+
     public function test_un_enseignant_non_admin_est_active_immediatement_sans_otp(): void
     {
         $enseignant = Enseignant::factory()->create([

@@ -14,7 +14,7 @@ class Device extends Model implements AuthenticatableContract
 {
     use Authenticatable, HasApiTokens, HasFactory;
 
-    protected $fillable = ['teacher_id', 'device_uuid', 'device_type', 'activated_at', 'otp_id', 'revoked_at', 'fcm_token', 'firmware_version', 'firmware_checked_at'];
+    protected $fillable = ['teacher_id', 'device_uuid', 'device_type', 'label', 'activated_at', 'otp_id', 'revoked_at', 'fcm_token', 'firmware_version', 'firmware_checked_at'];
 
     protected $casts = [
         'activated_at' => 'datetime',

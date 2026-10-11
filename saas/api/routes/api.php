@@ -61,9 +61,21 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('backoffice');
 
     Route::post('/otp/generate', [OtpController::class, 'generate'])->middleware('backoffice');
-    Route::post('/devices/{device}/revoke', [DeviceController::class, 'revoke']);
-    Route::post('/devices/{device}/rotate-token', [DeviceController::class, 'rotateToken']);
-    Route::post('/devices/provision-relay', [DeviceController::class, 'provisionRelay']);
+    /*
+      Réservées aux administrateurs. `auth:sanctum` seul ne suffisait pas : un
+      enseignant s'authentifie aussi par token depuis l'app mobile, et aucune
+      de ces trois actions ne vérifiait à qui appartient le device. N'importe
+      quel compte authentifié pouvait donc révoquer les appareils des autres,
+      faire tourner le token d'une borne — qui n'a alors plus qu'un token
+      invalide en NVS et demande une visite sur site — ou se créer un device
+      `relay_gateway`.
+    */
+    Route::post('/devices/{device}/revoke', [DeviceController::class, 'revoke'])
+        ->middleware('backoffice');
+    Route::post('/devices/{device}/rotate-token', [DeviceController::class, 'rotateToken'])
+        ->middleware('backoffice');
+    Route::post('/devices/provision-relay', [DeviceController::class, 'provisionRelay'])
+        ->middleware('backoffice');
     Route::post('/devices/fcm-token', [DeviceController::class, 'updateFcmToken']);
 
     Route::post('/attendance/scan', [AttendanceController::class, 'scan']);

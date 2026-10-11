@@ -74,6 +74,43 @@ class EtablissementIdentifiantsTest extends TestCase
             ->assertFailed();
     }
 
+    public function test_tester_sans_code_porte_sur_tous_les_etablissements(): void
+    {
+        // `--tester` est un bilan : exiger `--tous` en plus ne produisait
+        // qu'un refus « Indiquez un code d'établissement ».
+        $this->artisan('etablissement:identifiants --tester')
+            ->expectsOutputToContain('TEST')
+            ->assertSuccessful();
+    }
+
+    public function test_le_mot_de_passe_peut_venir_d_un_fichier(): void
+    {
+        $etablissement = Etablissement::where('code', 'TEST')->firstOrFail();
+
+        // Saisie par fichier : sur un hébergement où `stty` est indisponible,
+        // Symfony ne masque pas la saisie clavier et le mot de passe
+        // s'afficherait en clair. Le fichier est la voie sûre.
+        $fichier = tempnam(sys_get_temp_dir(), 'mdp');
+        file_put_contents($fichier, "depuisUnFichier2026\n");
+
+        try {
+            // Arguments en tableau : le chemin temporaire peut contenir une
+            // espace, qu'un appel sous forme de chaîne découperait.
+            $this->artisan('etablissement:identifiants', [
+                'code' => 'TEST',
+                '--password-file' => $fichier,
+            ])->assertSuccessful();
+
+            $this->assertSame(
+                'depuisUnFichier2026',
+                Crypt::decryptString($this->motDePasseStocke($etablissement)),
+                'Le saut de ligne final laissé par un éditeur doit être retiré.',
+            );
+        } finally {
+            @unlink($fichier);
+        }
+    }
+
     /**
      * Le cœur du problème : `$etablissement->save()` lèverait ici, parce que
      * le cast `encrypted` fait déchiffrer l'ancienne valeur pour détecter le
