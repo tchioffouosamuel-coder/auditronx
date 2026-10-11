@@ -41,7 +41,7 @@ class AttendanceRecorder
         ?string $photoBase64 = null,
         array $extraAttributes = [],
     ): Presence {
-        $accessPoint = $this->resolveAccessPoint($qrCode, $bssid);
+        $accessPoint = $this->resolveAccessPoint($qrCode, $bssid, $timestamp);
 
         return $this->record($enseignant->id, $timestamp, [
             'source' => $source,
@@ -83,7 +83,7 @@ class AttendanceRecorder
             ]);
         }
 
-        $accessPoint = $this->resolveAccessPoint($qrCode, $bssid);
+        $accessPoint = $this->resolveAccessPoint($qrCode, $bssid, $timestamp);
 
         $presence = $this->record($cible->id, $timestamp, [
             'source' => $source,
@@ -111,7 +111,7 @@ class AttendanceRecorder
         return $presence;
     }
 
-    private function resolveAccessPoint(string $qrCode, string $bssid): AccessPoint
+    private function resolveAccessPoint(string $qrCode, string $bssid, Carbon $seenAt): AccessPoint
     {
         // ValidationException (pas firstOrFail/ModelNotFoundException) : un QR
         // code inconnu ne se "réparera" jamais tout seul, RelaySyncController
@@ -129,6 +129,10 @@ class AttendanceRecorder
             throw ValidationException::withMessages([
                 'bssid' => ['Borne WiFi non reconnue.'],
             ]);
+        }
+
+        if (! $accessPoint->last_seen_at || $seenAt->greaterThan($accessPoint->last_seen_at)) {
+            $accessPoint->forceFill(['last_seen_at' => $seenAt])->save();
         }
 
         return $accessPoint;
@@ -187,7 +191,7 @@ class AttendanceRecorder
                 return null;
             }
 
-            $path = 'scan-photos/' . date('Y/m/d') . '/' . Str::uuid() . '.jpg';
+            $path = 'scan-photos/'.date('Y/m/d').'/'.Str::uuid().'.jpg';
             Storage::disk('public_direct')->put($path, $binary);
 
             return $path;

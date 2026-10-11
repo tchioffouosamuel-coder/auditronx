@@ -21,6 +21,12 @@ const LIENS = [
     icon: "manage_accounts",
     admin: true,
   },
+  {
+    to: "/plateforme/journal-audit",
+    label: "Journal d’audit",
+    icon: "history",
+    admin: true,
+  },
 ];
 
 /**

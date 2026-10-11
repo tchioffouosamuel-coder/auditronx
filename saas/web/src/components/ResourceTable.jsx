@@ -95,6 +95,7 @@ export default function ResourceTable({
   columns,
   idKey = 'id',
   extraRowActions,
+  pollIntervalMs = 0,
 }) {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
@@ -107,8 +108,8 @@ export default function ResourceTable({
 
   const displayColumns = columns ?? fields.map((f) => ({ key: f.key, label: f.label }))
 
-  async function load() {
-    setLoading(true)
+  async function load(silent = false) {
+    if (!silent) setLoading(true)
     setError(null)
     try {
       setRows(await fetchAllPages(resource))
@@ -121,8 +122,11 @@ export default function ResourceTable({
 
   useEffect(() => {
     load()
+    if (!pollIntervalMs) return undefined
+    const timer = setInterval(() => load(true), pollIntervalMs)
+    return () => clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resource])
+  }, [resource, pollIntervalMs])
 
   useEffect(() => {
     fields

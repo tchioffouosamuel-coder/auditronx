@@ -30,6 +30,7 @@ import EtablissementsPage from "./pages/plateforme/EtablissementsPage";
 import FacturationPage from "./pages/plateforme/FacturationPage";
 import PresencesPlateformePage from "./pages/plateforme/PresencesPage";
 import UtilisateursPlateformePage from "./pages/plateforme/UtilisateursPage";
+import AuditPlateformePage from "./pages/plateforme/AuditPage";
 import TableauDeBordPlateformePage from "./pages/plateforme/TableauDeBordPage";
 import TeacherPortalPage from "./pages/TeacherPortalPage";
 import ValidationPage from "./pages/ValidationPage";
@@ -68,6 +69,7 @@ export default function App() {
             <Route path="presences" element={<PresencesPlateformePage />} />
             <Route path="facturation" element={<FacturationPage />} />
             <Route path="equipe" element={<UtilisateursPlateformePage />} />
+            <Route path="journal-audit" element={<AuditPlateformePage />} />
           </Route>
           <Route
             path="/enseignant"

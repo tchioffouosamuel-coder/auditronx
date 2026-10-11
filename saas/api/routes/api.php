@@ -50,7 +50,7 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/devices/request-activation', [DeviceController::class, 'requestActivation']);
 
 Route::middleware('auth:sanctum')->group(function () {
-    Route::get('/user', fn(Request $request) => $request->user());
+    Route::get('/user', fn (Request $request) => $request->user());
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/me/fcm-token', [AuthController::class, 'updateFcmToken']);
@@ -83,6 +83,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Passerelle offline ESP1/ESP2 (§hardware) : lots de pointages relayés en différé.
     Route::post('/relay/sync', [RelaySyncController::class, 'sync']);
+    Route::post('/relay/heartbeat', [DeviceLogController::class, 'heartbeat']);
     // Moniteur série à distance de la borne (§hardware, diagnostic).
     Route::post('/relay/logs', [DeviceLogController::class, 'store']);
 

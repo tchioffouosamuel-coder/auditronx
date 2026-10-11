@@ -106,6 +106,10 @@ class RelaySyncTest extends TestCase
 
         $response->assertJsonPath('results.0.status', 'ok');
         $this->assertDatabaseHas('presences', ['enseignant_id' => $enseignant->id]);
+        $this->assertSame(
+            now()->toDateTimeString(),
+            $accessPoint->fresh()->last_seen_at->toDateTimeString(),
+        );
     }
 
     /**

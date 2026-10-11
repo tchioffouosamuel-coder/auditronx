@@ -74,7 +74,8 @@ npm run dev    # proxy /api → AUDITRON_API_PROXY (défaut http://localhost:800
   recherche par téléphone), puis s'identifie. Le choix est mémorisé.
 - `/plateforme` : espace éditeur — tableau de bord avec historique d'activité
   sur six mois, suivi des présences de tout le parc, fiches et provisioning des
-  établissements, offres et facturation (PDF, suivi manuel des paiements).
+  établissements, offres et facturation (PDF, suivi manuel des paiements),
+  équipe et journal d'audit Auditron (réservé aux super-administrateurs).
 - `/plateforme/equipe` : gestion des comptes Auditron, réservée aux
   super-administrateurs. Le mot de passe initial généré est affiché une seule
   fois ; `plateforme:utilisateur` reste disponible en ligne de commande.
@@ -101,6 +102,9 @@ relais, créé dans la base de cet établissement), `STA_SSID` / `STA_PASSWORD`.
 ## Exploitation
 
 ```bash
+# Migrations de la base centrale (journal Auditron, comptes et facturation)
+php artisan central:migrate
+
 # Après chaque déploiement : met à niveau le schéma de tous les abonnés
 php artisan tenants:migrate
 

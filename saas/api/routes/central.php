@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\Central\AbonnementController;
 use App\Http\Controllers\Api\Central\AnnuaireController;
+use App\Http\Controllers\Api\Central\AuditLogController;
 use App\Http\Controllers\Api\Central\AuthController;
 use App\Http\Controllers\Api\Central\CatalogueController;
 use App\Http\Controllers\Api\Central\EtablissementController;
@@ -61,6 +62,8 @@ Route::middleware(['auth:sanctum', 'platform'])->group(function () {
 
     // Tout ce qui crée, provisionne, facture ou détruit : super-admin seul.
     Route::middleware('platform:admin')->group(function () {
+        Route::get('/audit-logs', [AuditLogController::class, 'index']);
+
         Route::get('/utilisateurs', [PlatformUserController::class, 'index']);
         Route::post('/utilisateurs', [PlatformUserController::class, 'store']);
         Route::put('/utilisateurs/{platformUser}', [PlatformUserController::class, 'update']);

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/admin_api_client.dart';
@@ -7,6 +8,7 @@ import '../../services/offline/pending_action.dart';
 import '../../services/offline/pending_actions_queue.dart';
 import '../../services/offline/sync_engine.dart';
 import '../../theme.dart';
+import '../../utils/borne_status.dart';
 
 const _cacheKey = 'admin_devices';
 
@@ -22,35 +24,49 @@ class AdminDevicesScreen extends StatefulWidget {
 class _AdminDevicesScreenState extends State<AdminDevicesScreen> {
   final _searchController = TextEditingController();
   late Future<List<dynamic>> _future;
+  Timer? _refreshTimer;
+  bool _refreshing = false;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _refresh();
+    });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _refreshTimer?.cancel();
     super.dispose();
   }
 
   Future<List<dynamic>> _load() async {
     final data = await OfflineCache.instance.readThrough(
       _cacheKey,
-      () => AdminApiClient.instance.get(
-        '/devices',
-        query: {'revoked': 'false', 'device_type': 'mobile'},
-      ),
+      () =>
+          AdminApiClient.instance.get('/devices', query: {'revoked': 'false'}),
     );
     return ((data as Map<String, dynamic>)['data'] as List<dynamic>)
-        .where((device) => device['device_type'] == 'mobile')
+        .where(
+          (device) =>
+              device['device_type'] == 'mobile' ||
+              device['device_type'] == 'relay_gateway',
+        )
         .toList();
   }
 
   Future<void> _refresh() async {
-    setState(() => _future = _load());
-    await _future;
+    if (_refreshing || !mounted) return;
+    _refreshing = true;
+    try {
+      setState(() => _future = _load());
+      await _future;
+    } finally {
+      _refreshing = false;
+    }
   }
 
   Future<void> _revoke(Map<String, dynamic> device) async {
@@ -235,10 +251,26 @@ class _AdminDevicesScreenState extends State<AdminDevicesScreen> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        subtitle: Text(
-                          '${d['device_type']} · ${d['device_uuid']}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${d['device_type']} · ${d['device_uuid']}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (d['device_type'] == 'relay_gateway')
+                              Text(
+                                '${borneIsOnline(d) ? 'En ligne' : 'Hors ligne'} · Dernier signe de vie : ${borneLastSeenLabel(d)}',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: borneIsOnline(d)
+                                      ? Colors.green.shade700
+                                      : Colors.red.shade700,
+                                ),
+                              ),
+                          ],
                         ),
                         /*
                           `trailing` ne reçoit que la largeur laissée par le

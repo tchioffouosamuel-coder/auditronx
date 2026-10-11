@@ -1578,6 +1578,25 @@ static int apiPost(ApiSession &session, const char *path, const String &body, ui
 
 static bool flushRemoteLogs(ApiSession *openSession = nullptr);
 
+static bool sendRelayHeartbeat()
+{
+    if (WiFi.status() != WL_CONNECTED)
+        return false;
+
+    ApiSession session;
+    String response;
+    StaticJsonDocument<64> payload;
+    payload["bssid"] = g_ble_address;
+    String body;
+    serializeJson(payload, body);
+    const uint32_t startedAt = millis();
+    const int status = apiPost(session, API_RELAY_HEARTBEAT_PATH, body, 10000, true, response);
+    noteTlsResult(status, startedAt, Serial);
+    if (status != 200)
+        Serial.printf("[heartbeat] échec HTTP %d\n", status);
+    return status == 200;
+}
+
 /**
  * Envoie le paquet `body` (voir readQueueHead) et retire de la file ce que
  * l'API confirme. true : paquet confirmé/rejeté, ou connexion réutilisée
@@ -2203,6 +2222,7 @@ static void syncTask(void *)
     uint32_t lastMemoryLog = millis();
     uint32_t lastDiagnostic = 0;
     uint32_t lastOtaCheck = 0;
+    uint32_t lastHeartbeat = 0;
     bool otaCheckedOnce = false;
     for (;;)
     {
@@ -2237,6 +2257,11 @@ static void syncTask(void *)
             otaCheckedOnce = true;
             lastOtaCheck = millis();
             checkForUpdate();
+        }
+        if (!apiInBackoff() && (lastHeartbeat == 0 || millis() - lastHeartbeat >= RELAY_HEARTBEAT_INTERVAL_MS))
+        {
+            lastHeartbeat = millis();
+            sendRelayHeartbeat();
         }
         if (millis() - lastMemoryLog >= MEMORY_LOG_INTERVAL_MS)
         {

@@ -38,6 +38,8 @@ class AuthController extends Controller
             ]);
         }
 
+        auth()->setUser($utilisateur);
+
         return response()->json([
             'token' => $utilisateur->createToken('plateforme')->plainTextToken,
             'user' => $utilisateur,

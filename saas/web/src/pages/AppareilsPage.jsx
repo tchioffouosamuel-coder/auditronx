@@ -18,6 +18,12 @@ function Icone({ nom, className = "" }) {
   );
 }
 
+function borneEnLigne(derniereVue, revoquee = false) {
+  if (revoquee || !derniereVue) return false;
+  const age = Date.now() - Date.parse(derniereVue);
+  return age >= 0 && age <= 2 * 60 * 1000;
+}
+
 function DevicesTable() {
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,8 +33,8 @@ function DevicesTable() {
   // Modification des données enregistrées dans une borne déjà en service.
   const [reconfiguration, setReconfiguration] = useState(null);
 
-  function load() {
-    setLoading(true);
+  function load(silent = false) {
+    if (!silent) setLoading(true);
     api
       .get("/devices")
       .then(({ data }) =>
@@ -41,7 +47,11 @@ function DevicesTable() {
       .finally(() => setLoading(false));
   }
 
-  useEffect(load, []);
+  useEffect(() => {
+    load(true);
+    const timer = setInterval(() => load(true), 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   async function revoke(device) {
     if (
@@ -147,6 +157,27 @@ function DevicesTable() {
               ? formatDateTime(d.activated_at, {})
               : "—",
           sortValue: (d) => d.activated_at ?? "",
+        },
+        {
+          key: "connexion",
+          label: "Connexion",
+          render: (d) =>
+            borneEnLigne(d.last_seen_at, Boolean(d.revoked_at)) ? (
+              <span className="font-medium text-green-700">En ligne</span>
+            ) : (
+              <span className="font-medium text-red-600">Hors ligne</span>
+            ),
+          searchValue: (d) =>
+            borneEnLigne(d.last_seen_at, Boolean(d.revoked_at))
+              ? "En ligne"
+              : "Hors ligne",
+          sortValue: (d) => Number(borneEnLigne(d.last_seen_at, Boolean(d.revoked_at))),
+        },
+        {
+          key: "last_seen_at",
+          label: "Dernier signe de vie",
+          render: (d) => formatDateTime(d.last_seen_at),
+          sortValue: (d) => d.last_seen_at ?? "",
         },
         {
           key: "statut",
@@ -329,6 +360,7 @@ export default function AppareilsPage() {
         <ResourceTable
           title=""
           resource="/access-points"
+          pollIntervalMs={30000}
           fields={[
             {
               key: "bssid",
@@ -343,6 +375,24 @@ export default function AppareilsPage() {
             { key: "bssid", label: "Adresse BLE" },
             { key: "ssid", label: "Nom BLE" },
             { key: "label", label: "Libellé" },
+            {
+              key: "connexion",
+              label: "Connexion",
+              render: (point) =>
+                borneEnLigne(point.last_seen_at) ? (
+                  <span className="font-medium text-green-700">En ligne</span>
+                ) : (
+                  <span className="font-medium text-red-600">Hors ligne</span>
+                ),
+              searchValue: (point) =>
+                borneEnLigne(point.last_seen_at) ? "En ligne" : "Hors ligne",
+            },
+            {
+              key: "last_seen_at",
+              label: "Dernier signe de vie",
+              render: (point) => formatDateTime(point.last_seen_at),
+              sortValue: (point) => point.last_seen_at ?? "",
+            },
           ]}
         />
       )}

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../services/plateforme_session.dart';
 import '../../theme.dart';
+import 'plateforme_audit_screen.dart';
 import 'plateforme_dashboard_screen.dart';
 import 'plateforme_etablissements_screen.dart';
 import 'plateforme_factures_screen.dart';
@@ -25,6 +26,7 @@ class _PlateformeHomeScreenState extends State<PlateformeHomeScreen> {
       (3, 'Présences du parc', Icons.fact_check_outlined),
       (4, 'Offres et abonnements', Icons.sell_outlined),
       if (estSuperAdmin) (5, 'Équipe Auditron', Icons.groups_outlined),
+      if (estSuperAdmin) (6, 'Journal d’audit Auditron', Icons.history),
     ];
     final selected = await showModalBottomSheet<int>(
       context: context,
@@ -61,6 +63,7 @@ class _PlateformeHomeScreenState extends State<PlateformeHomeScreen> {
       const PlateformePresencesScreen(),
       PlateformePlansScreen(estSuperAdmin: session.estSuperAdmin),
       if (session.estSuperAdmin) const PlateformeUtilisateursScreen(),
+      if (session.estSuperAdmin) const PlateformeAuditScreen(),
     ];
     final titles = [
       'Portail Auditron',
@@ -69,6 +72,7 @@ class _PlateformeHomeScreenState extends State<PlateformeHomeScreen> {
       'Présences du parc',
       'Offres et abonnements',
       if (session.estSuperAdmin) 'Équipe Auditron',
+      if (session.estSuperAdmin) 'Journal d’audit Auditron',
     ];
     if (_index >= pages.length) _index = 0;
 

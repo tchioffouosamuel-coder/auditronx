@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../widgets/admin/admin_crud_screen.dart';
 import '../../widgets/admin/admin_field_spec.dart';
+import '../../utils/borne_status.dart';
 
 /// Gestion des bornes BLE (§admin-mobile) — équivalent mobile de l'onglet
 /// « Bornes (BLE) » de AppareilsPage.jsx.
@@ -15,6 +16,7 @@ class AdminBornesScreen extends StatelessWidget {
       cacheKey: 'admin_bornes',
       icon: Icons.bluetooth,
       readOnly: true,
+      refreshInterval: const Duration(seconds: 30),
       fields: const [
         AdminFieldSpec(
           key: 'bssid',
@@ -27,10 +29,14 @@ class AdminBornesScreen extends StatelessWidget {
       ],
       itemTitle: (item) =>
           item['label']?.toString() ?? item['bssid']?.toString() ?? '—',
-      itemSubtitle: (item) => [
-        item['bssid'],
-        item['ssid'],
-      ].where((v) => v != null && v.toString().isNotEmpty).join(' · '),
+      itemSubtitle: (item) {
+        final available = borneIsOnline(item);
+        return [
+          item['bssid'],
+          item['ssid'],
+          '${available ? 'En ligne' : 'Hors ligne'} · Dernier signe de vie : ${borneLastSeenLabel(item)}',
+        ].where((v) => v != null && v.toString().isNotEmpty).join(' · ');
+      },
     );
   }
 }

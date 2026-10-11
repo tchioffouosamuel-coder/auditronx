@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AccessPoint;
 use App\Models\Device;
 use App\Models\DeviceLog;
 use Carbon\Carbon;
@@ -31,6 +32,8 @@ class DeviceLogController extends Controller
         if (! $device instanceof Device || $device->device_type !== 'relay_gateway' || $device->isRevoked()) {
             abort(403, 'Authentification passerelle relais requise.');
         }
+
+        $device->forceFill(['last_seen_at' => now()])->save();
 
         $data = $request->validate([
             'uptime_ms' => ['required', 'integer', 'min:0'],
@@ -63,6 +66,33 @@ class DeviceLogController extends Controller
         }
 
         return response()->json(['stored' => count($rows)], 201);
+    }
+
+    /** POST /api/relay/heartbeat — signal périodique de présence de la borne. */
+    public function heartbeat(Request $request)
+    {
+        $device = $request->user();
+
+        if (! $device instanceof Device || $device->device_type !== 'relay_gateway' || $device->isRevoked()) {
+            abort(403, 'Authentification passerelle relais requise.');
+        }
+
+        $data = $request->validate([
+            'bssid' => ['sometimes', 'string', 'max:50'],
+        ]);
+        $device->forceFill(['last_seen_at' => now()])->save();
+        $accessPoint = null;
+        if (! empty($data['bssid'])) {
+            $accessPoint = AccessPoint::where('bssid', $data['bssid'])->first();
+            if ($accessPoint && (! $accessPoint->last_seen_at || now()->greaterThan($accessPoint->last_seen_at))) {
+                $accessPoint->forceFill(['last_seen_at' => now()])->save();
+            }
+        }
+
+        return response()->json([
+            'last_seen_at' => $device->last_seen_at->toIso8601String(),
+            'bssid_seen' => $accessPoint?->last_seen_at?->toIso8601String(),
+        ]);
     }
 
     /**

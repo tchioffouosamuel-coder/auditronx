@@ -9,7 +9,11 @@ class AccessPoint extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['bssid', 'ssid', 'label', 'etablissement_id'];
+    protected $fillable = ['bssid', 'ssid', 'label', 'etablissement_id', 'last_seen_at'];
+
+    protected $casts = [
+        'last_seen_at' => 'datetime',
+    ];
 
     // `password` (colonne encore présente en base) n'est plus utilisé depuis
     // le passage au BLE (§hardware) : la connexion téléphone<->borne ne

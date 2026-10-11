@@ -50,6 +50,8 @@ class RelaySyncController extends Controller
             abort(403, 'Authentification passerelle relais requise.');
         }
 
+        $device->forceFill(['last_seen_at' => now()])->save();
+
         $data = $request->validate([
             'packets' => ['required', 'array', 'min:1', 'max:100'],
         ]);

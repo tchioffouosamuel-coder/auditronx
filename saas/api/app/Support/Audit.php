@@ -3,6 +3,8 @@
 namespace App\Support;
 
 use App\Models\AuditLog;
+use App\Models\Central\CentralAuditLog;
+use App\Models\Central\PlatformUser;
 use App\Models\Device;
 use App\Models\Enseignant;
 use App\Models\User;
@@ -29,7 +31,9 @@ class Audit
     private const CHAMPS_SENSIBLES = [
         'password', 'password_confirmation', 'current_password', 'mot_de_passe',
         'token', 'api_token', 'plain_token', 'remember_token', 'fcm_token',
-        'secret', 'code', 'otp', 'rfid_uid',
+        'teacher_token', 'access_token', 'refresh_token', 'authorization',
+        'secret', 'code', 'otp', 'rfid_uid', 'photo', 'photo_base64',
+        'photo_arrivee_path', 'photo_depart_path',
     ];
 
     private const MASQUE = '•••';
@@ -69,12 +73,35 @@ class Audit
         array $contexte = [],
         ?int $statut = null,
     ): void {
+        self::ecrire(AuditLog::class, $action, $sujet, $changements, $contexte, $statut);
+    }
+
+    /** Écrit dans le journal central, sans jamais basculer vers une base client. */
+    public static function enregistrerPlateforme(
+        string $action,
+        ?Model $sujet = null,
+        array $changements = [],
+        array $contexte = [],
+        ?int $statut = null,
+    ): void {
+        self::ecrire(CentralAuditLog::class, $action, $sujet, $changements, $contexte, $statut);
+    }
+
+    /** @param class-string<AuditLog|CentralAuditLog> $modeleJournal */
+    private static function ecrire(
+        string $modeleJournal,
+        string $action,
+        ?Model $sujet,
+        array $changements,
+        array $contexte,
+        ?int $statut,
+    ): void {
         if (! self::$actif) {
             return;
         }
 
         try {
-            AuditLog::create(array_merge(
+            $modeleJournal::create(array_merge(
                 self::auteur(),
                 self::requete(),
                 [
@@ -110,6 +137,16 @@ class Audit
             ];
         }
 
+        if ($auteur instanceof PlatformUser) {
+            return [
+                'auteur_type' => 'platform_user',
+                'auteur_id' => $auteur->id,
+                'auteur_nom' => $auteur->name,
+                'auteur_email' => $auteur->email,
+                'auteur_accreditation' => $auteur->role,
+            ];
+        }
+
         if ($auteur instanceof Enseignant) {
             return [
                 'auteur_type' => 'enseignant',
@@ -124,7 +161,7 @@ class Audit
             return [
                 'auteur_type' => 'borne',
                 'auteur_id' => $auteur->id,
-                'auteur_nom' => $auteur->nom ?? $auteur->identifiant ?? ('Borne #' . $auteur->id),
+                'auteur_nom' => $auteur->nom ?? $auteur->identifiant ?? ('Borne #'.$auteur->id),
                 'auteur_email' => null,
                 'auteur_accreditation' => null,
             ];
@@ -160,7 +197,7 @@ class Audit
 
         return [
             'methode' => Request::method(),
-            'url' => Str::limit(Request::fullUrl(), 2040, ''),
+            'url' => Str::limit(Request::url(), 2040, ''),
             'route' => Request::route()?->uri(),
             'ip' => Request::ip(),
             'user_agent' => Str::limit((string) Request::userAgent(), 500, ''),
@@ -178,7 +215,7 @@ class Audit
             }
         }
 
-        return class_basename($sujet) . ' #' . $sujet->getKey();
+        return class_basename($sujet).' #'.$sujet->getKey();
     }
 
     /** Remplace les valeurs sensibles et tronque ce qui est trop volumineux. */
@@ -187,7 +224,14 @@ class Audit
         $propre = [];
 
         foreach ($donnees as $champ => $valeur) {
-            if (in_array(strtolower((string) $champ), self::CHAMPS_SENSIBLES, true)) {
+            $nomChamp = strtolower((string) $champ);
+            if (in_array($nomChamp, self::CHAMPS_SENSIBLES, true)
+                || str_contains($nomChamp, 'token')
+                || str_contains($nomChamp, 'password')
+                || str_contains($nomChamp, 'secret')
+                || str_contains($nomChamp, 'photo')
+                || str_contains($nomChamp, 'face')
+                || str_contains($nomChamp, 'embedding')) {
                 $propre[$champ] = self::MASQUE;
 
                 continue;
@@ -195,7 +239,7 @@ class Audit
 
             if (is_array($valeur)) {
                 $propre[$champ] = count($valeur) > 50
-                    ? ['_tronque' => count($valeur) . ' éléments']
+                    ? ['_tronque' => count($valeur).' éléments']
                     : self::nettoyer($valeur);
 
                 continue;

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -58,6 +60,7 @@ class AdminCrudScreen extends StatefulWidget {
   /// pas de barre de recherche affichée.
   final List<String>? searchFields;
   final String searchHint;
+  final Duration? refreshInterval;
 
   const AdminCrudScreen({
     super.key,
@@ -77,6 +80,7 @@ class AdminCrudScreen extends StatefulWidget {
     this.readOnly = false,
     this.searchFields,
     this.searchHint = 'Rechercher…',
+    this.refreshInterval,
   });
 
   @override
@@ -87,16 +91,24 @@ class AdminCrudScreenState extends State<AdminCrudScreen> {
   late Future<List<dynamic>> _future;
   final _searchController = TextEditingController();
   String _query = '';
+  Timer? _refreshTimer;
+  bool _refreshing = false;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+    if (widget.refreshInterval != null) {
+      _refreshTimer = Timer.periodic(widget.refreshInterval!, (_) {
+        refresh();
+      });
+    }
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _refreshTimer?.cancel();
     super.dispose();
   }
 
@@ -130,8 +142,14 @@ class AdminCrudScreenState extends State<AdminCrudScreen> {
   }
 
   Future<void> refresh() async {
-    setState(() => _future = _load());
-    await _future;
+    if (_refreshing || !mounted) return;
+    _refreshing = true;
+    try {
+      setState(() => _future = _load());
+      await _future;
+    } finally {
+      _refreshing = false;
+    }
   }
 
   Future<void> editItem(Map<String, dynamic> item) => _openForm(item: item);

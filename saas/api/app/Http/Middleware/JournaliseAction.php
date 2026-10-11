@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Support\Audit;
 use App\Tenancy\TenantManager;
 use Closure;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
@@ -31,15 +32,14 @@ class JournaliseAction
         'api/assiduite/journal-hebdomadaire/pdf',
         'api/assiduite/sans-presence/pdf',
         'api/statistiques/export-zip',
+        'api/central/factures/*/pdf',
+        'api/audit-logs',
     ];
 
     public function handle(Request $request, Closure $next): Response
     {
-        // Hors contexte établissement (routes `/api/central/*`), il n'y a
-        // aucun journal où écrire : `audit_logs` vit dans la base du client,
-        // jamais dans la base centrale. Les actions de l'éditeur sont tracées
-        // de leur côté, par les contrôleurs de la plateforme.
-        if (! app(TenantManager::class)->estInitialise()) {
+        $plateforme = $request->is('api/central/*');
+        if (! $plateforme && ! app(TenantManager::class)->estInitialise()) {
             return $next($request);
         }
 
@@ -56,24 +56,51 @@ class JournaliseAction
             return $response;
         }
 
-        Audit::enregistrer(
+        $arguments = [
             $this->action($request, $response),
-            null,
+            $this->sujet($request),
             [],
             $this->contexte($request, $response),
             $response->getStatusCode(),
-        );
+        ];
+        if ($plateforme) {
+            Audit::enregistrerPlateforme(...$arguments);
+        } else {
+            Audit::enregistrer(...$arguments);
+        }
 
         return $response;
     }
 
     private function doitJournaliser(Request $request, Response $response): bool
     {
+        if ($request->is('api/relay/heartbeat')
+            || $request->is('api/relay/logs')
+            || $request->is('api/central/catalogue')
+            || $request->is('api/central/annuaire/resolve')) {
+            return false;
+        }
+
         if (in_array($request->method(), self::METHODES_ECRITURE, true)) {
             return true;
         }
 
+        if ($request->isMethod('GET') && $request->is('api/central/*')) {
+            return true;
+        }
+
         return $request->isMethod('GET') && $request->is(...self::LECTURES_SENSIBLES);
+    }
+
+    private function sujet(Request $request): ?Model
+    {
+        foreach ($request->route()?->parameters() ?? [] as $parametre) {
+            if ($parametre instanceof Model) {
+                return $parametre;
+            }
+        }
+
+        return null;
     }
 
     /** `DELETE api/personnel/{enseignant}` → `personnel.delete` (ou `.refuse`). */
@@ -92,7 +119,7 @@ class JournaliseAction
             ? 'refuse'
             : strtolower($request->method());
 
-        return ($chemin ?: 'requete') . '.' . $suffixe;
+        return ($chemin ?: 'requete').'.'.$suffixe;
     }
 
     private function contexte(Request $request, Response $response): array
@@ -113,13 +140,13 @@ class JournaliseAction
             $contexte['echec'] = $this->motifEchec($response);
         }
 
-        return array_filter($contexte, fn($v) => $v !== [] && $v !== null);
+        return array_filter($contexte, fn ($v) => $v !== [] && $v !== null);
     }
 
     private function motifEchec(Response $response): string
     {
         $corps = json_decode((string) $response->getContent(), true);
 
-        return Str::limit((string) ($corps['message'] ?? 'Erreur ' . $response->getStatusCode()), 300, '');
+        return Str::limit((string) ($corps['message'] ?? 'Erreur '.$response->getStatusCode()), 300, '');
     }
 }

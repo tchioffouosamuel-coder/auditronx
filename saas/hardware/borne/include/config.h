@@ -95,6 +95,7 @@ inline constexpr uint8_t BUZZER_GPIO = 25;
 // abonnés : un seul firmware, et plus une variante par client à recompiler.
 inline constexpr char API_BASE_URL[] = "https://api.auditronx.com";
 inline constexpr char API_RELAY_SYNC_PATH[] = "/api/relay/sync";
+inline constexpr char API_RELAY_HEARTBEAT_PATH[] = "/api/relay/heartbeat";
 
 inline constexpr char TENANT_HEADER[] = "X-Tenant";
 
@@ -221,6 +222,7 @@ inline constexpr uint32_t SYNC_INTERVAL_MS = 3000;
 inline constexpr unsigned API_BURST_MAX_PACKETS = 10;
 inline constexpr uint32_t API_BURST_MAX_MS = 15000;
 inline constexpr uint32_t SYNC_RETRY_INTERVAL_MS = 5000;
+inline constexpr uint32_t RELAY_HEARTBEAT_INTERVAL_MS = 30000;
 // API injoignable (connexion impossible, pas une réponse d'erreur) : l'attente
 // double à chaque échec consécutif, de SYNC_RETRY_INTERVAL_MS jusqu'à ce
 // plafond, et vaut pour tous les appels à l'API (synchro, journaux, OTA).
@@ -276,7 +278,7 @@ inline constexpr char NTP_SERVER[] = "pool.ntp.org";
 // destiné à l'OTA et à saisir à l'identique dans le backoffice lors de
 // l'upload : la borne flashe dès que la version active côté serveur diffère
 // de celle-ci (activer une version plus ancienne fait donc un rollback).
-inline constexpr char FIRMWARE_VERSION[] = "1.1.0";
+inline constexpr char FIRMWARE_VERSION[] = "1.1.1";
 inline constexpr char API_RELAY_FIRMWARE_MANIFEST_PATH[] = "/api/relay/firmware/manifest";
 // Cadence de vérification du manifest (en plus d'une vérification dès la
 // première connexion WiFi). Pas de canal push ici, contrairement au MQTT de

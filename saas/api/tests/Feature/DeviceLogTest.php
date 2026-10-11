@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AccessPoint;
 use App\Models\Device;
 use App\Models\DeviceLog;
 use App\Models\Enseignant;
@@ -43,6 +44,34 @@ class DeviceLogTest extends TestCase
             'uptime_ms' => 10,
             'lines' => [['uptime_ms' => 1, 'message' => 'x']],
         ])->assertForbidden();
+    }
+
+    public function test_heartbeat_actualise_le_dernier_signe_de_vie_de_la_borne(): void
+    {
+        $this->freezeTime();
+        $accessPoint = AccessPoint::factory()->create(['last_seen_at' => null]);
+        $relay = Device::factory()->create([
+            'device_type' => 'relay_gateway',
+            'teacher_id' => null,
+            'last_seen_at' => null,
+        ]);
+        $this->withToken($relay->createToken('esp32-borne-test')->plainTextToken);
+
+        $this->postJson('/api/relay/heartbeat', ['bssid' => $accessPoint->bssid])
+            ->assertOk()
+            ->assertJsonPath('last_seen_at', now()->toIso8601String())
+            ->assertJsonPath('bssid_seen', now()->toIso8601String());
+
+        $this->assertSame(now()->toDateTimeString(), $relay->fresh()->last_seen_at->toDateTimeString());
+        $this->assertSame(now()->toDateTimeString(), $accessPoint->fresh()->last_seen_at->toDateTimeString());
+    }
+
+    public function test_un_enseignant_ne_peut_pas_envoyer_un_heartbeat_de_borne(): void
+    {
+        $enseignant = Enseignant::factory()->create();
+        $this->withToken($enseignant->createToken('mobile')->plainTextToken);
+
+        $this->postJson('/api/relay/heartbeat')->assertForbidden();
     }
 
     public function test_le_backoffice_lit_les_logs_de_facon_incrementale(): void

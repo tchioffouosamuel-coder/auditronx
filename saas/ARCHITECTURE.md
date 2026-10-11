@@ -123,6 +123,21 @@ Les frontières d'autorisation sont volontairement nettes :
   utilisateur de cet établissement, pour que le journal d'audit du client reste
   lisible.
 
+## Présence des bornes
+
+Les relais ESP32 envoient un heartbeat authentifié toutes les 30 secondes,
+qui actualise aussi le point BLE correspondant. Les bornes BLE actualisent
+également leur dernier signe de vie lors d'un pointage reçu par l'API. Le portail et l'application mobile les affichent « En ligne » si
+ce signe date de moins de deux minutes, sinon « Hors ligne ». Pour les bornes
+BLE sans relais connecté, cet état reflète la dernière détection lors d'un
+pointage, et non un contrôle radio continu.
+
+Les actions d'écriture et les consultations sensibles des espaces établissement
+sont conservées dans le journal de l'établissement. Le portail Auditron conserve
+les consultations et écritures du personnel dans un journal central distinct.
+Ces journaux sont en lecture seule et les mots de passe, jetons et photos y sont
+masqués.
+
 ## Cycle de vie d'un abonné
 
 [`ProvisionneurEtablissement`](api/app/Tenancy/ProvisionneurEtablissement.php),

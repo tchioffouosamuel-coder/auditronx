@@ -2,7 +2,26 @@
 
 namespace App\Observers;
 
+use App\Models\AccessPoint;
+use App\Models\Accreditation;
 use App\Models\AuditLog;
+use App\Models\CahierTexteEntree;
+use App\Models\Classe;
+use App\Models\CoursValidation;
+use App\Models\Device;
+use App\Models\DeviceLog;
+use App\Models\Discipline;
+use App\Models\EmploiDuTemps;
+use App\Models\Enseignant;
+use App\Models\Ferie;
+use App\Models\Firmware;
+use App\Models\Otp;
+use App\Models\Parametre;
+use App\Models\Presence;
+use App\Models\Programme;
+use App\Models\QrPoint;
+use App\Models\Signalement;
+use App\Models\User;
 use App\Support\Audit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -61,7 +80,7 @@ class AuditObserver
     /** `App\Models\EmploiDuTemps` + `supprime` → `emploi_du_temps.supprime`. */
     private static function action(Model $model, string $verbe): string
     {
-        return Str::snake(class_basename($model)) . '.' . $verbe;
+        return Str::snake(class_basename($model)).'.'.$verbe;
     }
 
     /** Valeurs modifiées, sous la forme {champ: {avant, apres}}. */
@@ -71,7 +90,7 @@ class AuditObserver
         $avant = $model->getOriginal();
 
         foreach ($model->getChanges() as $champ => $apres) {
-            if (in_array($champ, ['updated_at', 'created_at'], true)) {
+            if (in_array($champ, ['updated_at', 'created_at', 'last_seen_at'], true)) {
                 continue;
             }
 
@@ -90,7 +109,7 @@ class AuditObserver
     /** Instantané complet d'une ligne, pour une création ou une suppression. */
     private static function valeurs(array $attributs): array
     {
-        unset($attributs['created_at'], $attributs['updated_at']);
+        unset($attributs['created_at'], $attributs['updated_at'], $attributs['last_seen_at']);
 
         return Audit::nettoyer($attributs);
     }
@@ -99,29 +118,29 @@ class AuditObserver
     public static function modelesSurveilles(): array
     {
         return [
-            \App\Models\Enseignant::class,
-            \App\Models\User::class,
-            \App\Models\Accreditation::class,
-            \App\Models\Classe::class,
-            \App\Models\Discipline::class,
-            \App\Models\EmploiDuTemps::class,
-            \App\Models\Ferie::class,
-            \App\Models\Signalement::class,
-            \App\Models\Presence::class,
-            \App\Models\CoursValidation::class,
-            \App\Models\Device::class,
-            \App\Models\AccessPoint::class,
-            \App\Models\QrPoint::class,
-            \App\Models\Firmware::class,
-            \App\Models\Parametre::class,
-            \App\Models\Programme::class,
-            \App\Models\CahierTexteEntree::class,
+            Enseignant::class,
+            User::class,
+            Accreditation::class,
+            Classe::class,
+            Discipline::class,
+            EmploiDuTemps::class,
+            Ferie::class,
+            Signalement::class,
+            Presence::class,
+            CoursValidation::class,
+            Device::class,
+            AccessPoint::class,
+            QrPoint::class,
+            Firmware::class,
+            Parametre::class,
+            Programme::class,
+            CahierTexteEntree::class,
         ];
     }
 
     /** Modèles explicitement exclus : volumineux, techniques ou déjà tracés ailleurs. */
     public static function modelesIgnores(): array
     {
-        return [AuditLog::class, \App\Models\DeviceLog::class, \App\Models\Otp::class];
+        return [AuditLog::class, DeviceLog::class, Otp::class];
     }
 }
