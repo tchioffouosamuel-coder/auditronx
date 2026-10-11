@@ -1147,6 +1147,218 @@ static void superviseStorage()
 // ---------------------------------------------------------------------------
 // Moteur de pull périodique vers l'API
 // ---------------------------------------------------------------------------
+// Point d'accès de configuration : l'app mobile (espace admin) lit et écrit
+// l'identité par WiFi, sans ouvrir le boîtier ni brancher d'ordinateur.
+//
+// Ce que cette API ne fait PAS : authentifier son appelant. La borne est hors
+// ligne sur son propre réseau, elle ne peut vérifier aucun compte. Le partage
+// des droits — l'école ne change que le WiFi, l'éditeur peut tout changer —
+// vit dans l'application. Ici, la seule barrière est la fenêtre d'ouverture du
+// point d'accès (voir AP_WINDOW_MS dans config.h), qui ramène l'autorisation à
+// une présence physique au moment de la mise sous tension.
+//
+// Le garde-fou `confirme_sensible` ci-dessous ne protège donc pas contre un
+// acteur malveillant : il protège contre un client fautif, qui enverrait un
+// tenant ou un token sans que personne ne l'ait demandé.
+// ---------------------------------------------------------------------------
+
+static void handleNotFound(); // défini plus bas, avec le serveur HTTP legacy
+
+static bool g_apActif = false;
+static uint32_t g_apOuvertDepuisMs = 0;
+
+/** État de la borne, pour l'écran de configuration de l'app. */
+static void handleConfigGet()
+{
+    StaticJsonDocument<512> doc;
+    doc["firmware"] = FIRMWARE_VERSION;
+    doc["provisionne"] = g_provisioned;
+    doc["tenant"] = g_identity.tenant;
+    // Jamais le token en clair : il sort une fois du backoffice, il ne doit
+    // pas pouvoir être relu depuis un réseau WiFi ouvert à portée.
+    doc["token_masque"] = maskedToken(g_identity.token);
+    doc["ssid"] = g_identity.ssid;
+    doc["label"] = bleDeviceName();
+    doc["adresse_ble"] = g_ble_address;
+    // La file en attente commande la procédure de changement d'établissement :
+    // la vider d'abord, sinon ses pointages seront refusés puis purgés par la
+    // nouvelle base. L'app doit pouvoir le dire avant de laisser faire.
+    doc["file_en_attente"] = (uint32_t)queueLength();
+    doc["stockage"] = g_sd_ready ? "carte SD" : "memoire interne";
+
+    String corps;
+    serializeJson(doc, corps);
+    server.send(200, "application/json", corps);
+}
+
+/**
+ * Écrit les champs fournis en NVS, puis redémarre.
+ *
+ * Seuls les champs présents et non vides sont écrits : un `set` écrase, et un
+ * mot de passe WiFi vide envoyé par distraction couperait la borne du réseau.
+ */
+static void handleConfigPost()
+{
+    if (!server.hasArg("plain"))
+    {
+        server.send(400, "application/json", "{\"erreur\":\"corps JSON manquant\"}");
+        return;
+    }
+
+    StaticJsonDocument<768> recu;
+    if (deserializeJson(recu, server.arg("plain")) != DeserializationError::Ok)
+    {
+        server.send(400, "application/json", "{\"erreur\":\"JSON illisible\"}");
+        return;
+    }
+
+    const String ssid = recu["ssid"] | "";
+    const String wifi = recu["wifi"] | "";
+    const String tenant = recu["tenant"] | "";
+    const String token = recu["token"] | "";
+    const String label = recu["label"] | "";
+    const bool confirme = recu["confirme_sensible"] | false;
+
+    // Changer d'établissement ou de token exige une confirmation explicite du
+    // client. Les deux ne se corrigent pas tout seuls : un tenant erroné écrit
+    // les pointages dans la base d'un autre lycée, un token erroné rend la
+    // borne muette jusqu'à une visite sur site.
+    if ((!tenant.isEmpty() || !token.isEmpty()) && !confirme)
+    {
+        server.send(409, "application/json",
+                    "{\"erreur\":\"tenant et token exigent confirme_sensible\"}");
+        return;
+    }
+
+    // Le WiFi se change par paire : garder une moitié de l'ancienne
+    // configuration laisserait la borne incapable de se connecter.
+    if (ssid.isEmpty() != wifi.isEmpty())
+    {
+        server.send(422, "application/json",
+                    "{\"erreur\":\"ssid et wifi doivent etre fournis ensemble\"}");
+        return;
+    }
+
+    StaticJsonDocument<256> applique;
+    JsonArray champs = applique.createNestedArray("champs");
+
+    if (!ssid.isEmpty())
+    {
+        identityWriteField(NVS_KEY_SSID, ssid);
+        identityWriteField(NVS_KEY_WIFI_PASSWORD, wifi);
+        champs.add("ssid");
+        champs.add("wifi");
+    }
+    if (!tenant.isEmpty())
+    {
+        identityWriteField(NVS_KEY_TENANT, tenant);
+        champs.add("tenant");
+    }
+    if (!token.isEmpty())
+    {
+        identityWriteField(NVS_KEY_TOKEN, token);
+        champs.add("token");
+    }
+    if (!label.isEmpty())
+    {
+        identityWriteField(NVS_KEY_LABEL, label);
+        champs.add("label");
+    }
+
+    if (champs.size() == 0)
+    {
+        server.send(422, "application/json", "{\"erreur\":\"aucun champ a ecrire\"}");
+        return;
+    }
+
+    applique["redemarrage"] = true;
+    String corps;
+    serializeJson(applique, corps);
+    server.send(200, "application/json", corps);
+
+    g_log.printf("[config] %u champ(s) ecrit(s) par le point d'acces, redemarrage\n",
+                 (unsigned)champs.size());
+
+    // Laisse la réponse partir avant de couper : sans ce délai l'app voit une
+    // connexion fermée et croit l'écriture perdue, alors qu'elle a eu lieu.
+    server.client().flush();
+    delay(400);
+    ESP.restart();
+}
+
+/** Page minimale, pour un diagnostic au navigateur depuis le téléphone. */
+static void handleConfigRacine()
+{
+    server.send(200, "text/plain",
+                String("Borne Auditron\nfirmware ") + FIRMWARE_VERSION +
+                    "\netablissement " + (g_identity.tenant.isEmpty() ? "(non configure)" : g_identity.tenant) +
+                    "\nAPI : GET et POST /config\n");
+}
+
+static void startConfigAp()
+{
+    if (g_apActif)
+        return;
+
+    /*
+      En service, le point d'accès cohabite avec la liaison au modem
+      (WIFI_AP_STA) : la borne continue d'envoyer ses pointages pendant qu'un
+      administrateur la reconfigure. En état d'usine il n'y a pas de réseau
+      connu, donc point d'accès seul.
+    */
+    WiFi.mode(g_provisioned ? WIFI_AP_STA : WIFI_AP);
+
+    if (!WiFi.softAP(AP_SSID, AP_PASSWORD))
+    {
+        g_log.println("[config] echec d'ouverture du point d'acces");
+        return;
+    }
+
+    server.on("/", HTTP_GET, handleConfigRacine);
+    server.on("/config", HTTP_GET, handleConfigGet);
+    server.on("/config", HTTP_POST, handleConfigPost);
+    server.onNotFound(handleNotFound);
+    server.begin();
+
+    g_apActif = true;
+    g_apOuvertDepuisMs = millis();
+
+    g_log.printf("[config] point d'acces « %s » ouvert sur %s%s\n", AP_SSID,
+                 WiFi.softAPIP().toString().c_str(),
+                 g_provisioned ? "" : " (sans limite : borne non provisionnee)");
+}
+
+static void stopConfigAp()
+{
+    if (!g_apActif)
+        return;
+
+    server.stop();
+    WiFi.softAPdisconnect(true);
+    WiFi.mode(WIFI_STA);
+
+    g_apActif = false;
+    g_log.println("[config] point d'acces referme");
+}
+
+/**
+ * Appelée depuis loop(). Sert les requêtes tant que le point d'accès est
+ * ouvert, et le referme à la fin de la fenêtre — sauf en état d'usine, où il
+ * reste ouvert : la borne n'est pas en service, et c'est le moment où on en a
+ * besoin.
+ */
+static void superviseConfigAp()
+{
+    if (!g_apActif)
+        return;
+
+    server.handleClient();
+
+    if (g_provisioned && millis() - g_apOuvertDepuisMs >= AP_WINDOW_MS)
+        stopConfigAp();
+}
+
+// ---------------------------------------------------------------------------
 
 /**
  * Client TLS statique et réutilisé d'un cycle à l'autre (évite l'overhead de
@@ -2539,7 +2751,10 @@ void setup()
     */
     if (!g_provisioned)
     {
-        g_log.println("[identite] aucune identite en NVS : borne hors service, provisionnez-la au moniteur serie");
+        g_log.println("[identite] aucune identite en NVS : borne hors service");
+        // Ouvert sans limite ici : c'est la voie de mise en service depuis
+        // l'app mobile, pour qui n'a ni ordinateur ni câble USB sur site.
+        startConfigAp();
         return;
     }
 
@@ -2553,6 +2768,12 @@ void setup()
     setupBle();
 
     delay(1500);
+
+    // Avant WiFi.begin() : startConfigAp() bascule la radio en AP+STA, et la
+    // connexion au modem démarre ensuite dans ce mode. L'inverse couperait la
+    // tentative de connexion en cours.
+    startConfigAp();
+
     g_log.println("[wifi] tentative de connexion au modem...");
     WiFi.begin(g_identity.ssid.c_str(), g_identity.wifiPassword.c_str());
     // Conservée par le pilote pour les reconnexions (connectWifiIfNeeded()).
@@ -2573,6 +2794,9 @@ void loop()
     // Toujours en premier, et avant le filtre d'état d'usine : la console est
     // la seule voie de mise en service, elle ne doit dépendre de rien.
     handleProvisioningConsole();
+    // Avant le filtre d'état d'usine : c'est justement là que le point d'accès
+    // sert le plus.
+    superviseConfigAp();
 
     if (!g_provisioned)
     {

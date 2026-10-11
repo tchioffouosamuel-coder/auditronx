@@ -4,6 +4,27 @@ export default function Modal({ title, onClose, children }) {
   const panneau = useRef(null);
 
   /*
+    `onClose` est toujours passé en fonction fléchée par les appelants, donc
+    recréé à chaque rendu. Le garder dans les dépendances d'un effet qui
+    déplace le focus rejouait cet effet à CHAQUE frappe : le curseur quittait
+    le champ de saisie à chaque caractère et il fallait recliquer dedans. On
+    le lit donc à travers une référence, et on sépare les deux effets.
+  */
+  const fermer = useRef(onClose);
+
+  // Mise à jour après chaque rendu (pas pendant : une référence ne se touche
+  // pas en cours de rendu), sans tableau de dépendances.
+  useEffect(() => {
+    fermer.current = onClose;
+  });
+
+  // Une seule fois, à l'ouverture : sans ça le focus resterait sur le bouton
+  // qui a ouvert la boîte, derrière l'overlay.
+  useEffect(() => {
+    panneau.current?.focus();
+  }, []);
+
+  /*
     Échap pour fermer, et défilement de la page bloqué derrière la boîte :
     jusqu'ici seul le bouton « ✕ » fermait la fenêtre, et faire défiler
     au-dessus de l'arrière-plan déplaçait la page cachée — on perdait sa place
@@ -11,22 +32,18 @@ export default function Modal({ title, onClose, children }) {
   */
   useEffect(() => {
     function onKeyDown(event) {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") fermer.current();
     }
 
     const overflowInitial = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     document.addEventListener("keydown", onKeyDown);
 
-    // Le focus part sur le panneau : sans ça il reste sur le bouton qui a
-    // ouvert la boîte, derrière l'overlay.
-    panneau.current?.focus();
-
     return () => {
       document.body.style.overflow = overflowInitial;
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [onClose]);
+  }, []);
 
   return (
     <div

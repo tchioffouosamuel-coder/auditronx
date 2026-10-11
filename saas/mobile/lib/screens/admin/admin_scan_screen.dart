@@ -224,9 +224,15 @@ class _AdminAssiduiteCardState extends State<_AdminAssiduiteCard> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      Text(
-                        '$daysPresent / $daysExpected jours',
-                        style: const TextStyle(color: AuditronColors.ink500),
+                      // Même cause qu'AssiduiteMensuelleCard : le taux occupe
+                      // 32px de haut et l'essentiel de la largeur.
+                      Flexible(
+                        child: Text(
+                          '$daysPresent / $daysExpected jours',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: AuditronColors.ink500),
+                        ),
                       ),
                     ],
                   ),

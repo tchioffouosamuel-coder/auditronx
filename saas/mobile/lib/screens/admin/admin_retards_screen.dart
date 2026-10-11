@@ -317,13 +317,19 @@ class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              '${l['jours_retard'] ?? 0}j · ${l['minutes_retard_total'] ?? 0}min',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AuditronColors.ink500,
+                            // `overflow: ellipsis` ne fait rien sur un Text
+                            // non contraint : il prend sa largeur naturelle et
+                            // c'est le Row qui déborde. Flexible lui donne la
+                            // place restante, et l'ellipse opère enfin.
+                            Flexible(
+                              child: Text(
+                                '${l['jours_retard'] ?? 0}j · ${l['minutes_retard_total'] ?? 0}min',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AuditronColors.ink500,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 4),

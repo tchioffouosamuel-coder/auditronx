@@ -32,9 +32,13 @@ export function AuthProvider({ children }) {
         localStorage.setItem("auditron_user", JSON.stringify(data));
       })
       .catch(() => {
+        // `clearAuthToken()` était appelé ici sans exister nulle part : la
+        // moindre erreur sur /me (jeton expiré, API injoignable, abonnement
+        // suspendu) levait une ReferenceError AVANT setUser(null). La session
+        // restait donc ouverte côté interface avec un jeton mort, et toutes
+        // les requêtes suivantes partaient en 401.
         localStorage.removeItem("auditron_token");
         localStorage.removeItem("auditron_user");
-        clearAuthToken();
         setUser(null);
       })
       .finally(() => setLoading(false));

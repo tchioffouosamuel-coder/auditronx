@@ -232,10 +232,26 @@ class _AdminDevicesScreenState extends State<AdminDevicesScreen> {
                         ),
                         title: Text(
                           d['teacher']?['nom'] ?? d['device_type'] ?? '—',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         subtitle: Text(
                           '${d['device_type']} · ${d['device_uuid']}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
+                        /*
+                          `trailing` ne reçoit que la largeur laissée par le
+                          titre. Un IconButton (48dp) suivi d'un TextButton
+                          « Révoquer » (~90dp) n'y tenait pas dès qu'un nom
+                          d'enseignant était un peu long : RenderFlex
+                          overflowed. Deux boutons icônes tiennent, et le
+                          libellé passe en infobulle.
+
+                          Les textes du ListTile sont tronqués pour la même
+                          raison : un `device_uuid` est long et sans espace,
+                          donc insécable.
+                        */
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -248,9 +264,14 @@ class _AdminDevicesScreenState extends State<AdminDevicesScreen> {
                                 ),
                                 onPressed: () => _rotateToken(d),
                               ),
-                            TextButton(
+                            IconButton(
+                              tooltip: 'Révoquer',
+                              icon: Icon(
+                                Icons.link_off,
+                                size: 20,
+                                color: Colors.red.shade700,
+                              ),
                               onPressed: () => _revoke(d),
-                              child: const Text('Révoquer'),
                             ),
                           ],
                         ),

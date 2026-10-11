@@ -99,10 +99,28 @@ export function TenantProvider({ children }) {
     return normalise;
   }, []);
 
+  /**
+   * Changer d'établissement remet l'application à zéro, par un rechargement
+   * complet.
+   *
+   * Vider le stockage et poser `code` à "" ne suffisait pas : `AuthContext`
+   * garde l'utilisateur dans son propre état React, initialisé une seule fois
+   * au démarrage. Le jeton disparaissait du stockage mais l'interface
+   * continuait de croire la session ouverte — la sidebar restait en place, la
+   * redirection vers l'écran de connexion n'avait pas lieu, et le bouton
+   * paraissait sans effet.
+   *
+   * Un rechargement plutôt qu'un câblage entre les deux contextes : tout ce
+   * qui est en mémoire est propre à l'établissement quitté — session, branding,
+   * listes déjà chargées, caches des pages ouvertes. Les remettre à zéro une à
+   * une laisserait forcément un oubli, et une donnée d'un lycée affichée sous
+   * le nom d'un autre est exactement ce qu'on ne peut pas se permettre.
+   */
   const changerEtablissement = useCallback(() => {
     oublierEtablissement();
     setBranding(null);
     setCode("");
+    window.location.assign("/");
   }, []);
 
   return (

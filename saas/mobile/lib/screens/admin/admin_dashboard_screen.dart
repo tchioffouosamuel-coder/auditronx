@@ -109,9 +109,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Situation du ${d['date'] ?? _dateStr}',
-                    style: Theme.of(context).textTheme.titleMedium,
+                  // La date et le bouton se partagent la ligne : le texte doit
+                  // céder, pas déborder.
+                  Expanded(
+                    child: Text(
+                      'Situation du ${d['date'] ?? _dateStr}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
                   ),
                   TextButton.icon(
                     onPressed: _pickDate,
@@ -208,9 +214,16 @@ class _DashboardPeopleSection extends StatelessWidget {
               children: [
                 Icon(icon, color: color, size: 20),
                 const SizedBox(width: 8),
-                Text(
-                  '$title (${people.length})',
-                  style: Theme.of(context).textTheme.titleMedium,
+                // « Absents selon l'emploi du temps (12) » ne tient pas à côté
+                // de l'icône sur un écran étroit : sans Expanded, le Row
+                // débordait au lieu de tronquer.
+                Expanded(
+                  child: Text(
+                    '$title (${people.length})',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                 ),
               ],
             ),

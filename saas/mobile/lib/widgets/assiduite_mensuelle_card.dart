@@ -67,10 +67,7 @@ class _AssiduiteMensuelleCardState extends State<AssiduiteMensuelleCard> {
                     style: TextStyle(color: AuditronColors.ink500),
                   ),
                 ),
-                TextButton(
-                  onPressed: _refresh,
-                  child: const Text('Réessayer'),
-                ),
+                TextButton(onPressed: _refresh, child: const Text('Réessayer')),
               ],
             ),
           );
@@ -97,9 +94,10 @@ class _Contenu extends StatelessWidget {
     final emploiCharge = donnees['emploi_du_temps_charge'] == true;
     final horaireFixe = donnees['horaire_fixe'] == true;
 
-    final mois = DateFormat('MMMM yyyy', 'fr').format(
-      DateTime.tryParse('${donnees['mois']}') ?? DateTime.now(),
-    );
+    final mois = DateFormat(
+      'MMMM yyyy',
+      'fr',
+    ).format(DateTime.tryParse('${donnees['mois']}') ?? DateTime.now());
 
     // Aucun jour attendu : le pourcentage ne veut rien dire, on explique au
     // lieu d'afficher un 0 % trompeur.
@@ -152,9 +150,15 @@ class _Contenu extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  '$joursPresents / $joursAttendus jours',
-                  style: const TextStyle(color: AuditronColors.ink500),
+                // Le taux est en 34px : sur un écran étroit il ne reste pas
+                // assez pour « 22 / 23 jours », et le Row débordait.
+                Flexible(
+                  child: Text(
+                    '$joursPresents / $joursAttendus jours',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: AuditronColors.ink500),
+                  ),
                 ),
               ],
             ),

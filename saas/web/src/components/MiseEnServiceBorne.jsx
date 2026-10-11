@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTenant } from "../context/TenantContext";
+import BlocCommandes from "./BlocCommandes";
 
 /**
  * Fiche de mise en service d'une borne : le token fraîchement émis, et le bloc
@@ -21,7 +22,6 @@ export default function MiseEnServiceBorne({ device, token }) {
   const { code } = useTenant();
   const [ssid, setSsid] = useState("");
   const [motDePasse, setMotDePasse] = useState("");
-  const [copie, setCopie] = useState(false);
 
   const label = device?.label || device?.device_uuid || "";
 
@@ -35,20 +35,7 @@ export default function MiseEnServiceBorne({ device, token }) {
     "reboot",
   ].filter(Boolean);
 
-  const bloc = lignes.join("\n");
   const complet = Boolean(ssid && motDePasse);
-
-  async function copier() {
-    try {
-      await navigator.clipboard.writeText(bloc);
-      setCopie(true);
-      setTimeout(() => setCopie(false), 2500);
-    } catch {
-      // Presse-papiers refusé (contexte non sécurisé, permission) : le bloc
-      // reste sélectionnable à la main, inutile d'alerter.
-      setCopie(false);
-    }
-  }
 
   return (
     <div className="space-y-4">
@@ -100,28 +87,17 @@ export default function MiseEnServiceBorne({ device, token }) {
         uniquement à compléter le bloc ci-dessous.
       </p>
 
-      <div>
-        <div className="mb-1.5 flex items-center justify-between gap-2">
-          <span className="section-title">
-            À coller dans le moniteur série de la borne
-          </span>
-          <button type="button" onClick={copier} className="btn-secondary px-2.5 py-1 text-xs">
-            <span aria-hidden="true" className="material-symbols-rounded text-[16px]">
-              {copie ? "check" : "content_copy"}
-            </span>
-            {copie ? "Copié" : "Copier"}
-          </button>
-        </div>
-        <pre className="overflow-x-auto rounded-xl bg-brand-950 px-3 py-2.5 font-mono text-xs leading-relaxed text-brand-100">
-          {bloc}
-        </pre>
+      <BlocCommandes
+        lignes={lignes}
+        titre="À coller dans le moniteur série de la borne"
+      >
         {!complet && (
           <p className="mt-1.5 text-xs font-medium text-gold-700">
             Renseignez le WiFi ci-dessus, ou remplacez les deux valeurs en
             majuscules avant de coller.
           </p>
         )}
-      </div>
+      </BlocCommandes>
 
       <ol className="space-y-1.5 rounded-2xl bg-brand-50 p-3 text-xs text-ink-600">
         <li>

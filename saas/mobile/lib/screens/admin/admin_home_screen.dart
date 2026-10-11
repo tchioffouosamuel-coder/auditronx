@@ -6,6 +6,7 @@ import '../../widgets/sync_status_banner.dart';
 import '../change_password_screen.dart';
 import 'admin_alertes_screen.dart';
 import 'admin_assiduite_screen.dart';
+import 'admin_borne_config_screen.dart';
 import 'admin_bornes_screen.dart';
 import 'admin_cahier_texte_screen.dart';
 import 'admin_classes_screen.dart';
@@ -188,6 +189,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             icon: Icons.fact_check_outlined,
             screen: const AdminJournalAuditScreen(),
           ),
+        // Même précaution : en fin de liste, pour ne pas décaler
+        // `_primaryIndexes`.
+        _AdminMenuEntry(
+          title: 'Configurer une borne',
+          icon: Icons.settings_input_antenna,
+          screen: const AdminBorneConfigScreen(),
+        ),
       ],
     ),
   ];

@@ -149,6 +149,35 @@ inline constexpr char NVS_KEY_LABEL[] = "label";
 // Cadence du rappel imprimé sur le port série en état d'usine.
 inline constexpr uint32_t PROVISION_PROMPT_INTERVAL_MS = 15000;
 
+// ---- Point d'accès de configuration (app mobile, espace admin) ----
+//
+// La borne ouvre son propre réseau WiFi, auquel le téléphone de
+// l'administrateur se connecte pour lire et écrire l'identité sans ouvrir le
+// boîtier ni brancher d'ordinateur. L'API locale est servie sur
+// http://192.168.4.1 (adresse par défaut du mode AP de l'ESP32).
+inline constexpr char AP_SSID[] = "Borne Auditron";
+inline constexpr char AP_PASSWORD[] = "1234567890";
+
+/*
+  Le point d'accès n'est PAS ouvert en permanence.
+
+  Il l'est pendant cette fenêtre après chaque mise sous tension, puis se
+  referme seul. La raison est une limite qu'il faut assumer : la borne n'a
+  aucun moyen de savoir si le téléphone qui lui parle appartient à la
+  direction de l'école ou à l'éditeur — elle est hors ligne sur son propre
+  réseau, elle ne peut vérifier aucun compte. Le partage des droits vit dans
+  l'application, pas ici.
+
+  Fermer le point d'accès après quelques minutes ramène donc l'autorisation à
+  ce que la borne peut réellement constater : la présence physique de
+  quelqu'un qui vient de la mettre sous tension. À portée WiFi un jour
+  quelconque, il n'y a plus rien à joindre.
+
+  En état d'usine, en revanche, il reste ouvert sans limite : la borne n'est
+  pas en service, et c'est précisément le moment où on a besoin d'elle.
+*/
+inline constexpr uint32_t AP_WINDOW_MS = 10UL * 60UL * 1000UL;
+
 // ---- Graines de transition (laisser vides sur un binaire neuf) ----
 //
 // Écrites en NVS au premier démarrage, et UNIQUEMENT si la NVS est vide :
@@ -247,7 +276,7 @@ inline constexpr char NTP_SERVER[] = "pool.ntp.org";
 // destiné à l'OTA et à saisir à l'identique dans le backoffice lors de
 // l'upload : la borne flashe dès que la version active côté serveur diffère
 // de celle-ci (activer une version plus ancienne fait donc un rollback).
-inline constexpr char FIRMWARE_VERSION[] = "1.0.9";
+inline constexpr char FIRMWARE_VERSION[] = "1.1.0";
 inline constexpr char API_RELAY_FIRMWARE_MANIFEST_PATH[] = "/api/relay/firmware/manifest";
 // Cadence de vérification du manifest (en plus d'une vérification dès la
 // première connexion WiFi). Pas de canal push ici, contrairement au MQTT de

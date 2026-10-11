@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import DataTable from "../components/DataTable";
 import MiseEnServiceBorne from "../components/MiseEnServiceBorne";
+import ReconfigurationBorne from "../components/ReconfigurationBorne";
 import Modal from "../components/Modal";
 import RelayQueueImport from "../components/RelayQueueImport";
 import ResourceTable from "../components/ResourceTable";
@@ -23,6 +24,8 @@ function DevicesTable() {
   // Formulaire de déclaration d'une borne, puis fiche de mise en service.
   const [creation, setCreation] = useState(null);
   const [miseEnService, setMiseEnService] = useState(null);
+  // Modification des données enregistrées dans une borne déjà en service.
+  const [reconfiguration, setReconfiguration] = useState(null);
 
   function load() {
     setLoading(true);
@@ -163,6 +166,14 @@ function DevicesTable() {
           <div className="flex gap-3">
             {d.device_type === "relay_gateway" && (
               <button
+                onClick={() => setReconfiguration(d)}
+                className="text-ink-600 hover:text-brand-800"
+              >
+                Reconfigurer
+              </button>
+            )}
+            {d.device_type === "relay_gateway" && (
+              <button
                 onClick={() => rotateToken(d)}
                 className="text-brand-700 hover:text-brand-900"
               >
@@ -241,6 +252,15 @@ function DevicesTable() {
               </button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {reconfiguration && (
+        <Modal
+          title={`Reconfigurer ${reconfiguration.label || reconfiguration.device_uuid}`}
+          onClose={() => setReconfiguration(null)}
+        >
+          <ReconfigurationBorne device={reconfiguration} />
         </Modal>
       )}
 

@@ -9,6 +9,7 @@ const LIENS = [
     end: true,
   },
   { to: "/plateforme/etablissements", label: "Établissements", icon: "school" },
+  { to: "/plateforme/presences", label: "Présences", icon: "fact_check" },
   {
     to: "/plateforme/facturation",
     label: "Offres & facturation",

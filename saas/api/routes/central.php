@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Central\CatalogueController;
 use App\Http\Controllers\Api\Central\EtablissementController;
 use App\Http\Controllers\Api\Central\FactureController;
 use App\Http\Controllers\Api\Central\PlanController;
+use App\Http\Controllers\Api\Central\PresenceController;
 use App\Http\Controllers\Api\Central\TableauDeBordController;
 use Illuminate\Support\Facades\Route;
 
@@ -37,6 +38,16 @@ Route::middleware(['auth:sanctum', 'platform'])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
 
     Route::get('/tableau-de-bord', [TableauDeBordController::class, 'index']);
+
+    /*
+      Consultation des présences de tout le parc. Ouverte au support, comme la
+      lecture du parc : répondre à « est-ce que les pointages remontent ? »
+      sans se faire inviter dans la base du client était l'objet même de cette
+      route. C'est la seule route centrale qui lit des données métier en
+      volume — elle ouvre un contexte locataire par établissement, voir le
+      commentaire du contrôleur.
+    */
+    Route::get('/presences', [PresenceController::class, 'index']);
 
     // Lecture du parc ouverte à tout le personnel Auditron (support inclus).
     Route::get('/etablissements', [EtablissementController::class, 'index']);
