@@ -6,6 +6,8 @@ use App\Models\Central\Etablissement;
 use App\Models\Enseignant;
 use App\Tenancy\TenantManager;
 use Illuminate\Console\Command;
+use Illuminate\Contracts\Encryption\DecryptException;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
@@ -177,6 +179,14 @@ class Diagnostic extends Command
                 continue;
             }
 
+            // Avant la connexion : le mot de passe stocké est-il lisible ?
+            // Sans ce contrôle, une APP_KEY changée faisait rapporter les cinq
+            // établissements « injoignables : The MAC is invalid » — le
+            // symptôme, jamais la cause, et la connexion n'est même pas tentée.
+            if (! $this->motDePasseLisible($etablissement, $prefixe)) {
+                continue;
+            }
+
             try {
                 [$tables, $agents] = $tenants->execute($etablissement, fn () => [
                     count(DB::connection('tenant')->getSchemaBuilder()->getTableListing()),
@@ -213,6 +223,39 @@ class Diagnostic extends Command
                 ! is_writable($chemin) => $this->ko("{$relatif} non accessible en écriture"),
                 default => $this->ok($relatif),
             };
+        }
+    }
+
+    /**
+     * Le `db_password` chiffré de cet établissement se déchiffre-t-il avec
+     * l'APP_KEY en service ?
+     *
+     * Lecture par le constructeur de requêtes et non par le modèle : le cast
+     * `encrypted` lèverait au premier accès à l'attribut, ce qu'on veut
+     * justement attraper pour le nommer.
+     */
+    private function motDePasseLisible(Etablissement $etablissement, string $prefixe): bool
+    {
+        $chiffre = DB::connection('central')
+            ->table('etablissements')
+            ->where('id', $etablissement->id)
+            ->value('db_password');
+
+        if ($chiffre === null || $chiffre === '') {
+            return true; // Les identifiants du .env s'appliquent.
+        }
+
+        try {
+            Crypt::decryptString((string) $chiffre);
+
+            return true;
+        } catch (DecryptException $e) {
+            $this->ko("{$prefixe} mot de passe de base illisible : {$e->getMessage()}");
+            $this->ligne('         chiffré avec une autre APP_KEY que celle en service.');
+            $this->ligne('         → restaurer l’ancienne clé (APP_KEY ou APP_PREVIOUS_KEYS),');
+            $this->ligne('           ou resaisir : php artisan etablissement:identifiants --tous');
+
+            return false;
         }
     }
 

@@ -521,21 +521,54 @@ static void handleProvisioningConsole()
     while (Serial.available() > 0)
     {
         const char c = (char)Serial.read();
-        if (c == '\r')
-            continue;
 
-        if (c != '\n')
+        /*
+          CR, LF ou CRLF valent tous fin de ligne : selon le terminal, la
+          touche Entrée envoie l'un ou l'autre (CRLF par défaut dans
+          `pio device monitor`, CR seul dans le moniteur de l'IDE Arduino
+          réglé sur « Retour chariot », rien du tout s'il est sur « Aucun »).
+          N'agir que sur LF rendait la console inutilisable dans le deuxième
+          cas, sans aucun indice : la commande était tapée mais jamais
+          exécutée. La ligne vide que produit le second caractère d'un CRLF
+          est ignorée par executeProvisioningCommand().
+        */
+        if (c == '\r' || c == '\n')
         {
-            // Plafond du tampon : une ligne plus longue qu'un token Sanctum
-            // avec sa marge ne peut venir que d'un collage accidentel.
-            if (g_serialLine.length() < 256)
-                g_serialLine += c;
+            const String line = g_serialLine;
+            g_serialLine = "";
+            if (!line.isEmpty())
+                Serial.println();
+            executeProvisioningCommand(line);
             continue;
         }
 
-        const String line = g_serialLine;
-        g_serialLine = "";
-        executeProvisioningCommand(line);
+        // Correction de frappe : un token Sanctum fait une cinquantaine de
+        // caractères, le retaper en entier pour une faute serait pénible.
+        if (c == 0x08 || c == 0x7F) // retour arrière, suppression
+        {
+            if (g_serialLine.length() > 0)
+            {
+                g_serialLine.remove(g_serialLine.length() - 1);
+                Serial.print(F("\b \b"));
+            }
+            continue;
+        }
+
+        // Plafond du tampon : une ligne plus longue qu'un token Sanctum avec
+        // sa marge ne peut venir que d'un collage accidentel.
+        if (g_serialLine.length() < 256)
+        {
+            g_serialLine += c;
+
+            /*
+              La borne renvoie les caractères reçus : les moniteurs série
+              n'activent pas l'écho local par défaut, et saisir un token de
+              cinquante caractères sans rien voir à l'écran est intenable. Ne
+              pas activer l'écho du terminal par-dessus (`--echo`), chaque
+              caractère apparaîtrait en double.
+            */
+            Serial.write((uint8_t)c);
+        }
     }
 }
 
