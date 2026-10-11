@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Central\Abonnement;
 use App\Models\Central\Etablissement;
 use App\Models\Central\Facture;
+use App\Models\Central\Plan;
 use App\Models\Enseignant;
 use App\Models\Presence;
 use App\Tenancy\TenantManager;
@@ -51,13 +52,84 @@ class TableauDeBordController extends Controller
                     ->whereNotNull('echeance_le')
                     ->whereDate('echeance_le', '<', now()->toDateString())
                     ->count(),
-                'encaisse_mois' => (float) Facture::where('statut', Facture::STATUT_PAYEE)
+                'encaisse_mois' => Facture::where('statut', Facture::STATUT_PAYEE)
                     ->whereYear('payee_le', now()->year)
                     ->whereMonth('payee_le', now()->month)
-                    ->sum('montant'),
+                    ->selectRaw('devise, sum(montant) as total')
+                    ->groupBy('devise')
+                    ->pluck('total', 'devise'),
+            ],
+            'offres' => [
+                'actives' => Plan::where('actif', true)->count(),
             ],
             'usage' => $this->usageParEtablissement(),
+            'historique' => $this->historiqueActivite(),
         ]);
+    }
+
+    /** Indicateurs mensuels pour suivre l'activité du parc sur six mois. */
+    private function historiqueActivite(): array
+    {
+        return Cache::store(config('cache.default'))->remember(
+            'plateforme:historique-activite',
+            self::DUREE_CACHE,
+            function (): array {
+                $mois = collect(range(5, 0))->map(function (int $retard) {
+                    $debut = now()->startOfMonth()->subMonthsNoOverflow($retard);
+                    $fin = $debut->copy()->endOfMonth();
+
+                    return [
+                        'cle' => $debut->format('Y-m'),
+                        'mois' => $debut->format('m/Y'),
+                        'debut' => $debut->toDateString(),
+                        'fin' => $fin->toDateString(),
+                        'etablissements_ouverts' => Etablissement::whereBetween('created_at', [$debut, $fin])->count(),
+                        'factures_payees' => Facture::where('statut', Facture::STATUT_PAYEE)
+                            ->whereBetween('payee_le', [$debut->toDateString(), $fin->toDateString()])
+                            ->count(),
+                        'pointages' => 0,
+                        'bases_injoignables' => 0,
+                    ];
+                })->keyBy('cle');
+
+                $debut = $mois->first()['debut'];
+                $fin = $mois->last()['fin'];
+                $etablissements = Etablissement::query()
+                    ->whereNotNull('provisionne_le')
+                    ->whereIn('statut', [Etablissement::STATUT_ACTIF, Etablissement::STATUT_SUSPENDU])
+                    ->get();
+
+                foreach ($etablissements as $etablissement) {
+                    try {
+                        $comptages = $this->tenants->execute($etablissement, function () use ($debut, $fin) {
+                            $driver = \Illuminate\Support\Facades\DB::connection()->getDriverName();
+                            $moisSql = $driver === 'mysql'
+                                ? "DATE_FORMAT(date, '%Y-%m')"
+                                : "strftime('%Y-%m', date)";
+
+                            return Presence::query()
+                                ->selectRaw("{$moisSql} as mois, count(*) as total")
+                                ->whereBetween('date', [$debut, $fin])
+                                ->groupBy('mois')
+                                ->pluck('total', 'mois');
+                        });
+
+                        foreach ($comptages as $cle => $total) {
+                            if ($mois->has($cle)) {
+                                $mois[$cle]['pointages'] += (int) $total;
+                            }
+                        }
+                    } catch (Throwable) {
+                        foreach ($mois as $ligne) {
+                            $ligne['bases_injoignables']++;
+                            $mois[$ligne['cle']] = $ligne;
+                        }
+                    }
+                }
+
+                return $mois->values()->map(fn (array $ligne) => collect($ligne)->except(['cle', 'debut', 'fin'])->all())->all();
+            }
+        );
     }
 
     /** @return array<int, array<string, mixed>> */

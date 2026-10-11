@@ -29,6 +29,7 @@ import ConnexionPlateformePage from "./pages/plateforme/ConnexionPage";
 import EtablissementsPage from "./pages/plateforme/EtablissementsPage";
 import FacturationPage from "./pages/plateforme/FacturationPage";
 import PresencesPlateformePage from "./pages/plateforme/PresencesPage";
+import UtilisateursPlateformePage from "./pages/plateforme/UtilisateursPage";
 import TableauDeBordPlateformePage from "./pages/plateforme/TableauDeBordPage";
 import TeacherPortalPage from "./pages/TeacherPortalPage";
 import ValidationPage from "./pages/ValidationPage";
@@ -66,6 +67,7 @@ export default function App() {
             <Route path="etablissements" element={<EtablissementsPage />} />
             <Route path="presences" element={<PresencesPlateformePage />} />
             <Route path="facturation" element={<FacturationPage />} />
+            <Route path="equipe" element={<UtilisateursPlateformePage />} />
           </Route>
           <Route
             path="/enseignant"

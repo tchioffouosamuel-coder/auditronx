@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../services/admin_session.dart';
 import '../../theme.dart';
 import '../../widgets/sync_status_banner.dart';
+import '../plateforme/plateforme_login_screen.dart';
 import '../change_password_screen.dart';
 import 'admin_alertes_screen.dart';
 import 'admin_assiduite_screen.dart';
@@ -219,6 +220,12 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     );
   }
 
+  void _openPlateforme() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const PlateformeLoginScreen()));
+  }
+
   void _select(int index) {
     setState(() => _index = index);
   }
@@ -322,6 +329,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               onPressed: _openChangePassword,
               icon: const Icon(Icons.lock_outline),
               tooltip: 'Modifier le mot de passe',
+            ),
+            IconButton(
+              onPressed: _openPlateforme,
+              icon: const Icon(Icons.business_outlined),
+              tooltip: 'Espace équipe Auditron',
             ),
             IconButton(
               onPressed: _logout,

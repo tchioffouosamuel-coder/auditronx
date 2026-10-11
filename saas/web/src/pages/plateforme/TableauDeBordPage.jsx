@@ -1,4 +1,15 @@
 import { useEffect, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import LoadingState from "../../components/LoadingState";
 import apiCentral from "../../lib/apiCentral";
 
@@ -39,13 +50,53 @@ export default function TableauDeBordPage() {
           valeur={donnees.abonnements.actifs}
           detail={`${donnees.abonnements.echeance_30j} à échéance sous 30 j`}
         />
-        <Tuile libelle="Factures impayées" valeur={donnees.facturation.impayees} />
+        <Tuile libelle="Factures en retard" valeur={donnees.facturation.impayees} />
+        <Tuile libelle="Offres actives" valeur={donnees.offres.actives} />
         <Tuile
           libelle="Encaissé ce mois"
-          valeur={new Intl.NumberFormat("fr-FR").format(donnees.facturation.encaisse_mois)}
-          detail="XAF"
+          valeur={Object.entries(donnees.facturation.encaisse_mois)
+            .map(([devise, montant]) => `${new Intl.NumberFormat("fr-FR").format(montant)} ${devise}`)
+            .join(" · ") || "0"}
         />
       </div>
+
+      <section className="card">
+        <h2 className="border-b border-ink-100 px-4 py-3 font-semibold text-ink-900">
+          Activité historique — 6 derniers mois
+        </h2>
+        <div className="grid gap-4 p-4 lg:grid-cols-2">
+          <div>
+            <h3 className="mb-2 text-sm font-medium text-ink-700">Ouvertures & factures encaissées</h3>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={donnees.historique}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="mois" tick={{ fontSize: 11 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Bar dataKey="etablissements_ouverts" name="Établissements ouverts" fill="#0f6e49" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="factures_payees" name="Factures encaissées" fill="#d97706" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div>
+            <h3 className="mb-2 text-sm font-medium text-ink-700">Pointages remontés</h3>
+            <ResponsiveContainer width="100%" height={260}>
+              <LineChart data={donnees.historique}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="mois" tick={{ fontSize: 11 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Line type="monotone" dataKey="pointages" name="Pointages" stroke="#2563eb" strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+            {donnees.historique.some((ligne) => ligne.bases_injoignables > 0) && (
+              <p className="text-xs text-amber-700">
+                Certaines bases n’ont pas répondu pendant la période ; les totaux de pointages sont incomplets.
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
 
       <section className="card">
         <h2 className="border-b border-ink-100 px-4 py-3 font-semibold text-ink-900">

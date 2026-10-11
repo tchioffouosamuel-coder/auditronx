@@ -9,8 +9,10 @@ import 'package:provider/provider.dart';
 import 'screens/activation_screen.dart';
 import 'screens/admin/admin_home_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/plateforme/plateforme_home_screen.dart';
 import 'services/admin_session.dart';
 import 'services/offline/sync_engine.dart';
+import 'services/plateforme_session.dart';
 import 'services/push_notifications.dart';
 import 'services/session.dart';
 import 'theme.dart';
@@ -39,6 +41,7 @@ class AuditronXApp extends StatelessWidget {
         // Espace admin (§admin-mobile) : session indépendante de l'enseignant
         // — un même téléphone peut avoir les deux actives à la fois.
         ChangeNotifierProvider(create: (_) => AdminSession()..bootstrap()),
+        ChangeNotifierProvider(create: (_) => PlateformeSession()..bootstrap()),
         ChangeNotifierProvider.value(value: SyncEngine.instance),
       ],
       child: MaterialApp(
@@ -71,11 +74,13 @@ class _RootGate extends StatelessWidget {
   Widget build(BuildContext context) {
     final session = context.watch<Session>();
     final adminSession = context.watch<AdminSession>();
+    final plateformeSession = context.watch<PlateformeSession>();
 
-    if (session.loading || adminSession.loading) {
+    if (session.loading || adminSession.loading || plateformeSession.loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    if (plateformeSession.loggedIn) return const PlateformeHomeScreen();
     if (session.activated) return const HomeScreen();
     if (adminSession.loggedIn) return const AdminHomeScreen();
 

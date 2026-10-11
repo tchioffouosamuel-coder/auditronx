@@ -72,8 +72,12 @@ npm run dev    # proxy /api → AUDITRON_API_PROXY (défaut http://localhost:800
 
 - `/login` : l'utilisateur choisit son établissement (liste, code, ou
   recherche par téléphone), puis s'identifie. Le choix est mémorisé.
-- `/plateforme` : espace éditeur — parc d'abonnés, provisioning, suspension,
-  offres et facturation.
+- `/plateforme` : espace éditeur — tableau de bord avec historique d'activité
+  sur six mois, suivi des présences de tout le parc, fiches et provisioning des
+  établissements, offres et facturation (PDF, suivi manuel des paiements).
+- `/plateforme/equipe` : gestion des comptes Auditron, réservée aux
+  super-administrateurs. Le mot de passe initial généré est affiché une seule
+  fois ; `plateforme:utilisateur` reste disponible en ligne de commande.
 
 ### Application mobile
 

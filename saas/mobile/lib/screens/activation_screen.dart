@@ -5,6 +5,7 @@ import '../services/session.dart';
 import '../theme.dart';
 import 'admin/admin_login_screen.dart';
 import 'choix_etablissement.dart';
+import 'plateforme/plateforme_login_screen.dart';
 
 /// Activation en deux temps : choix de l'établissement, puis identification
 /// par téléphone et mot de passe.
@@ -175,85 +176,105 @@ class _ActivationScreenState extends State<ActivationScreen> {
                         }),
                       )
                     : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text(
-                      'Connectez-vous avec votre numéro de téléphone et votre mot de passe.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: AuditronColors.ink700),
-                    ),
-                    const SizedBox(height: 20),
-                    TextField(
-                      controller: _telController,
-                      keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(labelText: 'Téléphone'),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      decoration: InputDecoration(
-                        labelText: 'Mot de passe',
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text(
+                            'Connectez-vous avec votre numéro de téléphone et votre mot de passe.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: AuditronColors.ink700),
                           ),
-                          tooltip: _obscurePassword
-                              ? 'Afficher le mot de passe'
-                              : 'Masquer le mot de passe',
-                          onPressed: () => setState(
-                            () => _obscurePassword = !_obscurePassword,
+                          const SizedBox(height: 20),
+                          TextField(
+                            controller: _telController,
+                            keyboardType: TextInputType.phone,
+                            decoration: const InputDecoration(
+                              labelText: 'Téléphone',
+                            ),
                           ),
-                        ),
-                      ),
-                      onSubmitted: (_) => _submit(),
-                    ),
-                    if (_error != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        _error!,
-                        style: const TextStyle(color: Colors.red),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                    const SizedBox(height: 20),
-                    FilledButton(
-                      onPressed: _submitting ? null : _submit,
-                      child: _submitting
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text('Se connecter'),
-                    ),
-                    const SizedBox(height: 12),
-                    TextButton(
-                      onPressed: _submitting
-                          ? null
-                          : () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const AdminLoginScreen(),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _passwordController,
+                            obscureText: _obscurePassword,
+                            decoration: InputDecoration(
+                              labelText: 'Mot de passe',
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscurePassword
+                                      ? Icons.visibility_outlined
+                                      : Icons.visibility_off_outlined,
+                                ),
+                                tooltip: _obscurePassword
+                                    ? 'Afficher le mot de passe'
+                                    : 'Masquer le mot de passe',
+                                onPressed: () => setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                                ),
                               ),
                             ),
-                      child: const Text(
-                        'Se connecter en tant qu\'administrateur',
+                            onSubmitted: (_) => _submit(),
+                          ),
+                          if (_error != null) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              _error!,
+                              style: const TextStyle(color: Colors.red),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                          const SizedBox(height: 20),
+                          FilledButton(
+                            onPressed: _submitting ? null : _submit,
+                            child: _submitting
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Text('Se connecter'),
+                          ),
+                          const SizedBox(height: 12),
+                          TextButton(
+                            onPressed: _submitting
+                                ? null
+                                : () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const AdminLoginScreen(),
+                                    ),
+                                  ),
+                            child: const Text(
+                              'Se connecter en tant qu\'administrateur',
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _submitting
+                                ? null
+                                : _changerEtablissement,
+                            child: Text(
+                              'Changer d\'établissement ($_etablissement)',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                          if (!_chargementEtablissement)
+                            TextButton.icon(
+                              onPressed: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const PlateformeLoginScreen(),
+                                ),
+                              ),
+                              icon: const Icon(
+                                Icons.business_outlined,
+                                size: 18,
+                              ),
+                              label: const Text(
+                                'Connexion équipe Auditron',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ),
+                        ],
                       ),
-                    ),
-                    TextButton(
-                      onPressed: _submitting ? null : _changerEtablissement,
-                      child: Text(
-                        'Changer d\'établissement ($_etablissement)',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  ],
-                ),
               ),
             ],
           ),

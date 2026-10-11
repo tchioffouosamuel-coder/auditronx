@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Central\CatalogueController;
 use App\Http\Controllers\Api\Central\EtablissementController;
 use App\Http\Controllers\Api\Central\FactureController;
 use App\Http\Controllers\Api\Central\PlanController;
+use App\Http\Controllers\Api\Central\PlatformUserController;
 use App\Http\Controllers\Api\Central\PresenceController;
 use App\Http\Controllers\Api\Central\TableauDeBordController;
 use Illuminate\Support\Facades\Route;
@@ -56,9 +57,14 @@ Route::middleware(['auth:sanctum', 'platform'])->group(function () {
     Route::get('/plans', [PlanController::class, 'index']);
     Route::get('/abonnements', [AbonnementController::class, 'index']);
     Route::get('/factures', [FactureController::class, 'index']);
+    Route::get('/factures/{facture}/pdf', [FactureController::class, 'pdf']);
 
     // Tout ce qui crée, provisionne, facture ou détruit : super-admin seul.
     Route::middleware('platform:admin')->group(function () {
+        Route::get('/utilisateurs', [PlatformUserController::class, 'index']);
+        Route::post('/utilisateurs', [PlatformUserController::class, 'store']);
+        Route::put('/utilisateurs/{platformUser}', [PlatformUserController::class, 'update']);
+
         Route::post('/etablissements', [EtablissementController::class, 'store']);
         Route::put('/etablissements/{etablissement}', [EtablissementController::class, 'update']);
         Route::post('/etablissements/{etablissement}/provision', [EtablissementController::class, 'provision']);

@@ -15,6 +15,12 @@ const LIENS = [
     label: "Offres & facturation",
     icon: "receipt_long",
   },
+  {
+    to: "/plateforme/equipe",
+    label: "Équipe Auditron",
+    icon: "manage_accounts",
+    admin: true,
+  },
 ];
 
 /**
@@ -24,7 +30,7 @@ const LIENS = [
  * sécurité, pas une coquetterie.
  */
 export default function PlateformeLayout() {
-  const { compte, deconnexion } = usePlatformAuth();
+  const { compte, deconnexion, estSuperAdmin } = usePlatformAuth();
 
   return (
     <div className="min-h-screen bg-transparent">
@@ -44,7 +50,7 @@ export default function PlateformeLayout() {
             aria-label="Navigation plateforme"
             className="flex flex-1 flex-wrap gap-1.5"
           >
-            {LIENS.map((lien) => (
+            {LIENS.filter((lien) => !lien.admin || estSuperAdmin).map((lien) => (
               <NavLink
                 key={lien.to}
                 to={lien.to}

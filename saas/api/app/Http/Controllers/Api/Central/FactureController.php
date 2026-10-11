@@ -8,6 +8,7 @@ use App\Models\Central\Etablissement;
 use App\Models\Central\Facture;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 /** Facturation des abonnements (émission, encaissement, impayés). */
 class FactureController extends Controller
@@ -61,6 +62,8 @@ class FactureController extends Controller
 
     public function marquePayee(Request $request, Facture $facture)
     {
+        abort_if($facture->statut === Facture::STATUT_ANNULEE, 422, 'Une facture annulée ne peut pas être encaissée.');
+
         $data = $request->validate([
             'payee_le' => ['sometimes', 'date'],
             'moyen_paiement' => ['nullable', 'in:mobile_money,virement,especes,cheque'],
@@ -74,6 +77,15 @@ class FactureController extends Controller
         ]);
 
         return response()->json(['data' => $facture->fresh()]);
+    }
+
+    public function pdf(Facture $facture)
+    {
+        $facture->load(['etablissement', 'abonnement.plan']);
+
+        return Pdf::loadView('pdf.facture-plateforme', ['facture' => $facture])
+            ->setPaper('a4')
+            ->download('facture-' . $facture->numero . '.pdf');
     }
 
     public function annule(Facture $facture)

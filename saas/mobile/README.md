@@ -1,17 +1,29 @@
-# auditron_x_app
+# Auditron X — application mobile
 
-A new Flutter project.
+Application Flutter multi-espace :
 
-## Getting Started
+- **Établissement** : espace enseignant et administration du tenant sélectionné.
+- **Équipe Auditron** : portail central du personnel Auditron, connecté aux
+  routes `/api/central/*` sans en-tête de tenant.
 
-This project is a starting point for a Flutter application.
+Depuis l'écran d'activation, choisir « Équipe Auditron ». Une session Auditron
+reste distincte des sessions enseignant et établissement. Le tableau de bord
+central, le parc, les présences, les factures, les offres et abonnements sont
+accessibles au personnel connecté. La gestion des établissements, des paiements,
+des offres et des comptes de l'équipe est réservée au rôle `super_admin`, comme
+sur l'API et le portail web.
 
-A few resources to get you started if this is your first Flutter project:
+Les mots de passe initiaux générés lors de la création d'un compte ne sont
+affichés qu'une seule fois. Les factures PDF sont partagées via le sélecteur
+d'applications du téléphone.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+Sur l'écran d'activation, les établissements ne sont pas listés : le code doit
+être saisi ou lu depuis le QR communiqué par l'établissement.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Développement
+
+L'URL de l'API peut être remplacée au lancement :
+
+```sh
+flutter run --dart-define=AUDITRON_API_URL=http://10.0.2.2:8000/api
+```

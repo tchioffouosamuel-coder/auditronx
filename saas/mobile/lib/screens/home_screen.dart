@@ -11,6 +11,7 @@ import 'procuration_screen.dart';
 import 'scan_screen.dart';
 import 'cours_du_jour_screen.dart';
 import 'emploi_du_temps_screen.dart';
+import 'plateforme/plateforme_login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -45,6 +46,12 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (_) => ChangePasswordScreen(onSubmit: session.updatePassword),
       ),
     );
+  }
+
+  void _openPlateforme() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const PlateformeLoginScreen()));
   }
 
   void _openSchedule(dynamic rawId) {
@@ -104,6 +111,11 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: _openChangePassword,
             icon: const Icon(Icons.lock_outline),
             tooltip: 'Modifier le mot de passe',
+          ),
+          IconButton(
+            onPressed: _openPlateforme,
+            icon: const Icon(Icons.business_outlined),
+            tooltip: 'Espace équipe Auditron',
           ),
         ],
       ),

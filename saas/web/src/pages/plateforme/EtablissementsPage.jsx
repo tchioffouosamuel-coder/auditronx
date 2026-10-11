@@ -18,6 +18,21 @@ const CHAMPS_CREATION = [
   { key: "direction_email", label: "E-mail du compte de direction à créer", type: "email" },
 ];
 
+const CHAMPS_EDITION = [
+  { key: "nom", label: "Nom complet", requis: true },
+  { key: "nom_court", label: "Nom court" },
+  { key: "ville", label: "Ville" },
+  { key: "pays", label: "Pays" },
+  { key: "fuseau", label: "Fuseau horaire" },
+  { key: "contact_nom", label: "Contact — nom" },
+  { key: "contact_email", label: "Contact — e-mail", type: "email" },
+  { key: "contact_tel", label: "Contact — téléphone" },
+  { key: "couleur_primaire", label: "Couleur primaire" },
+  { key: "couleur_secondaire", label: "Couleur secondaire" },
+  { key: "db_username", label: "Utilisateur de base (facultatif)" },
+  { key: "db_password", label: "Nouveau mot de passe base (laisser vide pour ne pas changer)", type: "password" },
+];
+
 export default function EtablissementsPage() {
   const { estSuperAdmin } = usePlatformAuth();
   const [etablissements, setEtablissements] = useState(null);
@@ -27,6 +42,8 @@ export default function EtablissementsPage() {
   const [enCours, setEnCours] = useState(false);
   const [suppression, setSuppression] = useState(null);
   const [confirmation, setConfirmation] = useState("");
+  const [details, setDetails] = useState(null);
+  const [editionDetails, setEditionDetails] = useState(false);
 
   function recharger() {
     return apiCentral
@@ -61,8 +78,48 @@ export default function EtablissementsPage() {
   }
 
   async function changerStatut(etablissement, statut) {
-    await apiCentral.post(`/etablissements/${etablissement.id}/statut`, { statut });
-    await recharger();
+    setErreur(null);
+    try {
+      await apiCentral.post(`/etablissements/${etablissement.id}/statut`, { statut });
+      await recharger();
+    } catch (e) {
+      setErreur(e.response?.data?.message ?? "Modification du statut impossible.");
+    }
+  }
+
+  async function ouvrirDetails(etablissement) {
+    setErreur(null);
+    setEnCours(true);
+    try {
+      const { data } = await apiCentral.get(`/etablissements/${etablissement.id}`);
+      setDetails(data);
+      setEditionDetails(false);
+    } catch (e) {
+      setErreur(e.response?.data?.message ?? "Chargement de la fiche impossible.");
+    } finally {
+      setEnCours(false);
+    }
+  }
+
+  async function enregistrerDetails(e) {
+    e.preventDefault();
+    setEnCours(true);
+    setErreur(null);
+    try {
+      const { db_password, ...champs } = details.data;
+      await apiCentral.put(`/etablissements/${details.data.id}`, {
+        ...champs,
+        ...(db_password ? { db_password } : {}),
+      });
+      const { data } = await apiCentral.get(`/etablissements/${details.data.id}`);
+      setDetails(data);
+      setEditionDetails(false);
+      await recharger();
+    } catch (e) {
+      setErreur(e.response?.data?.message ?? "Modification de la fiche impossible.");
+    } finally {
+      setEnCours(false);
+    }
   }
 
   async function provisionner(etablissement) {
@@ -140,7 +197,7 @@ export default function EtablissementsPage() {
               <th className="px-4 py-2">Statut</th>
               <th className="px-4 py-2">Plan</th>
               <th className="px-4 py-2">Échéance</th>
-              {estSuperAdmin && <th className="px-4 py-2">Actions</th>}
+              <th className="px-4 py-2">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -174,9 +231,18 @@ export default function EtablissementsPage() {
                 <td className="px-4 py-2 text-ink-500">
                   {etablissement.abonnement_actif?.fin_le ?? "sans échéance"}
                 </td>
-                {estSuperAdmin && (
-                  <td className="px-4 py-2">
-                    <div className="flex flex-wrap gap-2 text-xs">
+                <td className="px-4 py-2">
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <button
+                      type="button"
+                      disabled={enCours}
+                      onClick={() => ouvrirDetails(etablissement)}
+                      className="rounded border border-brand-200 px-2 py-1 text-brand-800 hover:bg-brand-50"
+                    >
+                      Fiche
+                    </button>
+                    {estSuperAdmin && (
+                      <>
                       {!etablissement.provisionne_le && (
                         <button
                           type="button"
@@ -202,9 +268,10 @@ export default function EtablissementsPage() {
                       >
                         Supprimer
                       </button>
-                    </div>
-                  </td>
-                )}
+                      </>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -293,6 +360,98 @@ export default function EtablissementsPage() {
           </form>
         </Modal>
       )}
+
+      {details && (
+        <Modal
+          title={`Fiche établissement — ${details.data.nom}`}
+          onClose={() => {
+            setDetails(null);
+            setEditionDetails(false);
+          }}
+        >
+          {editionDetails ? (
+            <form onSubmit={enregistrerDetails} className="space-y-3">
+              {CHAMPS_EDITION.map((champ) => (
+                <label key={champ.key} className="block text-sm">
+                  <span className="mb-1 block font-medium text-ink-700">{champ.label}</span>
+                  <input
+                    type={champ.type ?? "text"}
+                    required={champ.requis}
+                    value={details.data[champ.key] ?? ""}
+                    onChange={(e) => setDetails({
+                      ...details,
+                      data: { ...details.data, [champ.key]: e.target.value },
+                    })}
+                    className="field w-full"
+                  />
+                </label>
+              ))}
+              <label className="block text-sm">
+                <span className="mb-1 block font-medium text-ink-700">Notes internes</span>
+                <textarea
+                  rows={3}
+                  value={details.data.notes ?? ""}
+                  onChange={(e) => setDetails({
+                    ...details,
+                    data: { ...details.data, notes: e.target.value },
+                  })}
+                  className="field w-full"
+                />
+              </label>
+              <p className="text-xs text-ink-500">
+                Code et nom de base immuables. Les identifiants techniques ne sont jamais relus ; seul un nouveau mot de passe peut être enregistré.
+              </p>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setEditionDetails(false)} className="btn-secondary flex-1">Annuler</button>
+                <button type="submit" disabled={enCours} className="btn flex-1 bg-ink-900 text-white">
+                  {enCours ? "Enregistrement…" : "Enregistrer"}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="space-y-4 text-sm">
+              <dl className="grid gap-2 sm:grid-cols-2">
+                <Detail label="Code" value={details.data.code} />
+                <Detail label="Statut" value={details.data.statut} />
+                <Detail label="Ville / pays" value={[details.data.ville, details.data.pays].filter(Boolean).join(", ")} />
+                <Detail label="Fuseau" value={details.data.fuseau} />
+                <Detail label="Contact" value={details.data.contact_nom} />
+                <Detail label="E-mail" value={details.data.contact_email} />
+                <Detail label="Téléphone" value={details.data.contact_tel} />
+                <Detail label="Base configurée" value={details.data.db_name || `auditron_${details.data.code.toLowerCase()}`} />
+                <Detail label="Provisionné le" value={details.data.provisionne_le ? new Date(details.data.provisionne_le).toLocaleString("fr-FR") : "Non provisionné"} />
+              </dl>
+              {details.data.notes && (
+                <div><strong>Notes internes</strong><p className="whitespace-pre-wrap text-ink-600">{details.data.notes}</p></div>
+              )}
+              {details.usage && (
+                <div className="rounded-xl bg-ink-50 p-3">
+                  <h3 className="mb-2 font-semibold text-ink-800">Utilisation du compte</h3>
+                  {details.usage.injoignable ? (
+                    <p className="text-amber-700">Base injoignable — vérifiez la configuration.</p>
+                  ) : (
+                    <p>{details.usage.personnel} membres du personnel · {details.usage.devices_actifs} appareil(s) actif(s) · {details.usage.presences_30j} pointage(s) sur 30 jours · dernier pointage : {details.usage.derniere_presence ?? "aucun"}</p>
+                  )}
+                </div>
+              )}
+              {estSuperAdmin && (
+                <button type="button" onClick={() => setEditionDetails(true)} className="btn w-full bg-ink-900 text-white">
+                  Modifier la fiche
+                </button>
+              )}
+            </div>
+          )}
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function Detail({ label, value }) {
+  return (
+    <div>
+      <dt className="text-xs uppercase tracking-wide text-ink-400">{label}</dt>
+      <dd className="font-medium text-ink-800">{value || "—"}</dd>
     </div>
   );
 }
