@@ -29,11 +29,18 @@ export function MobileShowcase() {
               <h2 className="text-3xl md:text-4xl font-bold text-white tracking-tight mb-4 leading-tight">
                 Votre journée scolaire<br />sur votre téléphone
               </h2>
-              <p className="text-white/60 text-base leading-relaxed max-w-lg mx-auto lg:mx-0 mb-6">
+              <p className="text-white/80 text-base leading-relaxed max-w-lg mx-auto lg:mx-0 mb-4">
                 Activez votre compte dans l’établissement, pointez votre arrivée
                 et votre départ au point de contrôle, puis retrouvez votre
                 historique, votre emploi du temps et vos cours du jour.
                 Les responsables habilités peuvent aussi pointer par procuration.
+              </p>
+              <p className="text-white/80 text-sm leading-relaxed max-w-lg mx-auto lg:mx-0 mb-6">
+                Sans internet sur le téléphone, le pointage reste possible à
+                proximité de la borne Bluetooth. Le cahier de texte peut aussi
+                être rempli hors ligne : les données en attente sont transmises
+                à la reconnexion. La consultation à distance des nouveaux
+                pointages dépend de la connexion de la borne au serveur.
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md mx-auto lg:mx-0">

@@ -1,43 +1,50 @@
 import { Reveal } from './Reveal';
 import { SchoolPhoto } from './SchoolPhoto';
 import { MobileCarousel } from './MobileCarousel';
+import { BookOpen, CalendarCheck, FileDown, Files, QrCode, UserCheck, Users } from 'lucide-react';
 
 const FEATURES = [
   {
-    icon: 'M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h.01M4 16h.01M4 8h.01M4 4h.01',
-    title: 'Pointage QR et borne locale',
-    desc: 'Le personnel scanne le QR du point de contrôle. Le téléphone transmet le pointage à la borne de l’établissement par Bluetooth.',
+    icon: QrCode,
+    title: 'Arrivées et départs par QR code',
+    desc: 'Le personnel pointe depuis son téléphone, même sans connexion internet. Le scan est transmis par Bluetooth à la borne locale, qui l’envoie au serveur dès qu’elle est connectée. La direction retrouve les heures d’arrivée et de départ.',
     color: 'from-brand-500 to-brand-600',
   },
   {
-    icon: 'M4 6h16M4 10h16M4 14h16M4 18h16',
+    icon: Users,
     title: 'Personnel et emplois du temps',
-    desc: 'Organisez les fiches du personnel, les sections, les classes et les disciplines. Planifiez les cours et repérez les conflits de créneaux.',
+    desc: 'Centralisez les noms, fonctions, matricules et coordonnées du personnel. Retrouvez un fichier actualisé, organisez les sections, les classes et les disciplines, puis planifiez les cours et leurs créneaux.',
     color: 'from-cyan-500 to-cyan-600',
   },
   {
-    icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
-    title: 'Assiduité, retards et absences',
-    desc: 'Consultez les présences du jour, les bilans par section et les retards. Retrouvez les alertes d’absences répétées et les justificatifs.',
+    icon: Files,
+    title: 'Bilans mensuels, globaux et par section',
+    desc: 'Générez les rapports d’assiduité en PDF : taux mensuel, absences, durée cumulée des retards et des départs anticipés. Les emplois du temps donnent le contexte des journées attendues.',
     color: 'from-audit-500 to-audit-600',
   },
   {
-    icon: 'M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.836 8.5a2.617 2.617 0 01-2.147-1.5',
+    icon: BookOpen,
     title: 'Cahier de texte et progression',
-    desc: 'Consignez le contenu des séances, validez les cours réalisés et suivez l’avancement du programme par classe et par discipline.',
+    desc: 'L’enseignant marque les leçons réalisées et remplit le cahier de texte. Les censeurs et responsables habilités consultent les séances et suivent l’avancement du programme par classe et par discipline.',
     color: 'from-brand-500 to-cyan-500',
   },
   {
-    icon: 'M12 10v6m0 0l-3-3m3 3l3-3m2 8V7a2 2 0 00-2-2h-8a2 2 0 00-2 2v13a2 2 0 002 2h8a2 2 0 002-2z',
-    title: 'Rapports pour la direction',
-    desc: 'Générez les bilans de retards et d’assiduité en PDF. Retrouvez les fiches individuelles et les exports groupés pour vos dossiers.',
+    icon: FileDown,
+    title: 'Une fiche individuelle par enseignant',
+    desc: 'Retrouvez les jours de cours prévus, les présences, absences, retards, départs anticipés et périodes à rattraper, avec le taux d’assiduité. Un suivi utile pour examiner l’activité du personnel payé à l’heure.',
     color: 'from-cyan-500 to-audit-500',
   },
   {
-    icon: 'M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z',
-    title: 'Espace enseignant et administration',
-    desc: 'Sur mobile, consultez vos présences et vos cours. Les responsables habilités disposent du pointage par procuration avec un motif obligatoire.',
+    icon: UserCheck,
+    title: 'Pointage par procuration encadré',
+    desc: 'Lorsqu’un enseignant ne peut pas pointer lui-même, un responsable habilité peut enregistrer sa présence à sa place. Le motif est obligatoire et l’intervention reste traçable.',
     color: 'from-audit-500 to-brand-500',
+  },
+  {
+    icon: CalendarCheck,
+    title: 'Signalements et jours fériés',
+    desc: 'L’administration enregistre les absences justifiées : les jours signalés restent visibles sur la fiche sans pénaliser le taux d’assiduité. Les jours déclarés fériés sont exclus des calculs.',
+    color: 'from-brand-500 to-brand-600',
   },
 ];
 
@@ -63,7 +70,7 @@ export function Features() {
               </h2>
               <p className="text-ink-500 text-base leading-relaxed">
                 Du pointage à la fiche de progression, Auditron-X accompagne les
-                enseignants, les chefs de section, les censeurs et la direction.
+                enseignants, les chefs de services, les censeurs et la direction.
               </p>
               <p className="text-ink-500 text-base leading-relaxed mt-4">
                 Le cahier de texte et la validation des cours relient le suivi
@@ -78,9 +85,7 @@ export function Features() {
             <Reveal key={f.title} delay={(i % 3) * 80}>
               <div className="group relative h-full p-6 rounded-2xl bg-white border border-ink-200 hover:border-brand-300 hover:shadow-xl hover:shadow-brand-500/5 transition-all duration-300 hover:-translate-y-1">
                 <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${f.color} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
-                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d={f.icon} />
-                  </svg>
+                  <f.icon size={24} strokeWidth={1.8} className="text-white" aria-hidden="true" />
                 </div>
                 <h3 className="font-bold text-ink-900 mb-2">{f.title}</h3>
                 <p className="text-sm text-ink-500 leading-relaxed">{f.desc}</p>

@@ -16,7 +16,7 @@ const TRUST_ITEMS = [
   {
     icon: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15',
     title: 'Interventions traçables',
-    desc: 'Les pointages par procuration et les corrections sont associés à un responsable et à un motif pour permettre leur vérification.',
+    desc: 'Les pointages par procuration et les modifications sont associés à un responsable et à un motif pour permettre leur vérification.',
   },
   {
     icon: 'M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z',

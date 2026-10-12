@@ -369,6 +369,130 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  if (const bool.fromEnvironment('AUDITRON_STORE_SCREENSHOTS')) {
+    testWidgets('export Play Store : sept captures telephone 9:16', (
+      tester,
+    ) async {
+      // Render the real screens with demo data, not a stretched phone preview.
+      for (final key in storage.keys.toList()) {
+        if (key == 'auditron_cache_admin_personnel' ||
+            key.startsWith('auditron_cache_admin_retards_') &&
+                key != 'auditron_cache_admin_retards_parametres') {
+          final rows = jsonDecode(storage[key]!) as List;
+          for (var i = 0; i < rows.length; i++) {
+            rows[i]['nom'] = i == 0 ? 'Enseignant A.' : 'Agent B.';
+            rows[i]['matricule'] = 'DEMO-00${i + 1}';
+          }
+          storage[key] = jsonEncode(rows);
+        }
+      }
+
+      Future<void> export(String name) async {
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(tester.getSize(find.byKey(boundaryKey)), const Size(432, 768));
+        await tester.runAsync(() async {
+          final boundary =
+              boundaryKey.currentContext!.findRenderObject()
+                  as RenderRepaintBoundary;
+          final image = await boundary.toImage(pixelRatio: 2.5);
+          try {
+            expect(image.width, 1080);
+            expect(image.height, 1920);
+            final bytes = await image.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            expect(bytes!.lengthInBytes, lessThan(8000000));
+            final directory = Directory('store-assets/phone-screenshots');
+            await directory.create(recursive: true);
+            await File('${directory.path}/$name.png').writeAsBytes(
+              bytes.buffer.asUint8List(
+                bytes.offsetInBytes,
+                bytes.lengthInBytes,
+              ),
+            );
+          } finally {
+            image.dispose();
+          }
+        });
+      }
+
+      await pumpScreen(tester, const HomeScreen(), width: 432, height: 768);
+      expect(find.text('Arrivée enregistrée'), findsOneWidget);
+      await export('01-journee-enseignant');
+      await tester.tap(find.text('Mathématiques').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Mes cours du jour'), findsOneWidget);
+      await export('02-cours-du-jour');
+      await tester.tap(find.byIcon(Icons.home_outlined));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Historique de mes présences'));
+      await tester.pumpAndSettle();
+      expect(find.text('Mes présences'), findsOneWidget);
+      await export('03-historique-presences');
+
+      await pumpScreen(
+        tester,
+        const AdminHomeScreen(),
+        width: 432,
+        height: 768,
+      );
+      expect(find.text('Espace direction'), findsOneWidget);
+      await export('04-tableau-de-bord-direction');
+      await tester.tap(find.byIcon(Icons.badge_outlined));
+      await tester.pumpAndSettle();
+      expect(find.text('DEMO-001'), findsOneWidget);
+      await export('05-personnel');
+      await tester.tap(find.byIcon(Icons.timer_outlined));
+      await tester.pumpAndSettle();
+      expect(find.text('Enseignant A.'), findsOneWidget);
+      await export('06-retards');
+      await tester.tap(find.text('Bilans PDF'));
+      await tester.pumpAndSettle();
+      expect(find.text('Bilan PDF de la section'), findsOneWidget);
+      await export('07-bilans-pdf');
+    });
+  }
+
+  for (final teacherAdmin in [false, true]) {
+    testWidgets(
+      'le compte enseignant sans acces Auditron, admin=$teacherAdmin',
+      (tester) async {
+        await pumpScreen(
+          tester,
+          const HomeScreen(),
+          teacherAdmin: teacherAdmin,
+        );
+        await tester.tap(find.byTooltip('Mon compte'));
+        await tester.pumpAndSettle();
+        final entries = tester.widgetList<PopupMenuItem<String>>(
+          find.byType(PopupMenuItem<String>),
+        );
+        expect(entries.map((entry) => entry.value), ['schedule', 'password']);
+        expect(find.text('Mon emploi du temps'), findsOneWidget);
+        expect(find.text('Modifier le mot de passe'), findsOneWidget);
+        expect(find.text('Espace équipe Auditron'), findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('le compte direction ne propose pas l espace Auditron', (
+    tester,
+  ) async {
+    await pumpScreen(tester, const AdminHomeScreen());
+    await tester.tap(find.byTooltip('Compte direction'));
+    await tester.pumpAndSettle();
+    final entries = tester.widgetList<PopupMenuItem<String>>(
+      find.byType(PopupMenuItem<String>),
+    );
+    expect(entries.map((entry) => entry.value), ['password', 'logout']);
+    expect(find.text('Modifier le mot de passe'), findsOneWidget);
+    expect(find.text('Déconnexion'), findsOneWidget);
+    expect(find.text('Espace équipe Auditron'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('personnel : noms pleine largeur et actions dans la fiche', (
     tester,
   ) async {

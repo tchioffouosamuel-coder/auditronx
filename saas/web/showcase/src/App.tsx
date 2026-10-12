@@ -6,6 +6,7 @@ import { Screenshots } from '@/components/Screenshots';
 import { MobileShowcase } from '@/components/MobileShowcase';
 import { Benefits } from '@/components/Benefits';
 import { Trust } from '@/components/Trust';
+import { Deployment } from '@/components/Deployment';
 import { Pricing } from '@/components/Pricing';
 import { FinalCTA } from '@/components/FinalCTA';
 import { Footer } from '@/components/Footer';
@@ -31,6 +32,7 @@ function App() {
             <MobileShowcase />
             <Benefits />
             <Trust />
+            <Deployment />
             <Pricing />
             <FinalCTA />
           </>

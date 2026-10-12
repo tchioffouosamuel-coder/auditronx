@@ -4,7 +4,6 @@ import '../../services/admin_session.dart';
 import '../../theme.dart';
 import '../../widgets/auditron_app_bar.dart';
 import '../../widgets/sync_status_banner.dart';
-import '../plateforme/plateforme_login_screen.dart';
 import '../change_password_screen.dart';
 import 'admin_alertes_screen.dart';
 import 'admin_assiduite_screen.dart';
@@ -238,12 +237,6 @@ class _AdminHomeScreenState extends State<_AdminHomeScreen> {
     );
   }
 
-  void _openPlateforme() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const PlateformeLoginScreen()));
-  }
-
   void _select(int index) {
     setState(() => _index = index);
   }
@@ -343,8 +336,6 @@ class _AdminHomeScreenState extends State<_AdminHomeScreen> {
                 switch (value) {
                   case 'password':
                     _openChangePassword();
-                  case 'platform':
-                    _openPlateforme();
                   case 'logout':
                     _logout();
                 }
@@ -355,14 +346,6 @@ class _AdminHomeScreenState extends State<_AdminHomeScreen> {
                   child: ListTile(
                     leading: Icon(Icons.lock_outline),
                     title: Text('Modifier le mot de passe'),
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'platform',
-                  child: ListTile(
-                    leading: Icon(Icons.business_outlined),
-                    title: Text('Espace équipe Auditron'),
                     contentPadding: EdgeInsets.zero,
                   ),
                 ),

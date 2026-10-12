@@ -12,7 +12,6 @@ import 'procuration_screen.dart';
 import 'scan_screen.dart';
 import 'cours_du_jour_screen.dart';
 import 'emploi_du_temps_screen.dart';
-import 'plateforme/plateforme_login_screen.dart';
 import 'teacher_day_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -48,12 +47,6 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (_) => ChangePasswordScreen(onSubmit: session.updatePassword),
       ),
     );
-  }
-
-  void _openPlateforme() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const PlateformeLoginScreen()));
   }
 
   void _openSchedule(dynamic rawId) {
@@ -125,8 +118,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   _openSchedule(session.me?['id']);
                 case 'password':
                   _openChangePassword();
-                case 'platform':
-                  _openPlateforme();
               }
             },
             itemBuilder: (_) => const [
@@ -143,14 +134,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: ListTile(
                   leading: Icon(Icons.lock_outline),
                   title: Text('Modifier le mot de passe'),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              PopupMenuItem(
-                value: 'platform',
-                child: ListTile(
-                  leading: Icon(Icons.business_outlined),
-                  title: Text('Espace équipe Auditron'),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),

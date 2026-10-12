@@ -31,9 +31,10 @@ export function Hero() {
             </h1>
 
             <p className="text-base md:text-lg text-ink-500 leading-relaxed max-w-xl mx-auto lg:mx-0 mb-7 animate-fade-up" style={{ animationDelay: '0.1s' }}>
-              Suivez la présence des enseignants et du personnel administratif,
-              les retards et les cours réalisés. Le pointage sur téléphone et le
-              portail de direction réunissent le suivi de votre établissement.
+              Une solution spécialisée dans l’assiduité, la ponctualité du
+              personnel et la gestion pédagogique. Du pointage des arrivées et
+              départs aux bilans mensuels et au cahier de texte, retrouvez le
+              suivi de votre établissement dans un même espace.
             </p>
 
             {/* CTAs */}

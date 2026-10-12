@@ -4,7 +4,7 @@ const PLANS = [
   {
     name: 'Essai',
     price: '0',
-    period: 'Découverte limitée dans le temps',
+    period: '30 jours',
     desc: 'Pour découvrir le pointage sur un premier site.',
     features: [
       'Jusqu’à 25 membres du personnel',
@@ -17,31 +17,33 @@ const PLANS = [
   },
   {
     name: 'Standard',
-    price: '75 000',
+    price: '200 000',
     period: 'Par établissement / an',
     desc: 'Pour le suivi quotidien d’un établissement de taille moyenne.',
     features: [
       'Jusqu’à 120 membres du personnel',
       'Jusqu’à 3 bornes',
       'Pointage QR et borne',
+      'Mises à jour des bornes à distance',
       'Journal d’assiduité et rapports PDF',
       'Cahier de texte numérique',
+      'Journal d’audit',
       'Notifications push',
+      'Exports PDF groupés en ZIP',
     ],
     cta: 'Choisir Standard',
     highlighted: true,
   },
   {
     name: 'Premium',
-    price: '150 000',
+    price: '400 000',
     period: 'Par établissement / an',
     desc: 'Pour les grands établissements et un suivi administratif étendu.',
     features: [
-      'Personnel et bornes sans quota',
+      '+ 120 membres du personnel',
+      'Jusqu’à 5 bornes',
+      'Pointage par reconnaissance faciale',
       'Fonctionnalités de l’offre Standard',
-      'Journal d’audit',
-      'Mises à jour des bornes à distance',
-      'Exports PDF groupés en ZIP',
     ],
     cta: 'Échanger sur Premium',
     highlighted: false,
@@ -69,11 +71,10 @@ export function Pricing() {
           {PLANS.map((plan, i) => (
             <Reveal key={plan.name} delay={i * 100}>
               <div
-                className={`relative h-full p-7 rounded-2xl border transition-all ${
-                  plan.highlighted
+                className={`relative h-full p-7 rounded-2xl border transition-all ${plan.highlighted
                     ? 'border-brand-500 bg-white shadow-2xl shadow-brand-500/10 md:scale-105'
                     : 'border-ink-200 bg-white hover:border-ink-300 hover:shadow-lg'
-                }`}
+                  }`}
               >
                 {plan.highlighted && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-gradient-to-r from-brand-500 to-cyan-500 text-white text-xs font-semibold shadow-lg">
@@ -98,11 +99,10 @@ export function Pricing() {
 
                 <a
                   href={`mailto:demo@auditronx.com?subject=${encodeURIComponent(`Auditron-X : offre ${plan.name}`)}`}
-                  className={`block w-full py-3 rounded-xl text-sm font-semibold text-center transition-all hover:-translate-y-0.5 ${
-                    plan.highlighted
+                  className={`block w-full py-3 rounded-xl text-sm font-semibold text-center transition-all hover:-translate-y-0.5 ${plan.highlighted
                       ? 'bg-brand-600 hover:bg-brand-700 text-white shadow-lg shadow-brand-500/25'
                       : 'bg-ink-100 hover:bg-ink-200 text-ink-700'
-                  }`}
+                    }`}
                 >
                   {plan.cta}
                 </a>
