@@ -1,5 +1,5 @@
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../services/admin_api_client.dart';
 import '../../services/offline/offline_cache.dart';
 import '../../theme.dart';
@@ -7,7 +7,14 @@ import '../../theme.dart';
 /// Tableau de bord admin (§admin-mobile) — équivalent mobile de
 /// DashboardPage.jsx : KPIs + sélecteur de date + classement par section.
 class AdminDashboardScreen extends StatefulWidget {
-  const AdminDashboardScreen({super.key});
+  final VoidCallback? onSignalements;
+  final VoidCallback? onAssiduite;
+
+  const AdminDashboardScreen({
+    super.key,
+    this.onSignalements,
+    this.onAssiduite,
+  });
 
   @override
   State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
@@ -70,29 +77,25 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
           final d = snapshot.data!;
           final cards = [
-            (_) => _KpiCard(
-              label: 'Effectif',
+            _KpiCard(
+              label: 'Effectif total',
               value: '${d['effectif']}',
-              icon: Icons.groups,
-              color: AuditronColors.brand700,
+              color: AuditronColors.ink700,
             ),
-            (_) => _KpiCard(
+            _KpiCard(
               label: 'Présents',
               value: '${d['presents']}',
-              icon: Icons.check_circle,
               color: AuditronColors.brand600,
             ),
-            (_) => _KpiCard(
+            _KpiCard(
               label: 'Absents',
               value: '${d['absents']}',
-              icon: Icons.cancel,
               color: Colors.red,
             ),
-            (_) => _KpiCard(
-              label: 'En retard',
+            _KpiCard(
+              label: 'Retardataires',
               value: '${d['retardataires']}',
-              icon: Icons.schedule,
-              color: AuditronColors.gold600,
+              color: AuditronColors.orange700,
             ),
           ];
           final sections =
@@ -104,6 +107,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           final retardataires = _dashboardPeople(d['retardataires_liste']);
 
           return ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
             children: [
               Row(
@@ -113,16 +117,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   // céder, pas déborder.
                   Expanded(
                     child: Text(
-                      'Situation du ${d['date'] ?? _dateStr}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium,
+                      'Situation du ${DateFormat('d MMMM yyyy', 'fr').format(DateTime.tryParse('${d['date']}') ?? _date)}',
+                      style: Theme.of(context).textTheme.titleSmall,
                     ),
                   ),
-                  TextButton.icon(
+                  IconButton(
                     onPressed: _pickDate,
                     icon: const Icon(Icons.calendar_today, size: 16),
-                    label: const Text('Changer'),
+                    tooltip: 'Choisir une date',
                   ),
                 ],
               ),
@@ -133,12 +135,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 physics: const NeverScrollableScrollPhysics(),
                 mainAxisSpacing: 12,
                 crossAxisSpacing: 12,
-                childAspectRatio: 1.15,
-                children: cards.map((c) => c(null)).toList(),
+                mainAxisExtent: MediaQuery.textScalerOf(context).scale(104),
+                children: cards,
               ),
               const SizedBox(height: 20),
               Text(
-                "Taux d'assiduité par section",
+                'Assiduité par section',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 12),
@@ -151,9 +153,30 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   ),
                 )
               else
-                SizedBox(
-                  height: 220,
-                  child: _SectionBarChart(sections: sections),
+                _SectionAttendance(sections: sections),
+              const SizedBox(height: 20),
+              const Divider(height: 1),
+              if (widget.onSignalements != null)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.flag_outlined,
+                    color: AuditronColors.ink500,
+                  ),
+                  title: const Text('Signalements et justificatifs'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: widget.onSignalements,
+                ),
+              if (widget.onAssiduite != null)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.insights_outlined,
+                    color: AuditronColors.ink500,
+                  ),
+                  title: const Text('Bilans d’assiduité et de retards'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: widget.onAssiduite,
                 ),
               const SizedBox(height: 20),
               _DashboardPeopleSection(
@@ -172,7 +195,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 title: 'Retardataires',
                 people: retardataires,
                 icon: Icons.schedule,
-                color: AuditronColors.gold600,
+                color: AuditronColors.orange700,
               ),
             ],
           );
@@ -204,73 +227,71 @@ class _DashboardPeopleSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, color: color, size: 20),
-                const SizedBox(width: 8),
-                // « Absents selon l'emploi du temps (12) » ne tient pas à côté
-                // de l'icône sur un écran étroit : sans Expanded, le Row
-                // débordait au lieu de tronquer.
-                Expanded(
-                  child: Text(
-                    '$title (${people.length})',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-              ],
-            ),
-            if (people.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 8),
+              // « Absents selon l'emploi du temps (12) » ne tient pas à côté
+              // de l'icône sur un écran étroit : sans Expanded, le Row
+              // débordait au lieu de tronquer.
+              Expanded(
                 child: Text(
-                  'Aucune personne.',
-                  style: TextStyle(color: AuditronColors.ink500),
+                  '$title (${people.length})',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
-              )
-            else
-              ...people.map((person) {
-                final cours =
-                    (person['cours'] as List?)
-                        ?.whereType<Map>()
-                        .map(
-                          (c) =>
-                              '${c['classe'] ?? '—'} ${c['heure_debut'] ?? ''}-${c['heure_fin'] ?? ''}',
-                        )
-                        .join(' · ') ??
-                    '';
-                final horaires = [
-                  if (person['heure_arrivee'] != null)
-                    'Arrivée ${person['heure_arrivee']}',
-                  if (person['heure_depart'] != null)
-                    'Départ ${person['heure_depart']}',
-                  if (person['minutes_retard'] != null &&
-                      person['minutes_retard'] != 0)
-                    '${person['minutes_retard']} min de retard',
-                ].join(' · ');
-                return ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(icon, color: color, size: 18),
-                  title: Text(person['nom']?.toString() ?? '—'),
-                  subtitle: Text(
-                    [person['matricule'], horaires, cours]
-                        .where((v) => v != null && v.toString().isNotEmpty)
-                        .join(' · '),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 2,
-                  ),
-                );
-              }),
-          ],
-        ),
+              ),
+            ],
+          ),
+          if (people.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Text(
+                'Aucune personne.',
+                style: TextStyle(color: AuditronColors.ink500),
+              ),
+            )
+          else
+            ...people.map((person) {
+              final cours =
+                  (person['cours'] as List?)
+                      ?.whereType<Map>()
+                      .map(
+                        (c) =>
+                            '${c['classe'] ?? '—'} ${c['heure_debut'] ?? ''}-${c['heure_fin'] ?? ''}',
+                      )
+                      .join(' · ') ??
+                  '';
+              final horaires = [
+                if (person['heure_arrivee'] != null)
+                  'Arrivée ${person['heure_arrivee']}',
+                if (person['heure_depart'] != null)
+                  'Départ ${person['heure_depart']}',
+                if (person['minutes_retard'] != null &&
+                    person['minutes_retard'] != 0)
+                  '${person['minutes_retard']} min de retard',
+              ].join(' · ');
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(icon, color: color, size: 18),
+                title: Text(person['nom']?.toString() ?? '—'),
+                subtitle: Text(
+                  [person['matricule'], horaires, cours]
+                      .where((v) => v != null && v.toString().isNotEmpty)
+                      .join(' · '),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
+                ),
+              );
+            }),
+        ],
       ),
     );
   }
@@ -279,13 +300,11 @@ class _DashboardPeopleSection extends StatelessWidget {
 class _KpiCard extends StatelessWidget {
   final String label;
   final String value;
-  final IconData icon;
   final Color color;
 
   const _KpiCard({
     required this.label,
     required this.value,
-    required this.icon,
     required this.color,
   });
 
@@ -299,26 +318,28 @@ class _KpiCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: AuditronColors.ink500,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
             FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
               child: Text(
                 value,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w900,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
                 ),
-              ),
-            ),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AuditronColors.ink500,
-                fontSize: 13,
               ),
             ),
           ],
@@ -342,85 +363,62 @@ class _ErrorTile extends StatelessWidget {
   }
 }
 
-/// Graphique "taux d'assiduité par section" (§admin-mobile) — équivalent
-/// mobile du BarChart Recharts de DashboardPage.jsx.
-class _SectionBarChart extends StatelessWidget {
+class _SectionAttendance extends StatelessWidget {
   final List<Map<String, dynamic>> sections;
 
-  const _SectionBarChart({required this.sections});
+  const _SectionAttendance({required this.sections});
 
   @override
   Widget build(BuildContext context) {
-    return BarChart(
-      BarChartData(
-        maxY: 100,
-        gridData: const FlGridData(show: true, drawVerticalLine: false),
-        borderData: FlBorderData(show: false),
-        barTouchData: BarTouchData(
-          touchTooltipData: BarTouchTooltipData(
-            getTooltipItem: (group, groupIndex, rod, rodIndex) =>
-                BarTooltipItem(
-                  '${rod.toY.toStringAsFixed(0)}%',
-                  const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-          ),
-        ),
-        titlesData: FlTitlesData(
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 32,
-              interval: 25,
-            ),
-          ),
-          rightTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-          topTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 36,
-              getTitlesWidget: (value, meta) {
-                final i = value.toInt();
-                if (i < 0 || i >= sections.length)
-                  return const SizedBox.shrink();
-                final label = sections[i]['section']?.toString() ?? '—';
-                return Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    label.length > 8 ? '${label.substring(0, 8)}…' : label,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: AuditronColors.ink500,
+    return Column(
+      children: [
+        for (final section in sections)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Builder(
+              builder: (context) {
+                final rate = (num.tryParse('${section['taux_assiduite']}') ?? 0)
+                    .toDouble();
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${section['section'] ?? 'Sans section'}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AuditronColors.ink500,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${rate.toStringAsFixed(rate % 1 == 0 ? 0 : 1)} %',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AuditronColors.ink500,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
+                    const SizedBox(height: 6),
+                    LinearProgressIndicator(
+                      value: (rate / 100).clamp(0, 1),
+                      minHeight: 8,
+                      borderRadius: BorderRadius.circular(4),
+                      color: AuditronColors.brand500,
+                      backgroundColor: AuditronColors.ink100,
+                      semanticsLabel: '${section['section'] ?? 'Sans section'}',
+                    ),
+                  ],
                 );
               },
             ),
           ),
-        ),
-        barGroups: [
-          for (var i = 0; i < sections.length; i++)
-            BarChartGroupData(
-              x: i,
-              barRods: [
-                BarChartRodData(
-                  toY: (num.tryParse('${sections[i]['taux_assiduite']}') ?? 0)
-                      .toDouble(),
-                  color: AuditronColors.brand700,
-                  width: 18,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ],
-            ),
-        ],
-      ),
+      ],
     );
   }
 }

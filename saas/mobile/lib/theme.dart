@@ -1,27 +1,27 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
-/// Identité visuelle Auditron X — palette extraite du logo (vert circuit + or),
-/// partagée avec le backoffice React. Montserrat donne à l'app une présence
-/// plus nette sur les écrans d'administration et les données denses.
+/// Palette commune aux interfaces mobiles de la vitrine et de l'application.
 class AuditronColors {
-  static const brand900 = Color(0xFF00281A);
-  static const brand800 = Color(0xFF003B27);
-  static const brand700 = Color(0xFF0F6E49);
-  static const brand600 = Color(0xFF16805A);
-  static const brand500 = Color(0xFF23855D);
-  static const brand100 = Color(0xFFE2F2EA);
-  static const brand50 = Color(0xFFF2F9F6);
+  static const brand900 = Color(0xFF043B2B);
+  static const brand800 = Color(0xFF064B36);
+  static const brand700 = Color(0xFF075F43);
+  static const brand600 = Color(0xFF08734F);
+  static const brand500 = Color(0xFF14825E);
+  static const brand100 = Color(0xFFD8F1E5);
+  static const brand50 = Color(0xFFEEF9F4);
 
-  static const gold600 = Color(0xFFC4972F);
-  static const gold500 = Color(0xFFE0B44A);
-  static const gold100 = Color(0xFFFBF1DC);
+  static const orange700 = Color(0xFFC2410C);
+  static const orange500 = Color(0xFFF97316);
+  static const orange100 = Color(0xFFFFEDD5);
+  static const gold600 = Color(0xFFCA8A04);
+  static const gold500 = Color(0xFFEAB308);
+  static const gold100 = Color(0xFFFEF3C7);
 
-  static const ink900 = Color(0xFF16241D);
-  static const ink700 = Color(0xFF33443C);
-  static const ink500 = Color(0xFF5B6B63);
-  static const ink100 = Color(0xFFE4E7E2);
-  static const ink50 = Color(0xFFF7F8F5);
+  static const ink900 = Color(0xFF0F172A);
+  static const ink700 = Color(0xFF334155);
+  static const ink500 = Color(0xFF64748B);
+  static const ink100 = Color(0xFFE2E8F0);
+  static const ink50 = Color(0xFFF8FAFC);
 }
 
 ThemeData buildAuditronTheme() {
@@ -29,103 +29,125 @@ ThemeData buildAuditronTheme() {
     seedColor: AuditronColors.brand700,
     brightness: Brightness.light,
     primary: AuditronColors.brand700,
-    secondary: AuditronColors.gold500,
+    secondary: AuditronColors.orange700,
     surface: Colors.white,
+    onSurface: AuditronColors.ink900,
+  );
+
+  // Lato est embarquee dans l'app et reste disponible hors ligne.
+  final textTheme = ThemeData.light().textTheme.apply(
+    fontFamily: 'Lato',
+    bodyColor: AuditronColors.ink700,
+    displayColor: AuditronColors.ink900,
   );
 
   return ThemeData(
     useMaterial3: true,
-    fontFamily: GoogleFonts.montserrat().fontFamily,
+    fontFamily: 'Lato',
     colorScheme: colorScheme,
     scaffoldBackgroundColor: AuditronColors.ink50,
+    dividerColor: AuditronColors.ink100,
     appBarTheme: const AppBarTheme(
-      backgroundColor: AuditronColors.brand900,
+      backgroundColor: AuditronColors.brand700,
       foregroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
       elevation: 0,
+      scrolledUnderElevation: 0,
       centerTitle: false,
+      titleTextStyle: TextStyle(
+        fontFamily: 'Lato',
+        fontSize: 20,
+        fontWeight: FontWeight.w700,
+        color: Colors.white,
+      ),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: AuditronColors.brand700,
         foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        textStyle: const TextStyle(
+          fontFamily: 'Lato',
+          fontWeight: FontWeight.w700,
+          fontSize: 15,
+        ),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: Colors.white,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         borderSide: const BorderSide(color: AuditronColors.ink100),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         borderSide: const BorderSide(color: AuditronColors.ink100),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         borderSide: const BorderSide(color: AuditronColors.brand700, width: 2),
       ),
     ),
     cardTheme: CardThemeData(
+      margin: EdgeInsets.zero,
       elevation: 0,
       color: Colors.white,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(8),
         side: const BorderSide(color: AuditronColors.ink100),
       ),
     ),
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: AuditronColors.brand900,
-      indicatorColor: AuditronColors.gold500,
-      indicatorShape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-      ),
-      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      indicatorColor: AuditronColors.brand100,
+      height: 72,
+      labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
       labelTextStyle: WidgetStateProperty.resolveWith(
         (states) => TextStyle(
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: states.contains(WidgetState.selected)
               ? FontWeight.w700
               : FontWeight.w500,
           color: states.contains(WidgetState.selected)
-              ? AuditronColors.brand900
-              : Colors.white70,
+              ? AuditronColors.brand700
+              : AuditronColors.ink500,
         ),
       ),
       iconTheme: WidgetStateProperty.resolveWith(
         (states) => IconThemeData(
           color: states.contains(WidgetState.selected)
-              ? AuditronColors.brand900
-              : Colors.white70,
+              ? AuditronColors.brand700
+              : AuditronColors.ink500,
         ),
       ),
     ),
     chipTheme: ChipThemeData(
-      backgroundColor: AuditronColors.gold100,
+      backgroundColor: Colors.white,
+      selectedColor: AuditronColors.brand100,
       labelStyle: const TextStyle(
-        color: AuditronColors.gold600,
+        fontFamily: 'Lato',
+        color: AuditronColors.brand700,
         fontWeight: FontWeight.w600,
       ),
-      side: BorderSide.none,
+      side: const BorderSide(color: AuditronColors.ink100),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     ),
-    textTheme: GoogleFonts.montserratTextTheme().copyWith(
-      headlineSmall: const TextStyle(
-        fontWeight: FontWeight.w900,
-        color: AuditronColors.ink900,
-      ),
-      titleLarge: const TextStyle(
+    textTheme: textTheme.copyWith(
+      headlineSmall: textTheme.headlineSmall?.copyWith(
         fontWeight: FontWeight.w700,
-        color: AuditronColors.ink900,
       ),
-      titleMedium: const TextStyle(
-        fontWeight: FontWeight.w700,
-        color: AuditronColors.ink900,
-      ),
-      bodyMedium: const TextStyle(color: AuditronColors.ink700),
+      titleLarge: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+      titleMedium: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+      bodyMedium: textTheme.bodyMedium?.copyWith(height: 1.4),
     ),
   );
 }

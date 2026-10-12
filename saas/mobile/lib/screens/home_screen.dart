@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../services/ble_service.dart';
 import '../services/session.dart';
-import '../widgets/assiduite_mensuelle_card.dart';
+import '../widgets/auditron_app_bar.dart';
 import '../widgets/sync_status_banner.dart';
 import 'change_password_screen.dart';
 import 'historique_screen.dart';
@@ -12,6 +13,7 @@ import 'scan_screen.dart';
 import 'cours_du_jour_screen.dart';
 import 'emploi_du_temps_screen.dart';
 import 'plateforme/plateforme_login_screen.dart';
+import 'teacher_day_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -23,12 +25,12 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _tab = 0;
 
-  void _openSelfScan() {
+  Future<void> _openSelfScan() async {
     final me = context.read<Session>().me;
-    Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ScanScreen(
-          title: 'Scanner ma présence',
+          title: 'Pointer ma présence',
           type: 'scan',
           teacherLabel: BleService.formatTeacherLabel(
             me?['nom'] as String?,
@@ -81,7 +83,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final isAdmin = session.me?['est_admin'] == true;
 
     final pages = [
-      _ScanTab(onScan: _openSelfScan, nom: session.nom),
+      TeacherDayScreen(
+        onScan: _openSelfScan,
+        onHistory: () => setState(() => _tab = 1),
+        onCourses: () => setState(() => _tab = 2),
+        onSchedule: () => _openSchedule(session.me?['id']),
+      ),
       const HistoriqueScreen(),
       const CoursDuJourScreen(),
       if (isAdmin) const ProcurationScreen(),
@@ -89,8 +96,8 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
 
     final titles = [
-      'Auditron X',
-      'Mon historique',
+      'Ma journée',
+      'Mes présences',
       'Mes cours du jour',
       if (isAdmin) 'Procuration',
       'Notifications',
@@ -99,23 +106,55 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_tab >= pages.length) _tab = 0;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(titles[_tab]),
+      appBar: buildAuditronAppBar(
+        context,
+        title: titles[_tab],
+        subtitle: [
+          if (session.nom.isNotEmpty) session.nom,
+          toBeginningOfSentenceCase(
+            DateFormat('EEEE d MMMM', 'fr').format(DateTime.now()),
+          ),
+        ].join(' · '),
+        automaticallyImplyLeading: false,
         actions: [
-          IconButton(
-            onPressed: () => _openSchedule(session.me?['id']),
-            icon: const Icon(Icons.calendar_month_outlined),
-            tooltip: 'Mon emploi du temps',
-          ),
-          IconButton(
-            onPressed: _openChangePassword,
-            icon: const Icon(Icons.lock_outline),
-            tooltip: 'Modifier le mot de passe',
-          ),
-          IconButton(
-            onPressed: _openPlateforme,
-            icon: const Icon(Icons.business_outlined),
-            tooltip: 'Espace équipe Auditron',
+          PopupMenuButton<String>(
+            tooltip: 'Mon compte',
+            onSelected: (value) {
+              switch (value) {
+                case 'schedule':
+                  _openSchedule(session.me?['id']);
+                case 'password':
+                  _openChangePassword();
+                case 'platform':
+                  _openPlateforme();
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'schedule',
+                child: ListTile(
+                  leading: Icon(Icons.calendar_month_outlined),
+                  title: Text('Mon emploi du temps'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'password',
+                child: ListTile(
+                  leading: Icon(Icons.lock_outline),
+                  title: Text('Modifier le mot de passe'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'platform',
+                child: ListTile(
+                  leading: Icon(Icons.business_outlined),
+                  title: Text('Espace équipe Auditron'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -130,8 +169,9 @@ class _HomeScreenState extends State<HomeScreen> {
         onDestinationSelected: (i) => setState(() => _tab = i),
         destinations: [
           const NavigationDestination(
-            icon: Icon(Icons.qr_code_scanner),
-            label: 'Scanner',
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'Accueil',
           ),
           const NavigationDestination(
             icon: Icon(Icons.history),
@@ -152,44 +192,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _ScanTab extends StatelessWidget {
-  final VoidCallback onScan;
-  final String nom;
-
-  const _ScanTab({required this.onScan, required this.nom});
-
-  @override
-  Widget build(BuildContext context) {
-    // Liste défilante plutôt que colonne centrée : la carte d'assiduité
-    // déborderait sur un petit écran en mode paysage.
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 28, 20, 28),
-      children: [
-        Image.asset('assets/logo.png', height: 64),
-        const SizedBox(height: 16),
-        Text(
-          'Bonjour, $nom',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        const SizedBox(height: 24),
-        Center(
-          child: FilledButton.icon(
-            onPressed: onScan,
-            icon: const Icon(Icons.qr_code_scanner),
-            label: const Text('Scanner ma présence'),
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
-            ),
-          ),
-        ),
-        const SizedBox(height: 28),
-        const AssiduiteMensuelleCard(),
-      ],
     );
   }
 }

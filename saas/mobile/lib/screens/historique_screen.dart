@@ -78,7 +78,10 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
       case _Periode.tout:
         return null;
       case _Periode.cetteSemaine:
-        return DateTimeRange(start: lundi, end: lundi.add(const Duration(days: 7)));
+        return DateTimeRange(
+          start: lundi,
+          end: lundi.add(const Duration(days: 7)),
+        );
       case _Periode.semaineDerniere:
         final lundiDernier = lundi.subtract(const Duration(days: 7));
         return DateTimeRange(start: lundiDernier, end: lundi);
@@ -105,7 +108,8 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
     final maintenant = DateTime.now();
     final choix = await showDatePicker(
       context: context,
-      initialDate: _moisChoisi ?? DateTime(maintenant.year, maintenant.month, 1),
+      initialDate:
+          _moisChoisi ?? DateTime(maintenant.year, maintenant.month, 1),
       firstDate: DateTime(
         maintenant.year,
         maintenant.month - _moisDisponibles,
@@ -209,7 +213,7 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
                           },
                         ),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
               ),
@@ -336,21 +340,56 @@ class _HistoriqueScreenState extends State<HistoriqueScreen> {
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Card(
                       margin: EdgeInsets.zero,
-                      child: ListTile(
-                        title: Text(_dateLisible(entree.date)),
-                        subtitle: Text(
-                          'Arrivée : ${formatTime(entree.heureArrivee)}   '
-                          'Départ : ${formatTime(entree.heureDepart)}',
-                        ),
-                        trailing: entree.enRetard
-                            ? Chip(
-                                label: Text('Retard ${entree.minutesRetard} min'),
-                                backgroundColor: Colors.orange.shade100,
-                              )
-                            : const Icon(
-                                Icons.check_circle,
-                                color: Colors.green,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _dateLisible(entree.date),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: AuditronColors.ink900,
                               ),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 20,
+                              runSpacing: 4,
+                              children: [
+                                Text(
+                                  'Arrivée ${formatTime(entree.heureArrivee)}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AuditronColors.ink500,
+                                  ),
+                                ),
+                                Text(
+                                  'Départ ${formatTime(entree.heureDepart)}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AuditronColors.ink500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              entree.enRetard
+                                  ? 'Retard : ${entree.minutesRetard} min'
+                                  : entree.minutesRetard == 0
+                                  ? 'À l’heure'
+                                  : 'Présence enregistrée',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: entree.enRetard
+                                    ? AuditronColors.orange700
+                                    : AuditronColors.brand700,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),

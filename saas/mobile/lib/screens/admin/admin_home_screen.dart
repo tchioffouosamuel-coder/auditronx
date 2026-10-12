@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/admin_session.dart';
 import '../../theme.dart';
+import '../../widgets/auditron_app_bar.dart';
 import '../../widgets/sync_status_banner.dart';
 import '../plateforme/plateforme_login_screen.dart';
 import '../change_password_screen.dart';
@@ -68,14 +69,21 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         accreditation['exclut_administration'] != true;
   }
 
-  static List<_AdminMenuGroup> _groupesPour({required bool accesTotal}) => [
+  static List<_AdminMenuGroup> _groupesPour({
+    required bool accesTotal,
+    VoidCallback? onSignalements,
+    VoidCallback? onAssiduite,
+  }) => [
     _AdminMenuGroup(
       title: "Vue d'ensemble",
       entries: [
         _AdminMenuEntry(
           title: 'Tableau de bord',
           icon: Icons.dashboard,
-          screen: const AdminDashboardScreen(),
+          screen: AdminDashboardScreen(
+            onSignalements: onSignalements,
+            onAssiduite: onAssiduite,
+          ),
         ),
         _AdminMenuEntry(
           title: 'Scanner',
@@ -230,6 +238,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     setState(() => _index = index);
   }
 
+  void _selectByTitle(String title) {
+    final index = _flatEntries.indexWhere((entry) => entry.title == title);
+    if (index >= 0) _select(index);
+  }
+
   void _showMore() {
     showModalBottomSheet<void>(
       context: context,
@@ -290,6 +303,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   Widget build(BuildContext context) {
     _groups = _groupesPour(
       accesTotal: _aAccesTotal(context.watch<AdminSession>()),
+      onSignalements: () => _selectByTitle('Signalements'),
+      onAssiduite: () => _selectByTitle('Assiduité'),
     );
     _flatEntries = [for (final g in _groups) ...g.entries];
     if (_index >= _flatEntries.length) _index = 0;
@@ -304,41 +319,52 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         if (!didPop) setState(() => _index = 0);
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: Text(
-            _flatEntries[_index].title,
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-          leading: Padding(
-            padding: const EdgeInsets.all(10),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: AuditronColors.gold500,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Image.asset(
-                'assets/logo.png',
-                width: 24,
-                height: 24,
-                fit: BoxFit.contain,
-              ),
-            ),
-          ),
+        appBar: buildAuditronAppBar(
+          context,
+          title: _index == 0 ? 'Espace direction' : _flatEntries[_index].title,
+          subtitle: _index == 0
+              ? 'Présences de l’établissement'
+              : 'Espace direction',
+          automaticallyImplyLeading: false,
           actions: [
-            IconButton(
-              onPressed: _openChangePassword,
-              icon: const Icon(Icons.lock_outline),
-              tooltip: 'Modifier le mot de passe',
-            ),
-            IconButton(
-              onPressed: _openPlateforme,
-              icon: const Icon(Icons.business_outlined),
-              tooltip: 'Espace équipe Auditron',
-            ),
-            IconButton(
-              onPressed: _logout,
-              icon: const Icon(Icons.logout),
-              tooltip: 'Déconnexion',
+            PopupMenuButton<String>(
+              tooltip: 'Compte direction',
+              onSelected: (value) {
+                switch (value) {
+                  case 'password':
+                    _openChangePassword();
+                  case 'platform':
+                    _openPlateforme();
+                  case 'logout':
+                    _logout();
+                }
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: 'password',
+                  child: ListTile(
+                    leading: Icon(Icons.lock_outline),
+                    title: Text('Modifier le mot de passe'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'platform',
+                  child: ListTile(
+                    leading: Icon(Icons.business_outlined),
+                    title: Text('Espace équipe Auditron'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'logout',
+                  child: ListTile(
+                    leading: Icon(Icons.logout),
+                    title: Text('Déconnexion'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
             ),
           ],
         ),

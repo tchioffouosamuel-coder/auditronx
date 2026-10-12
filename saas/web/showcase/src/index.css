@@ -1,0 +1,186 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-brand: #08734f;
+  --color-cyan: #f97316;
+  --color-audit: #eab308;
+}
+
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+section[id], footer[id] {
+  scroll-margin-top: 80px;
+}
+
+body {
+  font-family: 'Manrope', system-ui, sans-serif;
+  color: #12231e;
+  background: #fffdf9;
+}
+
+.legal-content ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+
+.legal-content li + li {
+  margin-top: 0.75rem;
+}
+
+.legal-content a {
+  color: #075f43;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+
+.legal-content a:hover {
+  color: #043b2b;
+}
+
+.context-photo-band .section-photo {
+  object-position: 70% 70%;
+}
+
+.context-photo-scrim {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97) 0%, rgba(255, 255, 255, 0.9) 55%, rgba(255, 255, 255, 0.15) 100%);
+}
+
+#cta .section-photo {
+  object-position: 35% center;
+}
+
+.cta-photo-scrim {
+  background: rgba(5, 35, 25, 0.83);
+}
+
+@media (min-width: 1024px) {
+  .context-photo-scrim {
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.94) 40%, rgba(255, 255, 255, 0.12) 75%);
+  }
+
+  .cta-photo-scrim {
+    background: linear-gradient(90deg, rgba(5, 35, 25, 0.35) 0%, rgba(5, 35, 25, 0.87) 50%, rgba(5, 35, 25, 0.94) 100%);
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Reveal-on-scroll */
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.reveal.revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #075f43 0%, #f97316 55%, #eab308 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Grid pattern background */
+.bg-grid {
+  background-image: 
+    linear-gradient(to right, rgba(8, 115, 79, 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(8, 115, 79, 0.07) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.bg-grid-dark {
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* Dot pattern */
+.bg-dots {
+  background-image: radial-gradient(circle, rgba(8, 115, 79, 0.12) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Glass morphism */
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Shimmer effect */
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.4) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 3s linear infinite;
+}
+
+/* QR code cell rendering */
+.qr-cell {
+  display: inline-block;
+  width: 100%;
+  height: 100%;
+}
+
+/* No scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-style: none;
+}
+
+/* Mesh gradient */
+.mesh-gradient {
+  background-color: #ffffff;
+  background-image:
+    radial-gradient(at 20% 20%, rgba(8, 115, 79, 0.10) 0px, transparent 50%),
+    radial-gradient(at 80% 0%, rgba(249, 115, 22, 0.08) 0px, transparent 50%),
+    radial-gradient(at 80% 80%, rgba(234, 179, 8, 0.07) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, rgba(8, 115, 79, 0.05) 0px, transparent 50%);
+}
+
+.mesh-gradient-dark {
+  background-color: #073b2c;
+  background-image:
+    radial-gradient(at 20% 20%, rgba(20, 130, 94, 0.22) 0px, transparent 50%),
+    radial-gradient(at 80% 0%, rgba(249, 115, 22, 0.15) 0px, transparent 50%),
+    radial-gradient(at 80% 80%, rgba(234, 179, 8, 0.12) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, rgba(8, 115, 79, 0.12) 0px, transparent 50%);
+}

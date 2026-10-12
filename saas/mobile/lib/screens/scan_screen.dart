@@ -7,6 +7,7 @@ import '../services/api_client.dart';
 import '../services/ble_service.dart';
 import '../services/presence_repository.dart';
 import '../theme.dart';
+import '../widgets/auditron_app_bar.dart';
 
 /// Écran de scan générique (§4.1, §4.3, §hardware) : lecture du QR papier fixe
 /// au point de contrôle, puis transmission à la borne ESP32 en BLE local
@@ -91,7 +92,7 @@ class _ScanScreenState extends State<ScanScreen> {
         return;
       }
 
-      final result = await _ble.scanViaBorne(
+      await _ble.scanViaBorne(
         type: widget.type,
         teacherToken: teacherToken,
         qrCode: code,
@@ -396,19 +397,102 @@ class _ScanScreenState extends State<ScanScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
-      body: Stack(
-        children: [
-          MobileScanner(
-            controller: _controller,
-            onDetect: (capture) {
-              final code = capture.barcodes.firstOrNull?.rawValue;
-              if (code != null) _handleCode(code);
-            },
-          ),
-          if (_processing) const _QrProcessingOverlay(),
-        ],
+      appBar: buildAuditronAppBar(
+        context,
+        title: widget.title,
+        subtitle: 'Point de contrôle · Borne locale',
       ),
+      body: ScanCameraView(
+        processing: _processing,
+        camera: MobileScanner(
+          controller: _controller,
+          onDetect: (capture) {
+            final code = capture.barcodes.firstOrNull?.rawValue;
+            if (code != null) _handleCode(code);
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class ScanCameraView extends StatelessWidget {
+  final Widget camera;
+  final bool processing;
+
+  const ScanCameraView({
+    super.key,
+    required this.camera,
+    this.processing = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Column(
+          children: [
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final shortest = constraints.maxWidth < constraints.maxHeight
+                      ? constraints.maxWidth
+                      : constraints.maxHeight;
+                  final frameSize = shortest * 0.72;
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      camera,
+                      if (!processing)
+                        IgnorePointer(
+                          child: Center(
+                            child: Container(
+                              width: frameSize,
+                              height: frameSize,
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: AuditronColors.brand500,
+                                  width: 3,
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            const ColoredBox(
+              color: Colors.white,
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Icon(Icons.bluetooth, color: AuditronColors.brand700),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Transmission locale par Bluetooth',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AuditronColors.brand700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (processing) const Positioned.fill(child: _QrProcessingOverlay()),
+      ],
     );
   }
 }
@@ -430,7 +514,7 @@ class _QrProcessingOverlay extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(8),
             boxShadow: const [
               BoxShadow(
                 color: Colors.black38,
