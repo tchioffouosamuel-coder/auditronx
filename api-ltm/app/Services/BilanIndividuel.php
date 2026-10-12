@@ -38,7 +38,7 @@ class BilanIndividuel
         $joursAttendus = $presencesValides = 0;
         $totalRetard = $totalAnticipation = $totalPeriodesPresence = $totalPeriodesAbsence = 0;
 
-        for ($date = $debut->copy(); $date->lte($fin); $date->addDay()) {
+        for ($date = $debut->copy()->startOfDay(); $date->lte($fin); $date->addDay()) {
             // Enseignant : jours avec cours ; personnel administratif : journée
             // de travail fixe, sans emploi du temps (voir HoraireAttendu).
             $plage = $this->horaires->plage($enseignant, $date, $emplois);
@@ -46,8 +46,8 @@ class BilanIndividuel
             $coursDuJour = $emplois->where('jour', $date->isoWeekday())->values();
             $periodesPrevues = max(1, (int) ceil($plage['minutes'] / 40));
             $presence = $presences->get($date->toDateString());
-            $signalement = $signalements->first(fn($item) => $date->between($item->date, $item->date->copy()->addDays(max(0, $item->duree_jours - 1))));
-            $futur = $date->isFuture();
+            $signalement = $signalements->first(fn($item) => $item->couvre($date));
+            $futur = $this->horaires->estAVenir($date);
             $heureFin = Carbon::parse($date->toDateString() . ' ' . $plage['heure_fin']);
             $retard = $presence?->heure_arrivee ? $this->retards->minutesDeRetard($enseignant, $presence) ?? 0 : 0;
             $anticipation = $presence?->heure_depart ? max(0, (int) floor(($heureFin->timestamp - $presence->heure_depart->timestamp) / 60)) : 0;
@@ -55,7 +55,7 @@ class BilanIndividuel
             $absent = !$futur && !$signale && (!$presence || (!$presence->heure_arrivee && !$presence->heure_depart));
             $periodesRattraper = $absent ? $periodesPrevues : (int) ceil($anticipation / 40);
             $valide = $signale || (bool) ($presence?->heure_arrivee || $presence?->heure_depart);
-            $joursAttendus++;
+            if (!$futur) $joursAttendus++;
             if ($valide && !$futur) $presencesValides++;
             if (!$futur) {
                 $totalRetard += $retard;

@@ -202,7 +202,7 @@ class HoraireAdministratifTest extends TestCase
         Pdf::shouldReceive('loadView')
             ->once()
             ->with('pdf.retards-individuel', \Mockery::on(function (array $data): bool {
-                $this->assertSame(5, $data['jours_attendus']);
+                $this->assertSame(3, $data['jours_attendus']); // Lundi a mercredi ; jours futurs exclus.
                 $this->assertSame(1, $data['presences_valides']);
                 $this->assertSame(20, $data['total_retard_minutes']);
                 $this->assertSame(60, $data['total_anticipation_minutes']);
@@ -281,9 +281,9 @@ class HoraireAdministratifTest extends TestCase
             ->once()
             ->with('pdf.retards-individuel', \Mockery::on(function (array $data) use ($administratif): bool {
                 $this->assertSame($administratif->id, $data['enseignant']->id);
-                $this->assertSame(5, $data['jours_attendus']);
+                $this->assertSame(3, $data['jours_attendus']);
                 $this->assertSame(1, $data['presences_valides']);
-                $this->assertEqualsWithDelta(20.0, $data['taux_assiduite'], 0.01);
+                $this->assertEqualsWithDelta(100 / 3, $data['taux_assiduite'], 0.01);
                 $this->assertCount(5, $data['details']);
 
                 return true;
