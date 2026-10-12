@@ -246,6 +246,14 @@ function couleurTaux(taux) {
 }
 
 function Cellule({ cellule }) {
+  if (cellule.ferie) {
+    return (
+      <td className="bg-amber-50 px-3 py-2 text-center text-xs text-amber-700" title={cellule.ferie}>
+        FÉR
+      </td>
+    )
+  }
+
   if (!cellule.attendu) {
     return (
       <td
@@ -253,6 +261,21 @@ function Cellule({ cellule }) {
         title="Non attendu ce jour-là"
       >
         ·
+      </td>
+    )
+  }
+
+  if (cellule.a_venir && !cellule.present) {
+    return <td className="px-3 py-2 text-center text-ink-300">–</td>
+  }
+
+  if (cellule.est_signale && !cellule.present) {
+    return (
+      <td
+        className="bg-brand-50 px-3 py-2 text-center text-xs font-semibold text-brand-700"
+        title={cellule.type_signalement || 'Signalé'}
+      >
+        SIG
       </td>
     )
   }

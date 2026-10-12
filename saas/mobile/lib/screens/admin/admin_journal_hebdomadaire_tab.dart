@@ -396,6 +396,7 @@ class _Pastille extends StatelessWidget {
   Widget build(BuildContext context) {
     final attendu = cellule['attendu'] == true;
     final present = cellule['present'] == true;
+    final signale = cellule['est_signale'] == true;
     // Un jour férié rend `attendu` faux côté API : sans traitement distinct, il
     // s'afficherait comme un jour sans cours, alors que c'est la raison même
     // pour laquelle personne n'est porté absent.
@@ -417,6 +418,8 @@ class _Pastille extends StatelessWidget {
           )
         : aVenir
         ? (AuditronColors.ink50, AuditronColors.ink500, '–')
+        : signale
+        ? (AuditronColors.brand100, AuditronColors.brand700, 'SIG')
         : (Colors.red.shade50, Colors.red.shade700, 'ABS');
 
     return Tooltip(
@@ -429,6 +432,8 @@ class _Pastille extends StatelessWidget {
                 'Départ ${cellule['heure_depart'] ?? '—'}'
           : aVenir
           ? 'Jour à venir : pas encore évalué'
+          : signale
+          ? 'Signalé : ${cellule['type_signalement'] ?? 'Justificatif'}'
           : 'Attendu, aucun pointage enregistré',
       child: Padding(
         padding: const EdgeInsets.only(right: 4),

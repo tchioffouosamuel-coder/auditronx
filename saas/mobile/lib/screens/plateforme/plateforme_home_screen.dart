@@ -6,7 +6,6 @@ import '../../theme.dart';
 import 'plateforme_audit_screen.dart';
 import 'plateforme_dashboard_screen.dart';
 import 'plateforme_etablissements_screen.dart';
-import 'plateforme_factures_screen.dart';
 import 'plateforme_plans_screen.dart';
 import 'plateforme_presences_screen.dart';
 import 'plateforme_utilisateurs_screen.dart';
@@ -23,10 +22,9 @@ class _PlateformeHomeScreenState extends State<PlateformeHomeScreen> {
 
   Future<void> _showMore(bool estSuperAdmin) async {
     final pages = [
-      (3, 'Présences du parc', Icons.fact_check_outlined),
-      (4, 'Offres et abonnements', Icons.sell_outlined),
-      if (estSuperAdmin) (5, 'Équipe Auditron', Icons.groups_outlined),
-      if (estSuperAdmin) (6, 'Journal d’audit Auditron', Icons.history),
+      (3, 'Offres et abonnements', Icons.sell_outlined),
+      if (estSuperAdmin) (4, 'Équipe Auditron', Icons.groups_outlined),
+      if (estSuperAdmin) (5, 'Journal d’audit Auditron', Icons.history),
     ];
     final selected = await showModalBottomSheet<int>(
       context: context,
@@ -59,7 +57,6 @@ class _PlateformeHomeScreenState extends State<PlateformeHomeScreen> {
     final pages = <Widget>[
       const PlateformeDashboardScreen(),
       PlateformeEtablissementsScreen(estSuperAdmin: session.estSuperAdmin),
-      PlateformeFacturesScreen(estSuperAdmin: session.estSuperAdmin),
       const PlateformePresencesScreen(),
       PlateformePlansScreen(estSuperAdmin: session.estSuperAdmin),
       if (session.estSuperAdmin) const PlateformeUtilisateursScreen(),
@@ -68,7 +65,6 @@ class _PlateformeHomeScreenState extends State<PlateformeHomeScreen> {
     final titles = [
       'Portail Auditron',
       'Établissements',
-      'Facturation',
       'Présences du parc',
       'Offres et abonnements',
       if (session.estSuperAdmin) 'Équipe Auditron',
@@ -122,8 +118,8 @@ class _PlateformeHomeScreenState extends State<PlateformeHomeScreen> {
               label: 'Parc',
             ),
             NavigationDestination(
-              icon: Icon(Icons.receipt_long_outlined),
-              label: 'Factures',
+              icon: Icon(Icons.fact_check_outlined),
+              label: 'Présences',
             ),
             NavigationDestination(
               icon: Icon(Icons.grid_view_rounded),

@@ -174,7 +174,9 @@ function PeopleList({ title, icon, people = [], tone = "neutral" }) {
                     )}
                   </td>
                   <td className="px-2 py-3 whitespace-nowrap text-ink-500 tabular-nums">
-                    {person.heure_arrivee || "—"}
+                    <span title={person.type_signalement || undefined}>
+                      {person.heure_arrivee || (person.est_signale ? "Signalé" : "—")}
+                    </span>
                   </td>
                   <td className="px-2 py-3 whitespace-nowrap text-ink-500 tabular-nums">
                     {person.heure_depart || "—"}
@@ -233,6 +235,7 @@ export default function DashboardPage() {
       ? data.classement_par_section
       : [];
   const scannes = data && Array.isArray(data.scannes) ? data.scannes : [];
+  const signales = data && Array.isArray(data.signales_liste) ? data.signales_liste : [];
   const absents =
     data && Array.isArray(data.absents_liste) ? data.absents_liste : [];
   const retardataires =
@@ -410,6 +413,11 @@ export default function DashboardPage() {
               icon="person_off"
               people={absents}
               tone="red"
+            />
+            <PeopleList
+              title="Signalés"
+              icon="flag"
+              people={signales}
             />
             <PeopleList
               title="Retardataires"

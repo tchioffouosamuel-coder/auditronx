@@ -23,19 +23,23 @@ class AbsenceDetectorService
     {
         // Attendus ce jour : enseignants ayant cours + personnel administratif
         // un jour ouvré de son horaire fixe (voir HoraireAttendu).
-        Enseignant::with('emploiDuTemps')->get()
+        Enseignant::with([
+            'emploiDuTemps',
+            'signalements' => fn ($query) => $query->whereDate('date', '<=', $date->toDateString()),
+        ])->get()
             ->filter(fn (Enseignant $enseignant) => $this->horaires->absenceEvaluable($enseignant, $date))
             ->each(function (Enseignant $enseignant) use ($date) {
                 $aPointe = Presence::where('enseignant_id', $enseignant->id)
                     ->whereDate('date', $date->toDateString())
-                    ->whereNotNull('heure_arrivee')
+                    ->where(fn ($query) => $query->whereNotNull('heure_arrivee')->orWhereNotNull('heure_depart'))
                     ->exists();
+                $signale = $enseignant->signalements->contains(fn ($item) => $item->couvre($date));
 
                 $veille = AbsenceCheckpoint::where('enseignant_id', $enseignant->id)
                     ->where('date', $date->copy()->subDay()->toDateString())
                     ->first();
 
-                $consecutives = $aPointe ? 0 : ($veille?->absences_consecutives ?? 0) + 1;
+                $consecutives = $aPointe || $signale ? 0 : ($veille?->absences_consecutives ?? 0) + 1;
 
                 $checkpoint = AbsenceCheckpoint::updateOrCreate(
                     ['enseignant_id' => $enseignant->id, 'date' => $date->toDateString()],

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Traits\AccessibleEnseignants;
 use App\Models\Enseignant;
 use App\Models\Presence;
+use App\Services\AssiduiteCalculator;
 use App\Services\HoraireAttendu;
 use Carbon\Carbon;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -18,44 +19,25 @@ class AssiduiteController extends Controller
     use AccessibleEnseignants;
 
     /** GET /api/assiduite/stats?debut=&fin=&section= */
-    public function stats(Request $request, HoraireAttendu $horaires)
+    public function stats(Request $request, AssiduiteCalculator $assiduite)
     {
         $debut = Carbon::parse($request->query('debut', now()->startOfMonth()));
         $fin = Carbon::parse($request->query('fin', now()->endOfMonth()));
         $enseignants = $this->enseignantsAccessibles($request->user())
             ->when($request->query('section'), fn($q, $v) => $q->whereRaw('LOWER(section) = LOWER(?)', [$v]))
-            ->with('emploiDuTemps')
+            ->with([
+                'emploiDuTemps',
+                'presences' => fn ($query) => $query->whereBetween('date', [$debut->toDateString(), $fin->toDateString()]),
+                'signalements' => fn ($query) => $query->whereDate('date', '<=', $fin->toDateString()),
+            ])
             ->get();
 
-        $presences = Presence::whereBetween('date', [$debut->toDateString(), $fin->toDateString()])
-            ->whereIn('enseignant_id', $enseignants->pluck('id'))
-            ->whereNotNull('heure_arrivee')
-            ->get()
-            ->groupBy('enseignant_id');
-
-        $lignes = $enseignants->map(function (Enseignant $enseignant) use ($presences, $debut, $fin, $horaires) {
-            $datesAttendues = collect();
-            for ($date = $debut->copy(); $date->lte($fin); $date->addDay()) {
-                // Une période qui déborde sur l'avenir (le mois en cours, par
-                // défaut) ne doit pas compter ses jours restants comme manqués.
-                if ($horaires->absenceEvaluable($enseignant, $date)) {
-                    $datesAttendues->push($date->toDateString());
-                }
-            }
-            $datesAttendues = $datesAttendues->unique()->values();
-            $datesPresents = $presences->get($enseignant->id, collect())
-                ->pluck('date')
-                ->map(fn($date) => Carbon::parse($date)->toDateString());
-            $joursPresents = $datesPresents->intersect($datesAttendues)->unique()->count();
-            $joursAttendus = $datesAttendues->count();
-
+        $lignes = $enseignants->map(function (Enseignant $enseignant) use ($debut, $fin, $assiduite) {
             return [
                 'enseignant_id' => $enseignant->id,
                 'nom' => $enseignant->nom,
                 'section' => $enseignant->section,
-                'jours_presents' => $joursPresents,
-                'jours_attendus' => $joursAttendus,
-                'taux_assiduite' => $joursAttendus > 0 ? round($joursPresents / $joursAttendus * 100, 1) : 0.0,
+                ...$assiduite->bilan($enseignant, $debut, $fin),
             ];
         });
 
@@ -144,7 +126,10 @@ class AssiduiteController extends Controller
 
         $enseignants = $this->enseignantsAccessibles($request->user())
             ->when($request->query('section'), fn ($q, $v) => $q->whereRaw('LOWER(section) = LOWER(?)', [$v]))
-            ->with('emploiDuTemps')
+            ->with([
+                'emploiDuTemps',
+                'signalements' => fn ($query) => $query->whereDate('date', '<=', $fin->toDateString()),
+            ])
             ->orderBy('nom')
             ->get();
         $enseignants = $this->filtrerParCategorie($enseignants, $request, $horaires);
@@ -168,14 +153,17 @@ class AssiduiteController extends Controller
                 $presence = $parDate->get($jour->toDateString(), collect())->first();
                 $attendu = $horaires->estAttendu($enseignant, $jour, $enseignant->emploiDuTemps);
                 $aVenir = $horaires->estAVenir($jour);
-                $present = $presence?->heure_arrivee !== null;
+                $present = (bool) ($presence?->heure_arrivee || $presence?->heure_depart);
+                $signalement = $attendu && ! $aVenir
+                    ? $enseignant->signalements->first(fn ($item) => $item->couvre($jour))
+                    : null;
 
                 // `attendu` reste la vérité de l'emploi du temps ; seul le
                 // comptage écarte les jours à venir, pour que la grille puisse
                 // les afficher comme tels plutôt qu'en « non attendu ».
                 if ($attendu && ! $aVenir) {
                     $attendus++;
-                    if ($present) {
+                    if ($present || $signalement) {
                         $presents++;
                     }
                 }
@@ -185,6 +173,8 @@ class AssiduiteController extends Controller
                     'attendu' => $attendu,
                     'a_venir' => $aVenir,
                     'present' => $present,
+                    'est_signale' => $signalement !== null,
+                    'type_signalement' => $signalement?->motif,
                     // Un férié rend `attendu` faux : sans ce libellé, la cellule
                     // serait indiscernable d'un jour sans cours.
                     'ferie' => $horaires->ferie($jour),

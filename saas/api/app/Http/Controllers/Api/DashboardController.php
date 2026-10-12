@@ -21,7 +21,9 @@ class DashboardController extends Controller
     {
         $date = $request->query('date') ? Carbon::parse($request->query('date')) : now();
 
-        $enseignants = $this->enseignantsAccessibles($request->user())->get();
+        $enseignants = $this->enseignantsAccessibles($request->user())
+            ->with(['signalements' => fn ($query) => $query->whereDate('date', '<=', $date->toDateString())])
+            ->get();
         $emploisDuJour = EmploiDuTemps::with(['classe', 'discipline'])
             ->where('jour', $date->isoWeekday())
             ->whereIn('enseignant_id', $enseignants->pluck('id'))
@@ -45,10 +47,17 @@ class DashboardController extends Controller
             ->get()
             ->keyBy('enseignant_id');
         $presentsSansCours = $enseignants
-            ->filter(fn(Enseignant $e) => ! $plages->has($e->id) && $presencesDuJour->get($e->id)?->heure_arrivee)
+            ->filter(fn(Enseignant $e) => ! $plages->has($e->id) && ($presencesDuJour->get($e->id)?->heure_arrivee || $presencesDuJour->get($e->id)?->heure_depart))
             ->sortBy('nom');
 
+        $signalementsDuJour = $planifies->mapWithKeys(fn (Enseignant $enseignant) => [
+            $enseignant->id => ! $horaires->estAVenir($date)
+                ? $enseignant->signalements->first(fn ($item) => $item->couvre($date))
+                : null,
+        ])->filter();
+
         $scannes = [];
+        $signales = [];
         $absents = [];
         $retardataires = [];
 
@@ -56,12 +65,15 @@ class DashboardController extends Controller
             $presence = $presencesDuJour->get($enseignant->id);
             $cours = $emploisDuJour->get($enseignant->id, collect());
             $plage = $plages->get($enseignant->id);
+            $signalement = $signalementsDuJour->get($enseignant->id);
             $detail = [
                 'enseignant_id' => $enseignant->id,
                 'nom' => $enseignant->nom,
                 'matricule' => $enseignant->matricule,
                 'section' => $enseignant->section,
                 'fonction' => $enseignant->fonction,
+                'est_signale' => $signalement !== null,
+                'type_signalement' => $signalement?->motif,
                 'cours' => $cours->map(fn(EmploiDuTemps $emploi) => [
                     'classe' => $emploi->classe?->nom,
                     'discipline' => $emploi->discipline?->nom,
@@ -80,9 +92,9 @@ class DashboardController extends Controller
                 ))
             );
 
-            if ($presence?->heure_arrivee) {
+            if ($presence?->heure_arrivee || $presence?->heure_depart) {
                 $minutesRetard = $retards->minutesDeRetard($enseignant, $presence) ?? 0;
-                $detail['heure_arrivee'] = $presence->heure_arrivee->format('H:i');
+                $detail['heure_arrivee'] = $presence->heure_arrivee?->format('H:i');
                 $detail['heure_depart'] = $presence->heure_depart?->format('H:i');
                 $detail['minutes_retard'] = $minutesRetard;
                 $scannes[] = $detail;
@@ -90,6 +102,8 @@ class DashboardController extends Controller
                 if ($minutesRetard > 0) {
                     $retardataires[] = $detail;
                 }
+            } elseif ($signalement) {
+                $signales[] = $detail;
             } elseif ($absenceEligible) {
                 $absents[] = $detail;
             }
@@ -99,12 +113,14 @@ class DashboardController extends Controller
             'date' => $date->toDateString(),
             'effectif' => $enseignants->count(),
             'presents' => count($scannes),
+            'signales' => count($signales),
             'absents' => count($absents),
             'retardataires' => count($retardataires),
             'scannes' => $scannes,
+            'signales_liste' => $signales,
             'absents_liste' => $absents,
             'retardataires_liste' => $retardataires,
-            'classement_par_section' => $this->classementParSection($planifies, $presencesDuJour, $retards),
+            'classement_par_section' => $this->classementParSection($planifies, $presencesDuJour, $signalementsDuJour, $retards),
         ]);
     }
 
@@ -114,11 +130,12 @@ class DashboardController extends Controller
      * "industrielle"...), un `groupBy('section')` strict les afficherait à
      * tort comme deux sections distinctes (voir aussi AccessibleEnseignants).
      */
-    private function classementParSection($enseignants, $presencesDuJour, RetardCalculator $retards)
+    private function classementParSection($enseignants, $presencesDuJour, $signalementsDuJour, RetardCalculator $retards)
     {
         return $enseignants->groupBy(fn(Enseignant $e) => mb_strtolower((string) $e->section))
-            ->map(function ($groupe) use ($presencesDuJour, $retards) {
-                $presents = $groupe->filter(fn(Enseignant $e) => $presencesDuJour->get($e->id)?->heure_arrivee);
+            ->map(function ($groupe) use ($presencesDuJour, $signalementsDuJour, $retards) {
+                $presents = $groupe->filter(fn(Enseignant $e) => $presencesDuJour->get($e->id)?->heure_arrivee || $presencesDuJour->get($e->id)?->heure_depart);
+                $valides = $groupe->filter(fn(Enseignant $e) => $presents->contains('id', $e->id) || $signalementsDuJour->has($e->id));
                 $retardsCount = $presents->filter(fn(Enseignant $e) => $retards->estEnRetard($e, $presencesDuJour->get($e->id)));
 
                 return [
@@ -127,7 +144,7 @@ class DashboardController extends Controller
                     'presents' => $presents->count(),
                     'retardataires' => $retardsCount->count(),
                     'taux_assiduite' => $groupe->count() > 0
-                        ? round($presents->count() / $groupe->count() * 100, 1)
+                        ? round($valides->count() / $groupe->count() * 100, 1)
                         : 0.0,
                 ];
             })

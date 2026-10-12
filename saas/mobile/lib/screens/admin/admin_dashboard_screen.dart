@@ -103,6 +103,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   ?.cast<Map<String, dynamic>>() ??
               const [];
           final scannes = _dashboardPeople(d['scannes']);
+          final signales = _dashboardPeople(d['signales_liste']);
           final absents = _dashboardPeople(d['absents_liste']);
           final retardataires = _dashboardPeople(d['retardataires_liste']);
 
@@ -197,6 +198,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 icon: Icons.schedule,
                 color: AuditronColors.orange700,
               ),
+              _DashboardPeopleSection(
+                title: 'Signalés',
+                people: signales,
+                icon: Icons.flag_outlined,
+                color: AuditronColors.ink500,
+              ),
             ],
           );
         },
@@ -269,6 +276,8 @@ class _DashboardPeopleSection extends StatelessWidget {
                       .join(' · ') ??
                   '';
               final horaires = [
+                if (person['est_signale'] == true)
+                  'Signalé : ${person['type_signalement'] ?? 'Justificatif'}',
                 if (person['heure_arrivee'] != null)
                   'Arrivée ${person['heure_arrivee']}',
                 if (person['heure_depart'] != null)

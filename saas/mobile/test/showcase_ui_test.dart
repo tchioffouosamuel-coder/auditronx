@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:auditron_x_app/screens/admin/admin_home_screen.dart';
+import 'package:auditron_x_app/screens/admin/admin_journal_hebdomadaire_tab.dart';
 import 'package:auditron_x_app/screens/home_screen.dart';
 import 'package:auditron_x_app/screens/scan_screen.dart';
 import 'package:auditron_x_app/screens/teacher_day_screen.dart';
@@ -1062,6 +1063,99 @@ void main() {
       await capture(tester, 'history-390');
     },
   );
+
+  testWidgets(
+    'signalements : le journal distingue un justificatif du pointage',
+    (tester) async {
+      online = true;
+      await http.runWithClient(
+        () => pumpScreen(
+          tester,
+          const Scaffold(
+            body: AdminJournalHebdomadaireTab(categorie: 'enseignant'),
+          ),
+          width: 320,
+        ),
+        () => MockClient(
+          (request) async => http.Response(
+            jsonEncode({
+              'debut': getToday(),
+              'jours': [
+                {'libelle': 'Lun'},
+                {'libelle': 'Mar'},
+                {'libelle': 'Mer'},
+              ],
+              'lignes': [
+                {
+                  'nom': 'Personnel signale',
+                  'section': 'Sciences',
+                  'jours_presents': 2,
+                  'jours_attendus': 2,
+                  'taux_assiduite': 100,
+                  'jours': [
+                    {
+                      'attendu': true,
+                      'present': false,
+                      'est_signale': true,
+                      'type_signalement': 'Mission',
+                    },
+                    {
+                      'attendu': true,
+                      'present': true,
+                      'est_signale': true,
+                      'heure_arrivee': '08:00',
+                    },
+                    {
+                      'attendu': true,
+                      'present': false,
+                      'est_signale': false,
+                      'a_venir': true,
+                    },
+                  ],
+                },
+              ],
+            }),
+            200,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('SIG'), findsOneWidget);
+      expect(find.text('08:00'), findsOneWidget);
+      expect(find.text('ABS'), findsNothing);
+      expect(find.text('100 %'), findsOneWidget);
+      expect(find.text('2 / 2'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await capture(tester, 'signalements-journal-320');
+    },
+  );
+
+  testWidgets('signalements : le dashboard affiche les personnes signalees', (
+    tester,
+  ) async {
+    final key = 'auditron_cache_admin_dashboard_${getToday()}';
+    final data = jsonDecode(storage[key]!) as Map<String, dynamic>;
+    data['signales_liste'] = [
+      {
+        'enseignant_id': 13,
+        'nom': 'Personnel signale',
+        'est_signale': true,
+        'type_signalement': 'Mission',
+      },
+    ];
+    storage[key] = jsonEncode(data);
+    await pumpScreen(tester, const AdminHomeScreen());
+    await tester.scrollUntilVisible(
+      find.text('Personnel signale'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Personnel signale'), findsOneWidget);
+    expect(find.text('Signalé : Mission'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await capture(tester, 'signalements-dashboard-390');
+  });
 
   testWidgets(
     'le tableau de bord conserve ses valeurs et ses barres par section',
