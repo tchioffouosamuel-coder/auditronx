@@ -1,4 +1,6 @@
 import { Reveal } from './Reveal';
+import { SchoolPhoto } from './SchoolPhoto';
+import { MobileCarousel } from './MobileCarousel';
 
 const TRUST_ITEMS = [
   {
@@ -25,53 +27,62 @@ const TRUST_ITEMS = [
 
 export function Trust() {
   return (
-    <section className="relative py-20 md:py-28 bg-white overflow-hidden">
+    <section id="trust" className="relative py-20 md:py-28 bg-white overflow-hidden">
       <div className="max-w-7xl mx-auto px-4 md:px-6">
-        <div className="grid lg:grid-cols-2 gap-12 items-center">
-          {/* Left: Copy */}
-          <Reveal>
-            <div className="inline-block px-3 py-1 rounded-full bg-brand-50 text-brand-700 text-xs font-semibold mb-3">
-              Confiance & fiabilité
-            </div>
-            <h2 className="text-3xl md:text-4xl font-bold text-ink-900 tracking-tight mb-4 leading-tight">
-              Une plateforme pensée<br />pour la fiabilité
-            </h2>
-            <p className="text-ink-500 text-base leading-relaxed mb-6">
-              Le suivi du personnel exige des accès maîtrisés et un historique
-              consultable. Auditron-X relie les pointages à l’établissement et
-              conserve la trace des interventions administratives.
-            </p>
-
-            {/* Trust stats */}
-            <div className="grid grid-cols-3 gap-4">
-              {[
-                { value: 'QR + BLE', label: 'Pointage local' },
-                { value: 'Par rôle', label: 'Accès aux données' },
-                { value: 'Historique', label: 'Suivi des actions' },
-              ].map((s) => (
-                <div key={s.label} className="p-4 rounded-xl bg-ink-50 border border-ink-200">
-                  <div className="text-sm font-bold text-brand-600 break-words">{s.value}</div>
-                  <div className="text-xs text-ink-500 font-medium mt-0.5">{s.label}</div>
-                </div>
-              ))}
-            </div>
+        <div className="grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] gap-10 lg:gap-16 items-center">
+          <Reveal className="order-2 lg:order-1 w-full max-w-sm mx-auto">
+            <figure>
+              <SchoolPhoto photo="direction" alt="Une personne en costume consulte son téléphone." />
+              <figcaption className="mt-3 text-sm text-ink-500 leading-relaxed">
+                Un suivi consultable selon les droits de chaque responsable.
+              </figcaption>
+            </figure>
           </Reveal>
 
-          {/* Right: Trust items */}
-          <div className="grid sm:grid-cols-2 gap-4">
-            {TRUST_ITEMS.map((item, i) => (
-              <Reveal key={item.title} delay={(i % 2) * 100}>
-                <div className="h-full p-5 rounded-2xl border border-ink-200 bg-gradient-to-br from-white to-ink-50/40 hover:border-brand-300 hover:shadow-lg transition-all">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-cyan-500 flex items-center justify-center mb-3">
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
-                    </svg>
+          <div className="order-1 lg:order-2 min-w-0">
+            <Reveal className="mb-8">
+              <div className="inline-block px-3 py-1 rounded-full bg-brand-50 text-brand-700 text-xs font-semibold mb-3">
+                Confiance & fiabilité
+              </div>
+              <h2 className="text-3xl md:text-4xl font-bold text-ink-900 tracking-tight mb-4 leading-tight">
+                Une plateforme pensée<br />pour la fiabilité
+              </h2>
+              <p className="text-ink-500 text-base leading-relaxed mb-6">
+                Le suivi du personnel exige des accès maîtrisés et un historique
+                consultable. Auditron-X relie les pointages à l’établissement et
+                conserve la trace des interventions administratives.
+              </p>
+
+              {/* Trust stats */}
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { value: 'QR + BLE', label: 'Pointage local' },
+                  { value: 'Par rôle', label: 'Accès aux données' },
+                  { value: 'Historique', label: 'Suivi des actions' },
+                ].map((s) => (
+                  <div key={s.label} className="p-3 sm:p-4 rounded-lg bg-ink-50 border border-ink-200">
+                    <div className="text-xs sm:text-sm font-bold text-brand-600">{s.value}</div>
+                    <div className="text-xs text-ink-500 font-medium mt-0.5">{s.label}</div>
                   </div>
-                  <h3 className="font-bold text-ink-900 mb-1.5 text-sm">{item.title}</h3>
-                  <p className="text-xs text-ink-500 leading-relaxed">{item.desc}</p>
-                </div>
-              </Reveal>
-            ))}
+                ))}
+              </div>
+            </Reveal>
+
+            <MobileCarousel label="Confiance et fiabilité" desktopClassName="grid sm:grid-cols-2 gap-4">
+              {TRUST_ITEMS.map((item, i) => (
+                <Reveal key={item.title} delay={(i % 2) * 100}>
+                  <div className="h-full p-5 rounded-2xl border border-ink-200 bg-gradient-to-br from-white to-ink-50/40 hover:border-brand-300 hover:shadow-lg transition-all">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-cyan-500 flex items-center justify-center mb-3">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
+                      </svg>
+                    </div>
+                    <h3 className="font-bold text-ink-900 mb-1.5 text-sm">{item.title}</h3>
+                    <p className="text-xs text-ink-500 leading-relaxed">{item.desc}</p>
+                  </div>
+                </Reveal>
+              ))}
+            </MobileCarousel>
           </div>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { Reveal } from './Reveal';
 import { SchoolPhoto } from './SchoolPhoto';
+import { MobileCarousel } from './MobileCarousel';
 
 const BENEFITS = [
   {
@@ -59,7 +60,7 @@ export function Benefits() {
           </div>
         </Reveal>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-14">
+        <MobileCarousel label="Avantages Auditron-X" desktopClassName="grid sm:grid-cols-2 lg:grid-cols-4 gap-5" className="mb-14">
           {BENEFITS.map((b, i) => (
             <Reveal key={b.title} delay={(i % 4) * 80}>
               <div className="h-full p-6 rounded-2xl bg-white border border-ink-200 hover:shadow-lg transition-shadow group">
@@ -73,7 +74,7 @@ export function Benefits() {
               </div>
             </Reveal>
           ))}
-        </div>
+        </MobileCarousel>
 
         {/* Audience row */}
         <Reveal>

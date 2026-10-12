@@ -64,6 +64,8 @@ class AdminPersonnelScreen extends StatelessWidget {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
       builder: (_) => _PersonnelDetailsSheet(
         item: item,
         onEdit: () async {
@@ -77,6 +79,10 @@ class AdminPersonnelScreen extends StatelessWidget {
         onChangePassword: () async {
           Navigator.pop(context);
           await _changePassword(context, item);
+        },
+        onManagePhoto: () async {
+          Navigator.pop(context);
+          await _openPhotoMenu(context, item);
         },
       ),
     );
@@ -96,7 +102,9 @@ class AdminPersonnelScreen extends StatelessWidget {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text('Mot de passe de ${item['nom'] ?? 'ce compte'} modifié.'),
+          content: Text(
+            'Mot de passe de ${item['nom'] ?? 'ce compte'} modifié.',
+          ),
           backgroundColor: AuditronColors.brand700,
         ),
       );
@@ -238,26 +246,73 @@ class AdminPersonnelScreen extends StatelessWidget {
       headerActions: (context, refresh) => [
         SpreadsheetActionsBar(entity: 'personnel', onImported: refresh),
       ],
-      leadingBuilder: (context, item) {
-        final photoUrl = item['photo_url'] as String?;
-        if (photoUrl != null && photoUrl.isNotEmpty) {
-          return CircleAvatar(
-            backgroundColor: AuditronColors.brand700.withValues(alpha: 0.1),
-            backgroundImage: NetworkImage(photoUrl),
-            onBackgroundImageError: (_, _) {},
-          );
-        }
-        return CircleAvatar(
-          backgroundColor: AuditronColors.brand700.withValues(alpha: 0.1),
-          child: Icon(Icons.person, color: AuditronColors.brand700),
-        );
-      },
-      extraRowActions: (context, item) => [
-        IconButton(
-          icon: const Icon(Icons.photo_camera_outlined, size: 20),
-          onPressed: () => _openPhotoMenu(context, item),
-        ),
-      ],
+      customListBuilder: (context, items, onEdit, onDelete) =>
+          ListView.separated(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            itemCount: items.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              final item = Map<String, dynamic>.from(items[index] as Map);
+              final matricule = item['matricule']?.toString() ?? '';
+              final role = [item['fonction'], item['section']]
+                  .where(
+                    (value) => value != null && value.toString().isNotEmpty,
+                  )
+                  .join(' · ');
+              return Semantics(
+                button: true,
+                hint: 'Ouvrir la fiche du personnel',
+                child: Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: () => _openDetails(context, item),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            item['nom']?.toString() ?? '—',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(color: AuditronColors.ink900),
+                          ),
+                          if (matricule.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              matricule,
+                              style: const TextStyle(
+                                color: AuditronColors.ink500,
+                              ),
+                            ),
+                          ],
+                          if (role.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              role,
+                              style: const TextStyle(
+                                color: AuditronColors.ink500,
+                              ),
+                            ),
+                          ],
+                          if (item['est_admin'] == true) ...[
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Compte administrateur',
+                              style: TextStyle(
+                                color: AuditronColors.orange700,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
     );
   }
 }
@@ -267,12 +322,14 @@ class _PersonnelDetailsSheet extends StatelessWidget {
   final Future<void> Function() onEdit;
   final Future<void> Function() onDelete;
   final Future<void> Function() onChangePassword;
+  final Future<void> Function() onManagePhoto;
 
   const _PersonnelDetailsSheet({
     required this.item,
     required this.onEdit,
     required this.onDelete,
     required this.onChangePassword,
+    required this.onManagePhoto,
   });
 
   Future<Map<String, dynamic>> _loadAttendance() async {
@@ -305,44 +362,75 @@ class _PersonnelDetailsSheet extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
         child: SingleChildScrollView(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Center(
-                child: Container(
-                  width: 42,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.black26,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
               Text(
                 item['nom']?.toString() ?? 'Personnel',
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: onEdit,
-                      icon: const Icon(Icons.edit),
-                      label: const Text('Modifier'),
+              if (item['photo_url'] is String &&
+                  (item['photo_url'] as String).isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      item['photo_url'] as String,
+                      width: 88,
+                      height: 88,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => const SizedBox(
+                        width: 88,
+                        height: 88,
+                        child: Icon(
+                          Icons.person_outline,
+                          color: AuditronColors.ink500,
+                        ),
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton.icon(
+                ),
+              ],
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  SizedBox.square(
+                    dimension: 48,
+                    child: IconButton.filled(
+                      onPressed: onEdit,
+                      tooltip: 'Modifier',
+                      style: IconButton.styleFrom(
+                        backgroundColor: AuditronColors.orange700,
+                        foregroundColor: Colors.white,
+                      ),
+                      icon: const Icon(Icons.edit_outlined),
+                    ),
+                  ),
+                  SizedBox.square(
+                    dimension: 48,
+                    child: IconButton.outlined(
+                      onPressed: onManagePhoto,
+                      tooltip: 'Gérer la photo',
+                      icon: const Icon(Icons.photo_camera_outlined),
+                    ),
+                  ),
+                  SizedBox.square(
+                    dimension: 48,
+                    child: IconButton.outlined(
                       onPressed: onDelete,
+                      tooltip: 'Supprimer',
+                      style: IconButton.styleFrom(
+                        foregroundColor: Colors.red.shade700,
+                      ),
                       icon: const Icon(Icons.delete_outline),
-                      label: const Text('Supprimer'),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(

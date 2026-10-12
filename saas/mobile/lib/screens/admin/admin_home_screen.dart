@@ -48,14 +48,24 @@ class _AdminMenuGroup {
 
 /// Coquille de l'espace admin (§admin-mobile) — navigation mobile par barre
 /// basse pour les accès fréquents, avec une feuille groupée pour le reste.
-class AdminHomeScreen extends StatefulWidget {
+class AdminHomeScreen extends StatelessWidget {
   const AdminHomeScreen({super.key});
 
   @override
-  State<AdminHomeScreen> createState() => _AdminHomeScreenState();
+  Widget build(BuildContext context) => Theme(
+    data: buildAuditronAdminTheme(Theme.of(context)),
+    child: const _AdminHomeScreen(),
+  );
 }
 
-class _AdminHomeScreenState extends State<AdminHomeScreen> {
+class _AdminHomeScreen extends StatefulWidget {
+  const _AdminHomeScreen();
+
+  @override
+  State<_AdminHomeScreen> createState() => _AdminHomeScreenState();
+}
+
+class _AdminHomeScreenState extends State<_AdminHomeScreen> {
   /// Le journal d'audit sert à contrôler les rôles restreints : l'API le
   /// réserve aux accréditations à accès total qui ne sont pas elles-mêmes
   /// bridées (surveillance générale). On masque l'entrée de menu dans les
@@ -282,7 +292,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                         trailing: _flatEntries[_index] == entry
                             ? const Icon(
                                 Icons.check,
-                                color: AuditronColors.gold600,
+                                color: AuditronColors.orange700,
                               )
                             : null,
                         onTap: () {

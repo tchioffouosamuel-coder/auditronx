@@ -1,5 +1,6 @@
 import { Reveal } from './Reveal';
 import { SchoolPhoto } from './SchoolPhoto';
+import { MobileCarousel } from './MobileCarousel';
 
 const PROBLEMS = [
   {
@@ -58,9 +59,9 @@ export function ProblemSolution() {
           </Reveal>
         </div>
       </div>
-      <div className="max-w-7xl mx-auto px-4 md:px-6 py-20 md:py-28">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-10 md:py-28">
         {/* Problems */}
-        <div className="grid md:grid-cols-3 gap-5 mb-16">
+        <MobileCarousel label="Difficultés du suivi scolaire" desktopClassName="grid md:grid-cols-3 gap-5" className="mb-4 md:mb-16">
           {PROBLEMS.map((p, i) => (
             <Reveal key={p.title} delay={i * 100}>
               <div className="relative h-full p-6 rounded-2xl border border-ink-200 bg-ink-50/50 hover:bg-ink-50 transition-colors">
@@ -74,10 +75,14 @@ export function ProblemSolution() {
               </div>
             </Reveal>
           ))}
+        </MobileCarousel>
+
+        <div className="md:hidden text-center text-sm font-bold text-brand-700 mb-1">
+          La solution Auditron
         </div>
 
         {/* Divider with arrow */}
-        <Reveal className="flex flex-col items-center mb-16">
+        <Reveal className="hidden md:flex flex-col items-center mb-16">
           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-brand-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-brand-500/20">
             <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
@@ -89,7 +94,7 @@ export function ProblemSolution() {
         </Reveal>
 
         {/* Solutions */}
-        <div className="grid md:grid-cols-3 gap-5">
+        <MobileCarousel label="Solutions Auditron-X" desktopClassName="grid md:grid-cols-3 gap-5">
           {SOLUTIONS.map((s, i) => (
             <Reveal key={s.title} delay={i * 100}>
               <div className="relative h-full p-6 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50/60 to-white hover:border-brand-300 transition-colors group">
@@ -103,7 +108,7 @@ export function ProblemSolution() {
               </div>
             </Reveal>
           ))}
-        </div>
+        </MobileCarousel>
       </div>
     </section>
   );

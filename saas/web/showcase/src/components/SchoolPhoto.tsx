@@ -2,6 +2,8 @@ const PHOTOS = {
   etablissement: { src: '/1.jpg', width: 5674, height: 3385 },
   lecture: { src: '/2.jpg', width: 4675, height: 3117 },
   accompagnement: { src: '/3.jpg', width: 4804, height: 3203 },
+  application: { src: '/4.png', width: 1535, height: 1024 },
+  direction: { src: '/5.jpg', width: 4912, height: 7360 },
 };
 
 interface SchoolPhotoProps {

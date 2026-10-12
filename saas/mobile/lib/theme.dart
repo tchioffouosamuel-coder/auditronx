@@ -151,3 +151,44 @@ ThemeData buildAuditronTheme() {
     ),
   );
 }
+
+ThemeData buildAuditronAdminTheme(ThemeData base) {
+  final actionStyle = FilledButton.styleFrom(
+    backgroundColor: AuditronColors.orange700,
+    foregroundColor: Colors.white,
+  );
+  return base.copyWith(
+    filledButtonTheme: FilledButtonThemeData(
+      style: (base.filledButtonTheme.style ?? const ButtonStyle()).copyWith(
+        backgroundColor: actionStyle.backgroundColor,
+        foregroundColor: actionStyle.foregroundColor,
+      ),
+    ),
+    floatingActionButtonTheme: base.floatingActionButtonTheme.copyWith(
+      backgroundColor: AuditronColors.orange700,
+      foregroundColor: Colors.white,
+    ),
+    navigationBarTheme: base.navigationBarTheme.copyWith(
+      indicatorColor: AuditronColors.orange100,
+      labelTextStyle: WidgetStateProperty.resolveWith(
+        (states) => TextStyle(
+          fontFamily: 'Lato',
+          fontSize: 11,
+          fontWeight: states.contains(WidgetState.selected)
+              ? FontWeight.w700
+              : FontWeight.w500,
+          color: states.contains(WidgetState.selected)
+              ? AuditronColors.orange700
+              : AuditronColors.ink500,
+        ),
+      ),
+      iconTheme: WidgetStateProperty.resolveWith(
+        (states) => IconThemeData(
+          color: states.contains(WidgetState.selected)
+              ? AuditronColors.orange700
+              : AuditronColors.ink500,
+        ),
+      ),
+    ),
+  );
+}

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -12,12 +13,16 @@ import 'package:auditron_x_app/services/presence_repository.dart';
 import 'package:auditron_x_app/services/session.dart';
 import 'package:auditron_x_app/theme.dart';
 import 'package:auditron_x_app/widgets/auditron_app_bar.dart';
+import 'package:auditron_x_app/widgets/admin/admin_select_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 
 class _TeacherSession extends Session {
@@ -47,11 +52,17 @@ void main() {
   const connectivityChannel = MethodChannel(
     'dev.fluttercommunity.plus/connectivity',
   );
+  const pathChannel = MethodChannel('plugins.flutter.io/path_provider');
+  const shareChannel = MethodChannel('dev.fluttercommunity.plus/share');
   final storage = <String, String>{};
+  final sharedFiles = <String>[];
+  var online = false;
+  late Directory pdfDirectory;
   final boundaryKey = GlobalKey();
   String getToday() => DateTime.now().toIso8601String().substring(0, 10);
 
   setUpAll(() async {
+    pdfDirectory = await Directory.systemTemp.createTemp('auditron-pdf-tests-');
     await initializeDateFormatting('fr');
     final fonts = FontLoader('Lato')
       ..addFont(rootBundle.load('assets/fonts/Lato-Regular.ttf'))
@@ -62,9 +73,76 @@ void main() {
     await icons.load();
   });
 
+  tearDownAll(() async {
+    for (final file in await pdfDirectory.list().toList()) {
+      if (file is File) await file.delete();
+    }
+    await pdfDirectory.delete();
+  });
+
   setUp(() {
     final today = getToday();
+    online = false;
+    sharedFiles.clear();
     storage.clear();
+    final now = DateTime.now();
+    final firstDay = DateTime(
+      now.year,
+      now.month,
+      1,
+    ).toIso8601String().substring(0, 10);
+    final lastDay = DateTime(
+      now.year,
+      now.month + 1,
+      0,
+    ).toIso8601String().substring(0, 10);
+    storage['auditron_cache_admin_retards_${firstDay}_$lastDay'] = jsonEncode([
+      {
+        'enseignant_id': 12,
+        'nom': 'DJANKO MBO UOMBOUO THIERRY',
+        'matricule': '1148431X',
+        'section': 'Industrielle',
+        'jours_retard': 3,
+        'minutes_retard_total': 124,
+      },
+      {
+        'enseignant_id': 18,
+        'nom': 'BELINGA MARIE',
+        'matricule': '1148432X',
+        'section': 'Administration',
+        'jours_retard': 1,
+        'minutes_retard_total': 18,
+      },
+    ]);
+    storage['auditron_cache_admin_retards_parametres'] = jsonEncode({
+      'tolerance_minutes': 10,
+    });
+    storage['auditron_cache_admin_personnel'] = jsonEncode([
+      {
+        'id': 12,
+        'nom': 'DJANKO MBO UOMBOUO THIERRY',
+        'matricule': '1148431X',
+        'fonction': 'Enseignant de mathématiques',
+        'section': 'Industrielle',
+        'email': 'enseignant@example.test',
+        'tel': '600000000',
+        'est_admin': true,
+      },
+      {
+        'id': 18,
+        'nom': 'BELINGA MARIE',
+        'matricule': '1148432X',
+        'fonction': 'Secrétaire',
+        'section': 'Administration',
+        'est_admin': false,
+      },
+    ]);
+    storage['auditron_cache_admin_personnel_12_assiduite'] = jsonEncode({
+      'taux_assiduite': 96,
+      'jours_presents': 24,
+      'jours_attendus': 25,
+    });
+    storage['auditron_cache_admin_personnel_12_emplois'] = '[]';
     storage['auditron_presence_history_cache'] = jsonEncode([
       {
         'id': 1,
@@ -139,7 +217,18 @@ void main() {
           return null;
         });
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(connectivityChannel, (_) async => ['none']);
+        .setMockMethodCallHandler(
+          connectivityChannel,
+          (_) async => [online ? 'wifi' : 'none'],
+        );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(pathChannel, (_) async => pdfDirectory.path);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(shareChannel, (call) async {
+          final args = call.arguments as Map;
+          sharedFiles.addAll((args['paths'] as List).cast<String>());
+          return 'saved';
+        });
   });
 
   tearDown(() {
@@ -147,6 +236,10 @@ void main() {
         .setMockMethodCallHandler(storageChannel, null);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(connectivityChannel, null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(pathChannel, null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(shareChannel, null);
   });
 
   Future<void> pumpScreen(
@@ -243,6 +336,500 @@ void main() {
       ),
     ),
   );
+
+  Future<void> openRetards(
+    WidgetTester tester, {
+    double width = 390,
+    double height = 844,
+    double scale = 1,
+  }) async {
+    await pumpScreen(
+      tester,
+      const AdminHomeScreen(),
+      width: width,
+      height: height,
+      scale: scale,
+    );
+    await tester.tap(find.byIcon(Icons.timer_outlined));
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> openPersonnel(
+    WidgetTester tester, {
+    double width = 390,
+    double scale = 1,
+  }) async {
+    await pumpScreen(
+      tester,
+      const AdminHomeScreen(),
+      width: width,
+      scale: scale,
+    );
+    await tester.tap(find.byIcon(Icons.badge_outlined));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('personnel : noms pleine largeur et actions dans la fiche', (
+    tester,
+  ) async {
+    await openPersonnel(tester);
+    final name = find.text('DJANKO MBO UOMBOUO THIERRY');
+    final card = find.ancestor(of: name, matching: find.byType(Card));
+    expect(
+      tester.getSize(name).width,
+      closeTo(tester.getSize(card).width - 32, 1),
+    );
+    expect(tester.widget<Text>(name).maxLines, isNull);
+    expect(tester.widget<Text>(name).overflow, isNot(TextOverflow.ellipsis));
+    expect(find.descendant(of: card, matching: find.byType(Row)), findsNothing);
+    expect(
+      find.descendant(of: card, matching: find.byType(IconButton)),
+      findsNothing,
+    );
+    expect(find.text('1148431X'), findsOneWidget);
+    expect(find.text('Compte administrateur'), findsOneWidget);
+    expect(find.byType(CircleAvatar), findsNothing);
+    await capture(tester, 'personnel-390');
+    await tester.tap(name);
+    await tester.pumpAndSettle();
+    for (final action in ['Modifier', 'Gérer la photo', 'Supprimer']) {
+      final button = find.byWidgetPredicate(
+        (widget) => widget is IconButton && widget.tooltip == action,
+      );
+      expect(button, findsOneWidget);
+      expect(tester.widget(button), isA<IconButton>());
+      expect(tester.getSize(button), const Size(48, 48));
+      expect(find.text(action), findsNothing);
+    }
+    expect(
+      tester.getTopLeft(find.byTooltip('Modifier')).dy,
+      tester.getTopLeft(find.byTooltip('Supprimer')).dy,
+    );
+    for (final action in ['Emploi du temps', 'Modifier le mot de passe']) {
+      expect(find.text(action), findsOneWidget);
+    }
+    expect(find.text('96%'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await capture(tester, 'personnel-sheet-390');
+  });
+
+  testWidgets('personnel : la recherche conserve les champs de la fiche', (
+    tester,
+  ) async {
+    await openPersonnel(tester);
+    await tester.enterText(find.byType(TextField), 'Administration');
+    await tester.pumpAndSettle();
+    expect(find.text('BELINGA MARIE'), findsOneWidget);
+    expect(find.text('DJANKO MBO UOMBOUO THIERRY'), findsNothing);
+    await tester.enterText(find.byType(TextField), '1148431X');
+    await tester.pumpAndSettle();
+    expect(find.text('DJANKO MBO UOMBOUO THIERRY'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'personnel : les actions photo, modification et suppression restent accessibles',
+    (tester) async {
+      await openPersonnel(tester);
+      await tester.tap(find.text('DJANKO MBO UOMBOUO THIERRY'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Gérer la photo'));
+      await tester.pumpAndSettle();
+      expect(find.text('Changer la photo'), findsOneWidget);
+      expect(find.text('Supprimer la photo'), findsNothing);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('DJANKO MBO UOMBOUO THIERRY'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Modifier'));
+      await tester.pumpAndSettle();
+      final nomField = find.widgetWithText(TextFormField, 'Nom *');
+      expect(
+        tester.widget<TextFormField>(nomField).controller!.text,
+        'DJANKO MBO UOMBOUO THIERRY',
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('DJANKO MBO UOMBOUO THIERRY'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Supprimer'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+      await tester.tap(find.text('Annuler'));
+      await tester.pumpAndSettle();
+      expect(find.text('DJANKO MBO UOMBOUO THIERRY'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'personnel : mot de passe et emploi du temps accessibles depuis la fiche',
+    (tester) async {
+      await openPersonnel(tester);
+      await tester.tap(find.text('DJANKO MBO UOMBOUO THIERRY'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Modifier le mot de passe'));
+      await tester.pumpAndSettle();
+      expect(
+        find.widgetWithText(TextFormField, 'Nouveau mot de passe'),
+        findsOneWidget,
+      );
+      expect(
+        find.widgetWithText(TextFormField, 'Confirmer le mot de passe'),
+        findsOneWidget,
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('DJANKO MBO UOMBOUO THIERRY'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Emploi du temps'));
+      await tester.pumpAndSettle();
+      expect(find.text('Aucun cours planifié.'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final width in [320.0, 600.0]) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'personnel : tiles et fiche sans débordement à ${width}px, texte x$scale',
+        (tester) async {
+          await openPersonnel(tester, width: width, scale: scale);
+          expect(tester.takeException(), isNull);
+          await capture(tester, 'personnel-${width.toInt()}-$scale');
+          final name = find.text('DJANKO MBO UOMBOUO THIERRY');
+          await tester.ensureVisible(name);
+          await tester.tap(name);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          await tester.ensureVisible(find.byTooltip('Supprimer'));
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          await capture(tester, 'personnel-sheet-${width.toInt()}-$scale');
+        },
+      );
+    }
+  }
+
+  testWidgets(
+    'les bilans sont dans un sheet et les noms prennent toute la largeur',
+    (tester) async {
+      await openRetards(tester);
+      expect(find.text('Bilans PDF'), findsOneWidget);
+      expect(find.text('Période du bilan'), findsNothing);
+      expect(find.text('Bilan PDF cumulé'), findsNothing);
+      final name = find.text('DJANKO MBO UOMBOUO THIERRY');
+      final card = find.ancestor(of: name, matching: find.byType(Card));
+      expect(
+        tester.getSize(name).width,
+        closeTo(tester.getSize(card).width - 32, 1),
+      );
+      expect(
+        find.descendant(of: card, matching: find.byType(Row)),
+        findsNothing,
+      );
+      expect(tester.widget<Text>(name).maxLines, isNull);
+      expect(find.text('3 jours de retard · 124 min cumulées'), findsOneWidget);
+      final navigation = NavigationBarTheme.of(
+        tester.element(find.byType(NavigationBar)),
+      );
+      expect(navigation.indicatorColor, AuditronColors.orange100);
+      expect(
+        navigation.iconTheme!.resolve({WidgetState.selected})!.color,
+        AuditronColors.orange700,
+      );
+      final theme = Theme.of(tester.element(find.text('Bilans PDF')));
+      expect(
+        theme.filledButtonTheme.style!.backgroundColor!.resolve({}),
+        AuditronColors.orange700,
+      );
+      await capture(tester, 'retards-390');
+      await tester.tap(find.text('Bilans PDF'));
+      await tester.pumpAndSettle();
+      expect(find.text('Télécharger un bilan'), findsOneWidget);
+      expect(find.text('Période du bilan'), findsOneWidget);
+      expect(find.text('Tolérance des retards (min)'), findsOneWidget);
+      expect(find.text('Bilan PDF cumulé'), findsOneWidget);
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, 'Bilan PDF de la section'),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(tester.takeException(), isNull);
+      await capture(tester, 'retards-sheet-390');
+    },
+  );
+
+  testWidgets('la recherche des retards filtre et se réinitialise', (
+    tester,
+  ) async {
+    await openRetards(tester);
+    await tester.enterText(find.byType(TextField), 'Administration');
+    await tester.pumpAndSettle();
+    expect(find.text('BELINGA MARIE'), findsOneWidget);
+    expect(find.text('DJANKO MBO UOMBOUO THIERRY'), findsNothing);
+    await tester.tap(find.byTooltip('Effacer la recherche'));
+    await tester.pumpAndSettle();
+    expect(find.text('DJANKO MBO UOMBOUO THIERRY'), findsOneWidget);
+  });
+
+  testWidgets(
+    'le clic sur un nom signale un téléchargement impossible hors ligne',
+    (tester) async {
+      await openRetards(tester);
+      await tester.tap(find.text('DJANKO MBO UOMBOUO THIERRY'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Pas de connexion internet. Vérifiez votre réseau et réessayez.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Télécharger un bilan'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'la tolérance se valide et se sauvegarde hors ligne depuis le sheet',
+    (tester) async {
+      await openRetards(tester);
+      await tester.tap(find.text('Bilans PDF'));
+      await tester.pumpAndSettle();
+      final tolerance = find.widgetWithText(
+        TextField,
+        'Tolérance des retards (min)',
+      );
+      await tester.enterText(tolerance, '121');
+      await tester.tap(find.text('Enregistrer la tolérance'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('La tolérance doit être comprise entre 0 et 120 minutes.'),
+        findsOneWidget,
+      );
+      await tester.enterText(tolerance, '15');
+      await tester.tap(find.text('Enregistrer la tolérance'));
+      await tester.pumpAndSettle();
+      expect(find.text('Tolérance enregistrée hors ligne.'), findsOneWidget);
+      expect(
+        jsonDecode(
+          storage['auditron_cache_admin_retards_parametres']!,
+        )['tolerance_minutes'],
+        15,
+      );
+      final actions = jsonDecode(storage['auditron_pending_actions']!) as List;
+      expect(actions.single['path'], '/retards/parametres');
+      expect(actions.single['body']['tolerance_minutes'], 15);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('le téléchargement cumulé affiche son erreur dans le sheet', (
+    tester,
+  ) async {
+    await openRetards(tester);
+    await tester.tap(find.text('Bilans PDF'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Bilan PDF cumulé'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Pas de connexion internet. Vérifiez votre réseau et réessayez.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Bilan PDF cumulé'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'le clic sur un nom prépare et partage sa fiche avec la période sélectionnée',
+    (tester) async {
+      await openRetards(tester);
+      online = true;
+      final requests = <http.Request>[];
+      await tester.runAsync(() async {
+        final shared = Completer<void>();
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(shareChannel, (call) async {
+              sharedFiles.addAll(
+                ((call.arguments as Map)['paths'] as List).cast<String>(),
+              );
+              shared.complete();
+              return 'saved';
+            });
+        return http.runWithClient(
+          () async {
+            final name = find.text('DJANKO MBO UOMBOUO THIERRY');
+            final tile = tester.widget<InkWell>(
+              find.ancestor(of: name, matching: find.byType(InkWell)).first,
+            );
+            tile.onTap!();
+            await shared.future.timeout(const Duration(seconds: 5));
+            await Future<void>.delayed(Duration.zero);
+          },
+          () => MockClient((request) async {
+            requests.add(request);
+            return http.Response('%PDF-1.4 test', 200);
+          }),
+        );
+      });
+      await tester.pumpAndSettle();
+      expect(requests.single.url.path, '/api/retards/bilan/12');
+      expect(
+        requests.single.url.queryParameters.keys,
+        containsAll(['debut', 'fin']),
+      );
+      expect(sharedFiles.single.endsWith('bilan-1148431X.pdf'), isTrue);
+      expect(
+        await tester.runAsync(() => File(sharedFiles.single).readAsString()),
+        '%PDF-1.4 test',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'la période choisie dans le sheet actualise la liste des retards',
+    (tester) async {
+      final now = DateTime.now();
+      final previous = DateTime(now.year, now.month - 1, 1);
+      final start = previous.toIso8601String().substring(0, 10);
+      final end = DateTime(
+        previous.year,
+        previous.month + 1,
+        0,
+      ).toIso8601String().substring(0, 10);
+      storage['auditron_cache_admin_retards_${start}_$end'] = jsonEncode([
+        {
+          'enseignant_id': 20,
+          'nom': 'PERSONNEL DU MOIS PRÉCÉDENT',
+          'matricule': '20',
+          'section': 'STT',
+          'jours_retard': 2,
+          'minutes_retard_total': 30,
+        },
+      ]);
+      final label = DateFormat('MMMM yyyy', 'fr').format(previous);
+      final monthLabel = label[0].toUpperCase() + label.substring(1);
+      await openRetards(tester);
+      await tester.tap(find.text('Bilans PDF'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.widgetWithText(AdminSearchableSelect, 'Période du bilan'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(monthLabel));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Fermer les bilans'));
+      await tester.pumpAndSettle();
+      expect(find.text(monthLabel), findsOneWidget);
+      expect(find.text('PERSONNEL DU MOIS PRÉCÉDENT'), findsOneWidget);
+      expect(find.text('DJANKO MBO UOMBOUO THIERRY'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('le PDF de section attend une sélection et conserve son filtre', (
+    tester,
+  ) async {
+    await openRetards(tester);
+    await tester.tap(find.text('Bilans PDF'));
+    await tester.pumpAndSettle();
+    final sectionPicker = find.widgetWithText(
+      AdminSearchableSelect,
+      'Section du bilan',
+    );
+    await tester.ensureVisible(sectionPicker);
+    await tester.tap(sectionPicker);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Industrielle'));
+    await tester.pumpAndSettle();
+    expect(sharedFiles, isEmpty);
+    final export = find.widgetWithText(
+      OutlinedButton,
+      'Bilan PDF de la section',
+    );
+    final onPressed = tester.widget<OutlinedButton>(export).onPressed!;
+    online = true;
+    final requests = <http.Request>[];
+    await tester.runAsync(() async {
+      final shared = Completer<void>();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(shareChannel, (call) async {
+            sharedFiles.addAll(
+              ((call.arguments as Map)['paths'] as List).cast<String>(),
+            );
+            shared.complete();
+            return 'saved';
+          });
+      return http.runWithClient(
+        () async {
+          onPressed();
+          onPressed();
+          await shared.future.timeout(const Duration(seconds: 5));
+          await Future<void>.delayed(Duration.zero);
+        },
+        () => MockClient((request) async {
+          requests.add(request);
+          return http.Response('%PDF-1.4 test', 200);
+        }),
+      );
+    });
+    await tester.pumpAndSettle();
+    expect(requests, hasLength(1));
+    expect(requests.single.url.path, '/api/retards/bilan-cumule');
+    expect(requests.single.url.queryParameters['section'], 'Industrielle');
+    expect(
+      requests.single.url.queryParameters.keys,
+      containsAll(['debut', 'fin']),
+    );
+    expect(sharedFiles.single, contains('bilan-retards-industrielle-'));
+    expect(find.text('PDF prêt à enregistrer ou partager.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final viewport in [
+    const Size(320, 844),
+    const Size(600, 844),
+    const Size(844, 390),
+  ]) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'retards et sheet sans débordement à $viewport, texte x$scale',
+        (tester) async {
+          await openRetards(
+            tester,
+            width: viewport.width,
+            height: viewport.height,
+            scale: scale,
+          );
+          expect(tester.takeException(), isNull);
+          await capture(tester, 'retards-${viewport.width.toInt()}-$scale');
+          await tester.tap(find.text('Bilans PDF'));
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          await tester.ensureVisible(find.text('Bilan PDF de la section'));
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          await capture(
+            tester,
+            'retards-sheet-${viewport.width.toInt()}-$scale',
+          );
+        },
+      );
+    }
+  }
 
   testWidgets(
     'reprend la journée de la vitrine avec la présence et les cours réels',

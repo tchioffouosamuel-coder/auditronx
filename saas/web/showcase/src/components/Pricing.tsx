@@ -50,9 +50,8 @@ const PLANS = [
 
 export function Pricing() {
   return (
-    <section id="pricing" className="relative py-20 md:py-28 bg-ink-50/60 overflow-hidden">
-      <div className="absolute inset-0 bg-dots opacity-30 pointer-events-none" />
-      <div className="relative max-w-7xl mx-auto px-4 md:px-6">
+    <section id="pricing" className="pricing-section relative py-20 md:py-28 overflow-hidden">
+      <div className="relative z-10 max-w-7xl mx-auto px-4 md:px-6">
         <Reveal className="text-center max-w-2xl mx-auto mb-14">
           <div className="inline-block px-3 py-1 rounded-full bg-brand-50 text-brand-700 text-xs font-semibold mb-3">
             Tarifs
@@ -60,7 +59,7 @@ export function Pricing() {
           <h2 className="text-3xl md:text-4xl font-bold text-ink-900 tracking-tight mb-3">
             Une offre à la taille de votre établissement
           </h2>
-          <p className="text-ink-500 text-base leading-relaxed">
+          <p className="text-ink-700 text-base leading-relaxed">
             Choisissez selon l’effectif du personnel, le nombre de bornes et
             les modules nécessaires à votre suivi administratif et pédagogique.
           </p>
@@ -124,7 +123,7 @@ export function Pricing() {
         </div>
 
         <Reveal className="text-center mt-8">
-          <p className="text-sm text-ink-400">
+          <p className="text-sm text-ink-700">
             Contactez l’équipe pour confirmer l’offre et préparer la configuration
             des bornes de votre établissement.
           </p>

@@ -1,5 +1,6 @@
 import { Reveal } from './Reveal';
 import { SchoolPhoto } from './SchoolPhoto';
+import { MobileCarousel } from './MobileCarousel';
 
 const FEATURES = [
   {
@@ -72,7 +73,7 @@ export function Features() {
           </div>
         </Reveal>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <MobileCarousel label="Fonctionnalités Auditron-X" desktopClassName="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {FEATURES.map((f, i) => (
             <Reveal key={f.title} delay={(i % 3) * 80}>
               <div className="group relative h-full p-6 rounded-2xl bg-white border border-ink-200 hover:border-brand-300 hover:shadow-xl hover:shadow-brand-500/5 transition-all duration-300 hover:-translate-y-1">
@@ -92,7 +93,7 @@ export function Features() {
               </div>
             </Reveal>
           ))}
-        </div>
+        </MobileCarousel>
       </div>
     </section>
   );

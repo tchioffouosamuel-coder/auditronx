@@ -1,36 +1,24 @@
 import { Reveal } from './Reveal';
-import { PhoneFrame } from './PhoneFrame';
-import { MobileScreenHistory, MobileScreenScan, MobileScreenAttendance } from './MobileScreens';
+import { SchoolPhoto } from './SchoolPhoto';
 
 export function MobileShowcase() {
   return (
     <section id="mobile" className="relative py-20 md:py-28 mesh-gradient-dark overflow-hidden">
       <div className="absolute inset-0 bg-grid-dark opacity-40 pointer-events-none" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-brand-500/10 rounded-full blur-[120px] pointer-events-none" />
 
       <div className="relative max-w-7xl mx-auto px-4 md:px-6">
-        <div className="flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
-          {/* Left: Phones */}
-          <div className="relative flex items-end justify-center gap-4 md:gap-6 order-2 lg:order-1 shrink-0">
-            {/* Phone 1 - back */}
-            <div className="w-[169px] h-[351px] translate-y-8 opacity-80 hidden xl:block [&>div]:scale-[0.65] [&>div]:origin-top-left">
-              <PhoneFrame tilt="left">
-                <MobileScreenHistory />
-              </PhoneFrame>
-            </div>
-            {/* Phone 2 - center, elevated */}
-            <div className="w-[195px] h-[405px] z-10 [&>div]:scale-[0.75] [&>div]:origin-top-left">
-              <PhoneFrame tilt="front">
-                <MobileScreenAttendance />
-              </PhoneFrame>
-            </div>
-            {/* Phone 3 - back right */}
-            <div className="w-[169px] h-[351px] translate-y-8 opacity-80 hidden xl:block [&>div]:scale-[0.65] [&>div]:origin-top-left">
-              <PhoneFrame tilt="right">
-                <MobileScreenScan />
-              </PhoneFrame>
-            </div>
-          </div>
+        <div className="grid lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] items-center gap-12 lg:gap-16">
+          <Reveal className="order-2 lg:order-1 w-full max-w-2xl mx-auto">
+            <figure>
+              <SchoolPhoto
+                photo="application"
+                alt="Illustration des espaces Auditron-X sur téléphone : tableau de bord, pointage et activation de l'établissement."
+              />
+              <figcaption className="mt-3 text-xs text-white/70 leading-relaxed">
+                Illustration des espaces mobiles d’Auditron-X.
+              </figcaption>
+            </figure>
+          </Reveal>
 
           {/* Right: Copy */}
           <div className="flex-1 text-center lg:text-left order-1 lg:order-2">
