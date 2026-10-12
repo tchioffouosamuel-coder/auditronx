@@ -42,16 +42,64 @@ export default function FacturationPage() {
   async function souscrire(e) {
     e.preventDefault();
     setEnCours(true);
+    setErreur(null);
+
+    const plan = donnees.plans.find(
+      (item) => String(item.id) === String(souscription.plan_id),
+    );
+    let abonnementCree = Boolean(souscription.abonnement_id);
+    let factureCree = Boolean(souscription.facture_id);
 
     try {
-      await apiCentral.post("/abonnements", {
-        ...souscription,
-        debut_le: souscription.debut_le || new Date().toISOString().slice(0, 10),
-      });
+      if (!plan) throw new Error("Sélectionnez une offre active.");
+
+      const aujourdhui = new Date().toISOString().slice(0, 10);
+      let abonnementId = souscription.abonnement_id;
+      let factureId = souscription.facture_id;
+
+      if (!abonnementId) {
+        const { data } = await apiCentral.post("/abonnements", {
+          etablissement_id: souscription.etablissement_id,
+          plan_id: souscription.plan_id,
+          debut_le: souscription.debut_le || aujourdhui,
+          fin_le: souscription.fin_le || null,
+        });
+        abonnementId = data.data.id;
+        abonnementCree = true;
+        setSouscription((courante) => ({ ...courante, abonnement_id: abonnementId }));
+      }
+
+      if (Number(plan.prix) > 0) {
+        if (!factureId) {
+          const { data } = await apiCentral.post("/factures", {
+            etablissement_id: souscription.etablissement_id,
+            abonnement_id: abonnementId,
+            montant: plan.prix,
+            devise: plan.devise,
+          });
+          factureId = data.data.id;
+          factureCree = true;
+          setSouscription((courante) => ({ ...courante, facture_id: factureId }));
+        }
+
+        await apiCentral.post(`/factures/${factureId}/payee`, {
+          payee_le: souscription.payee_le || aujourdhui,
+          moyen_paiement: "mobile_money",
+          reference_paiement: souscription.reference_paiement,
+        });
+      }
       setSouscription(null);
       await recharger();
     } catch (e) {
-      setErreur(e.response?.data?.message ?? "Souscription impossible.");
+      const detail = e.response?.data?.message ?? e.message;
+      const progression = factureCree
+        ? "L’abonnement et la facture sont enregistrés, mais le règlement reste à confirmer. Réessayez pour terminer."
+        : abonnementCree
+          ? "L’abonnement est créé, mais la facturation n’a pas abouti. Réessayez pour reprendre sans créer un second abonnement."
+          : null;
+      setErreur(
+        progression ? `${progression} ${detail}` : detail ?? "Souscription impossible.",
+      );
     } finally {
       setEnCours(false);
     }
@@ -176,6 +224,10 @@ export default function FacturationPage() {
   }
 
   if (!donnees) return <LoadingState />;
+
+  const planSelectionne = donnees.plans.find(
+    (plan) => String(plan.id) === String(souscription?.plan_id),
+  );
 
   return (
     <div className="space-y-6">
@@ -361,14 +413,51 @@ export default function FacturationPage() {
               valeur={souscription.etablissement_id}
               options={donnees.etablissements.map((e) => ({ value: e.id, label: `${e.nom} (${e.code})` }))}
               onChange={(v) => setSouscription({ ...souscription, etablissement_id: v })}
+              disabled={Boolean(souscription.abonnement_id)}
             />
 
             <SelectChamp
               label="Plan"
               valeur={souscription.plan_id}
-              options={donnees.plans.map((p) => ({ value: p.id, label: p.nom }))}
+              options={donnees.plans.filter((plan) => plan.actif).map((p) => ({ value: p.id, label: p.nom }))}
               onChange={(v) => setSouscription({ ...souscription, plan_id: v })}
+              disabled={Boolean(souscription.abonnement_id)}
             />
+
+            {planSelectionne && (
+              <div className="rounded-xl border border-brand-100 bg-brand-50 p-3">
+                <p className="text-sm font-semibold text-brand-900">
+                  Montant : {money(planSelectionne.prix, planSelectionne.devise)}
+                </p>
+                {Number(planSelectionne.prix) > 0 && (
+                  <>
+                    <p className="mt-1 text-xs text-brand-800">
+                      Moyen de paiement : Mobile Money. Saisissez les informations d’un règlement déjà reçu.
+                    </p>
+                    <label className="mt-3 block text-sm">
+                      <span className="mb-1 block font-medium text-ink-700">Date du règlement</span>
+                      <input
+                        type="date"
+                        required
+                        value={souscription.payee_le ?? new Date().toISOString().slice(0, 10)}
+                        onChange={(e) => setSouscription({ ...souscription, payee_le: e.target.value })}
+                        className="field w-full"
+                      />
+                    </label>
+                    <label className="mt-3 block text-sm">
+                      <span className="mb-1 block font-medium text-ink-700">Référence Mobile Money</span>
+                      <input
+                        required
+                        value={souscription.reference_paiement ?? ""}
+                        onChange={(e) => setSouscription({ ...souscription, reference_paiement: e.target.value })}
+                        className="field w-full"
+                        maxLength={255}
+                      />
+                    </label>
+                  </>
+                )}
+              </div>
+            )}
 
             <label className="block text-sm">
               <span className="mb-1 block font-medium text-ink-700">Début</span>
@@ -392,10 +481,14 @@ export default function FacturationPage() {
 
             <button
               type="submit"
-              disabled={enCours}
+              disabled={enCours || !souscription.etablissement_id || !souscription.plan_id || (Number(planSelectionne?.prix) > 0 && !souscription.reference_paiement?.trim())}
               className="btn w-full bg-ink-900 text-white hover:bg-ink-800"
             >
-              Souscrire
+              {enCours
+                ? "Enregistrement…"
+                : Number(planSelectionne?.prix) > 0
+                  ? "Souscrire et enregistrer le règlement"
+                  : "Souscrire"}
             </button>
           </form>
         </Modal>
@@ -518,7 +611,7 @@ function ChampTexte({ label, value, onChange, ...props }) {
   );
 }
 
-function SelectChamp({ label, valeur, options, onChange }) {
+function SelectChamp({ label, valeur, options, onChange, disabled = false }) {
   return (
     <label className="block text-sm">
       <span className="mb-1 block font-medium text-ink-700">{label}</span>
@@ -526,7 +619,8 @@ function SelectChamp({ label, valeur, options, onChange }) {
         required
         value={valeur ?? ""}
         onChange={(e) => onChange(e.target.value)}
-        className="field w-full"
+        disabled={disabled}
+        className="field w-full disabled:cursor-not-allowed disabled:opacity-60"
       >
         <option value="">—</option>
         {options.map((option) => (
