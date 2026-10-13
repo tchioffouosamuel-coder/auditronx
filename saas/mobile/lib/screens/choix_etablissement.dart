@@ -1,8 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../services/api_client.dart';
 import '../services/etablissement_service.dart';
-import '../theme.dart';
+import '../widgets/auth/auth_scaffold.dart';
 
 /// Première étape de l'activation : choisir son établissement.
 ///
@@ -12,11 +13,16 @@ import '../theme.dart';
 /// depuis le QR d'enrôlement affiché par l'administration. Aucun catalogue
 /// des clients n'est affiché sur cet écran.
 class ChoixEtablissement extends StatefulWidget {
-  const ChoixEtablissement({super.key, required this.onChoisi});
+  const ChoixEtablissement({
+    super.key,
+    required this.onChoisi,
+    this.onBusyChanged,
+  });
 
   /// Appelé avec le branding de l'établissement retenu, une fois vérifié
   /// auprès de l'API.
-  final void Function(Map<String, dynamic>? branding) onChoisi;
+  final FutureOr<void> Function(Map<String, dynamic>? branding) onChoisi;
+  final ValueChanged<bool>? onBusyChanged;
 
   @override
   State<ChoixEtablissement> createState() => _ChoixEtablissementState();
@@ -35,24 +41,38 @@ class _ChoixEtablissementState extends State<ChoixEtablissement> {
   }
 
   Future<void> _retenir(String code) async {
+    if (_validation) return;
+    if (code.trim().isEmpty) {
+      setState(() => _erreur = 'Saisissez le code de votre établissement.');
+      return;
+    }
     setState(() {
       _validation = true;
       _erreur = null;
     });
+    widget.onBusyChanged?.call(true);
 
     try {
       final branding = await EtablissementService.instance.verifier(code);
+      if (!mounted) return;
 
       if (branding == null) {
         setState(() => _erreur = 'Code d’établissement invalide.');
         return;
       }
 
-      widget.onChoisi(branding);
+      await widget.onChoisi(branding);
     } on ApiException catch (e) {
       if (mounted) setState(() => _erreur = e.message);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _erreur = 'Vérification impossible. Réessayez.');
+      }
     } finally {
-      if (mounted) setState(() => _validation = false);
+      if (mounted) {
+        setState(() => _validation = false);
+        widget.onBusyChanged?.call(false);
+      }
     }
   }
 
@@ -61,7 +81,7 @@ class _ChoixEtablissementState extends State<ChoixEtablissement> {
       context,
     ).push<String>(MaterialPageRoute(builder: (_) => const _ScanEnrolement()));
 
-    if (code != null && code.isNotEmpty) await _retenir(code);
+    if (mounted && code != null && code.isNotEmpty) await _retenir(code);
   }
 
   @override
@@ -69,34 +89,22 @@ class _ChoixEtablissementState extends State<ChoixEtablissement> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          'Saisissez le code de votre établissement. Ce choix n’est demandé qu’une fois.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: AuditronColors.ink700),
-        ),
-        const SizedBox(height: 16),
-
-        if (_erreur != null) ...[
-          Text(
-            _erreur!,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.red),
-          ),
-          const SizedBox(height: 12),
-        ],
-
-        const SizedBox(height: 8),
         TextField(
           controller: _codeController,
+          enabled: !_validation,
+          autocorrect: false,
+          textInputAction: TextInputAction.next,
           textCapitalization: TextCapitalization.characters,
           decoration: const InputDecoration(
             labelText: 'Code de l’établissement',
-            hintText: 'Saisir le code communiqué par votre établissement',
+            floatingLabelBehavior: FloatingLabelBehavior.always,
+            hintText: 'Ex. LTM2026',
             prefixIcon: Icon(Icons.apartment_outlined),
           ),
           onSubmitted: (v) => _retenir(v),
         ),
-        const SizedBox(height: 12),
+        if (_erreur != null) AuthError(_erreur!),
+        const SizedBox(height: 24),
         FilledButton(
           onPressed: _validation ? null : () => _retenir(_codeController.text),
           child: _validation
@@ -110,11 +118,11 @@ class _ChoixEtablissementState extends State<ChoixEtablissement> {
                 )
               : const Text('Continuer'),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 12),
         OutlinedButton.icon(
           onPressed: _validation ? null : _scanner,
           icon: const Icon(Icons.qr_code_scanner),
-          label: const Text('Scanner le QR de mon établissement'),
+          label: const Text('Scanner un QR', textAlign: TextAlign.center),
         ),
       ],
     );

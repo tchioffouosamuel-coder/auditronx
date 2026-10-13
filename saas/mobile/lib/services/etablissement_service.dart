@@ -36,6 +36,8 @@ class EtablissementService {
           normalise,
           branding: branding,
         );
+      } else {
+        await ApiClient.instance.oublierEtablissement();
       }
 
       return branding;

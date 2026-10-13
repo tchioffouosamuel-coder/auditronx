@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 
+class AuditronFonts {
+  static const body = 'Manrope';
+  static const display = 'Space Grotesk';
+}
+
 /// Palette commune aux interfaces mobiles de la vitrine et de l'application.
 class AuditronColors {
   static const brand900 = Color(0xFF043B2B);
@@ -34,16 +39,15 @@ ThemeData buildAuditronTheme() {
     onSurface: AuditronColors.ink900,
   );
 
-  // Lato est embarquee dans l'app et reste disponible hors ligne.
-  final textTheme = ThemeData.light().textTheme.apply(
-    fontFamily: 'Lato',
+  // Les deux polices de la vitrine sont embarquees pour le mode hors ligne.
+  final textTheme = _auditronTextTheme().apply(
     bodyColor: AuditronColors.ink700,
     displayColor: AuditronColors.ink900,
   );
 
   return ThemeData(
     useMaterial3: true,
-    fontFamily: 'Lato',
+    fontFamily: AuditronFonts.body,
     colorScheme: colorScheme,
     scaffoldBackgroundColor: AuditronColors.ink50,
     dividerColor: AuditronColors.ink100,
@@ -55,7 +59,7 @@ ThemeData buildAuditronTheme() {
       scrolledUnderElevation: 0,
       centerTitle: false,
       titleTextStyle: TextStyle(
-        fontFamily: 'Lato',
+        fontFamily: AuditronFonts.display,
         fontSize: 20,
         fontWeight: FontWeight.w700,
         color: Colors.white,
@@ -68,7 +72,7 @@ ThemeData buildAuditronTheme() {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         textStyle: const TextStyle(
-          fontFamily: 'Lato',
+          fontFamily: AuditronFonts.body,
           fontWeight: FontWeight.w700,
           fontSize: 15,
         ),
@@ -113,6 +117,7 @@ ThemeData buildAuditronTheme() {
       labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
       labelTextStyle: WidgetStateProperty.resolveWith(
         (states) => TextStyle(
+          fontFamily: AuditronFonts.body,
           fontSize: 11,
           fontWeight: states.contains(WidgetState.selected)
               ? FontWeight.w700
@@ -134,7 +139,7 @@ ThemeData buildAuditronTheme() {
       backgroundColor: Colors.white,
       selectedColor: AuditronColors.brand100,
       labelStyle: const TextStyle(
-        fontFamily: 'Lato',
+        fontFamily: AuditronFonts.body,
         color: AuditronColors.brand700,
         fontWeight: FontWeight.w600,
       ),
@@ -172,7 +177,7 @@ ThemeData buildAuditronAdminTheme(ThemeData base) {
       indicatorColor: AuditronColors.orange100,
       labelTextStyle: WidgetStateProperty.resolveWith(
         (states) => TextStyle(
-          fontFamily: 'Lato',
+          fontFamily: AuditronFonts.body,
           fontSize: 11,
           fontWeight: states.contains(WidgetState.selected)
               ? FontWeight.w700
@@ -190,5 +195,30 @@ ThemeData buildAuditronAdminTheme(ThemeData base) {
         ),
       ),
     ),
+  );
+}
+
+TextTheme _auditronTextTheme() {
+  final base = ThemeData.light().textTheme;
+  TextStyle? style(TextStyle? value, {bool heading = false}) => value?.copyWith(
+    fontFamily: heading ? AuditronFonts.display : AuditronFonts.body,
+    letterSpacing: 0,
+  );
+  return TextTheme(
+    displayLarge: style(base.displayLarge, heading: true),
+    displayMedium: style(base.displayMedium, heading: true),
+    displaySmall: style(base.displaySmall, heading: true),
+    headlineLarge: style(base.headlineLarge, heading: true),
+    headlineMedium: style(base.headlineMedium, heading: true),
+    headlineSmall: style(base.headlineSmall, heading: true),
+    titleLarge: style(base.titleLarge, heading: true),
+    titleMedium: style(base.titleMedium, heading: true),
+    titleSmall: style(base.titleSmall, heading: true),
+    bodyLarge: style(base.bodyLarge),
+    bodyMedium: style(base.bodyMedium),
+    bodySmall: style(base.bodySmall),
+    labelLarge: style(base.labelLarge),
+    labelMedium: style(base.labelMedium),
+    labelSmall: style(base.labelSmall),
   );
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../theme.dart';
 
 AppBar buildAuditronAppBar(
   BuildContext context, {
@@ -10,14 +11,14 @@ AppBar buildAuditronAppBar(
 }) {
   final scaler = MediaQuery.textScalerOf(context);
   const titleStyle = TextStyle(
-    fontFamily: 'Lato',
+    fontFamily: AuditronFonts.display,
     fontSize: 22,
     fontWeight: FontWeight.w700,
     color: Colors.white,
     height: 1.25,
   );
   const subtitleStyle = TextStyle(
-    fontFamily: 'Lato',
+    fontFamily: AuditronFonts.body,
     fontSize: 12,
     color: Colors.white70,
     height: 1.4,
@@ -51,7 +52,11 @@ AppBar buildAuditronAppBar(
             'Auditron-X',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            style: TextStyle(
+              fontFamily: AuditronFonts.display,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ],

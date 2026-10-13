@@ -15,6 +15,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
+import 'support/auditron_test_fonts.dart';
 
 class _Session extends PlateformeSession {
   _Session(this.superAdmin);
@@ -33,10 +34,7 @@ void main() {
 
   setUpAll(() async {
     await initializeDateFormatting('fr');
-    final fonts = FontLoader('Lato')
-      ..addFont(rootBundle.load('assets/fonts/Lato-Regular.ttf'))
-      ..addFont(rootBundle.load('assets/fonts/Lato-Bold.ttf'));
-    await fonts.load();
+    await loadAuditronTestFonts();
   });
   setUp(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

@@ -39,6 +39,8 @@ class ApiClient {
   /// téléphones (voir `readOrNull`) — la requête partait alors sans token et
   /// le 401 du serveur s'affichait comme une session expirée.
   String? _cachedToken;
+  int _sessionRevision = 0;
+  Future<void>? _sessionWrites;
 
   /// Appelé quand l'API refuse la session (401) : [Session] s'y abonne pour
   /// renvoyer vers l'écran de connexion. Sans ça, l'app restait sur l'écran
@@ -57,8 +59,17 @@ class ApiClient {
   /// un « Établissement non précisé » incompréhensible pour l'utilisateur.
   String? _cachedEtablissement;
 
-  Future<String?> get token async =>
-      _cachedToken ??= await _storage.readOrNull(_tokenKey);
+  Future<String?> get token async {
+    if (_cachedToken != null) return _cachedToken;
+    final revision = _sessionRevision;
+    final pending = _sessionWrites;
+    if (pending != null) await pending;
+    if (revision != _sessionRevision) return _cachedToken;
+    final stored = await _storage.readOrNull(_tokenKey);
+    if (revision == _sessionRevision) _cachedToken ??= stored;
+    return _cachedToken;
+  }
+
   Future<String?> get deviceUuid => _storage.readOrNull(_deviceUuidKey);
 
   Future<String?> get etablissement async =>
@@ -116,15 +127,37 @@ class ApiClient {
     required String token,
     required String deviceUuid,
   }) async {
+    _sessionRevision++;
     _cachedToken = token;
-    await _storage.write(key: _tokenKey, value: token);
-    await _storage.write(key: _deviceUuidKey, value: deviceUuid);
+    await _persistSession(() async {
+      await _storage.write(key: _tokenKey, value: token);
+      await _storage.write(key: _deviceUuidKey, value: deviceUuid);
+    });
   }
 
   Future<void> clearSession() async {
+    _sessionRevision++;
     _cachedToken = null;
-    await _storage.delete(key: _tokenKey);
-    await _storage.delete(key: _deviceUuidKey);
+    await _persistSession(() async {
+      await _storage.delete(key: _tokenKey);
+      await _storage.delete(key: _deviceUuidKey);
+    });
+  }
+
+  // Serialize secure-storage mutations so an old deletion cannot erase a login.
+  Future<void> _persistSession(Future<void> Function() operation) {
+    final previous = _sessionWrites;
+    final done = Completer<void>();
+    _sessionWrites = done.future;
+    return () async {
+      try {
+        if (previous != null) await previous;
+        await operation();
+      } finally {
+        if (identical(_sessionWrites, done.future)) _sessionWrites = null;
+        done.complete();
+      }
+    }();
   }
 
   Future<bool> get isActivated async => (await token) != null;
@@ -222,27 +255,43 @@ class ApiClient {
     }
   }
 
-  dynamic _decode(
+  Future<dynamic> _decode(
     http.Response response,
     String request,
     Map<String, String> headers,
-  ) {
-    final body = response.body.isEmpty ? null : jsonDecode(response.body);
-
+  ) async {
     if (response.statusCode == 401) {
-      final tokenSent = headers.containsKey('Authorization');
+      final authorization = headers['Authorization'];
+      final tokenSent = authorization != null;
       debugPrint(
         '[api] 401 sur $request (token ${tokenSent ? 'envoyé' : 'absent'})',
       );
-      clearSession();
-      onSessionExpired?.call();
+      if (tokenSent && authorization == 'Bearer $_cachedToken') {
+        final clearing = clearSession();
+        final revision = _sessionRevision;
+        try {
+          await clearing;
+        } catch (_) {
+          debugPrint('[api] suppression locale de la session indisponible');
+        }
+        if (revision == _sessionRevision) onSessionExpired?.call();
+      }
+      if (!tokenSent) {
+        final body = response.body.isEmpty ? null : jsonDecode(response.body);
+        throw ApiException(
+          body is Map && body['message'] is String
+              ? body['message'] as String
+              : 'Identifiants incorrects. Réessayez.',
+          401,
+        );
+      }
       throw ApiException(
-        tokenSent
-            ? 'Session expirée, merci de vous reconnecter.'
-            : 'Session introuvable sur ce téléphone, merci de vous reconnecter.',
+        'Session expirée. Rétablissez votre session avec votre mot de passe.',
         response.statusCode,
       );
     }
+
+    final body = response.body.isEmpty ? null : jsonDecode(response.body);
 
     final motif = body is Map ? body['erreur'] : null;
 

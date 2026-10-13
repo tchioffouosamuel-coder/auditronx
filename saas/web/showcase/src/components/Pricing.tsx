@@ -18,7 +18,7 @@ const PLANS = [
   },
   {
     name: 'Standard',
-    price: '200 000',
+    price: '300 000',
     period: 'Par établissement / an',
     desc: 'Pour le suivi quotidien d’un établissement de taille moyenne.',
     features: [
@@ -37,7 +37,7 @@ const PLANS = [
   },
   {
     name: 'Premium',
-    price: '400 000',
+    price: '500 000',
     period: 'Par établissement / an',
     desc: 'Pour les grands établissements et un suivi administratif étendu.',
     features: [

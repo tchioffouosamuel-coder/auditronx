@@ -3,9 +3,11 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:provider/provider.dart';
 import '../services/api_client.dart';
 import '../services/ble_service.dart';
 import '../services/presence_repository.dart';
+import '../services/session.dart';
 import '../theme.dart';
 import '../widgets/auditron_app_bar.dart';
 
@@ -65,7 +67,12 @@ class _ScanScreenState extends State<ScanScreen> {
       final teacherToken =
           await (widget.tokenProvider ?? () => ApiClient.instance.token)();
       if (teacherToken == null) {
-        _showMessage('Session expirée, merci de vous réactiver.', error: true);
+        if (mounted && widget.tokenProvider == null) {
+          context.read<Session>().requireRecovery();
+          Navigator.of(context).pop();
+        } else {
+          _showMessage('Session administrateur expirée.', error: true);
+        }
         return;
       }
 

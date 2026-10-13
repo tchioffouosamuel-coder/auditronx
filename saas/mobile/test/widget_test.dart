@@ -49,8 +49,10 @@ void main() {
       }
 
       // Aucun jeton stocké → login établissement et accès au portail central.
-      expect(find.text('Auditron X'), findsWidgets);
-      expect(find.text('Se connecter'), findsOneWidget);
+      expect(find.text('Auditron-X'), findsOneWidget);
+      expect(find.text('Votre téléphone'), findsOneWidget);
+      expect(find.text('Continuer'), findsOneWidget);
+      expect(find.text('Mot de passe'), findsNothing);
       expect(find.text('Connexion équipe Auditron'), findsOneWidget);
     },
   );
@@ -66,7 +68,7 @@ void main() {
 
     expect(find.text('Code de l’établissement'), findsOneWidget);
     expect(find.text('Continuer'), findsOneWidget);
-    expect(find.text('Scanner le QR de mon établissement'), findsOneWidget);
+    expect(find.text('Scanner un QR'), findsOneWidget);
     expect(find.text('Retrouver mon établissement'), findsNothing);
     expect(find.byType(ListTile), findsNothing);
   });

@@ -25,6 +25,7 @@ import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
+import 'support/auditron_test_fonts.dart';
 
 class _TeacherSession extends Session {
   final bool admin;
@@ -65,10 +66,7 @@ void main() {
   setUpAll(() async {
     pdfDirectory = await Directory.systemTemp.createTemp('auditron-pdf-tests-');
     await initializeDateFormatting('fr');
-    final fonts = FontLoader('Lato')
-      ..addFont(rootBundle.load('assets/fonts/Lato-Regular.ttf'))
-      ..addFont(rootBundle.load('assets/fonts/Lato-Bold.ttf'));
-    await fonts.load();
+    await loadAuditronTestFonts();
     final icons = FontLoader('MaterialIcons')
       ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
     await icons.load();

@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'screens/activation_screen.dart';
 import 'screens/admin/admin_home_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/session_recovery_screen.dart';
 import 'screens/plateforme/plateforme_home_screen.dart';
 import 'services/admin_session.dart';
 import 'services/offline/sync_engine.dart';
@@ -67,8 +68,15 @@ class AuditronXApp extends StatelessWidget {
 /// Aiguille vers l'espace admin, l'activation ou l'écran principal enseignant
 /// selon l'état des deux sessions. L'enseignant reste le cas par défaut de
 /// l'app ; l'admin y accède via un lien depuis [ActivationScreen].
-class _RootGate extends StatelessWidget {
+class _RootGate extends StatefulWidget {
   const _RootGate();
+
+  @override
+  State<_RootGate> createState() => _RootGateState();
+}
+
+class _RootGateState extends State<_RootGate> {
+  bool _recovering = false;
 
   @override
   Widget build(BuildContext context) {
@@ -80,10 +88,24 @@ class _RootGate extends StatelessWidget {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    if (plateformeSession.loggedIn) return const PlateformeHomeScreen();
+    if (plateformeSession.loggedIn) {
+      _recovering = false;
+      return const PlateformeHomeScreen();
+    }
+    if (!session.activated && adminSession.loggedIn) {
+      _recovering = false;
+      return const AdminHomeScreen();
+    }
+    if (session.needsRecovery && !_recovering) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && context.read<Session>().needsRecovery) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
+      });
+    }
+    _recovering = session.needsRecovery;
     if (session.activated) return const HomeScreen();
-    if (adminSession.loggedIn) return const AdminHomeScreen();
-
+    if (session.needsRecovery) return const SessionRecoveryScreen();
     return const ActivationScreen();
   }
 }

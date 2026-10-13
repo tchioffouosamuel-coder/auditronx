@@ -2,284 +2,151 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/api_client.dart';
 import '../services/session.dart';
-import '../theme.dart';
+import '../widgets/auth/auth_scaffold.dart';
+import '../widgets/auth/credential_login_screen.dart';
 import 'admin/admin_login_screen.dart';
 import 'choix_etablissement.dart';
 import 'plateforme/plateforme_login_screen.dart';
 
-/// Activation en deux temps : choix de l'établissement, puis identification
-/// par téléphone et mot de passe.
-///
-/// L'application est la même pour tous les abonnés : rien dans le binaire ne
-/// dit à quel établissement ce téléphone appartient. Le choix est demandé une
-/// seule fois, mémorisé dans le stockage sécurisé, et envoyé ensuite dans
-/// l'en-tête `X-Tenant` de chaque requête.
 class ActivationScreen extends StatefulWidget {
   const ActivationScreen({super.key});
-
   @override
   State<ActivationScreen> createState() => _ActivationScreenState();
 }
 
 class _ActivationScreenState extends State<ActivationScreen> {
-  final _telController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _submitting = false;
-  bool _obscurePassword = true;
-  String? _error;
-
-  /// Établissement déjà mémorisé sur ce téléphone, et son branding en cache.
-  String? _etablissement;
+  String? _code;
   Map<String, dynamic>? _branding;
-  bool _chargementEtablissement = true;
+  bool _loading = true;
+  bool _choosing = false;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _loadSavedTel();
-    _chargerEtablissement();
+    _load();
   }
 
-  Future<void> _loadSavedTel() async {
-    final tel = await context.read<Session>().lastTel;
-    if (mounted && tel != null) _telController.text = tel;
-  }
-
-  Future<void> _chargerEtablissement() async {
-    final code = await ApiClient.instance.etablissement;
-    final branding = await ApiClient.instance.brandingEnCache;
-
-    if (!mounted) return;
-
-    setState(() {
-      _etablissement = code;
-      _branding = branding;
-      _chargementEtablissement = false;
-    });
-  }
-
-  /// Dissocie ce téléphone de l'établissement courant : la session en cours
-  /// ne vaut plus rien ailleurs, elle est donc effacée avec le code.
-  Future<void> _changerEtablissement() async {
-    await ApiClient.instance.oublierEtablissement();
-
-    if (!mounted) return;
-
-    setState(() {
-      _etablissement = null;
-      _branding = null;
-      _error = null;
-    });
-  }
-
-  @override
-  void dispose() {
-    _telController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (_telController.text.trim().isEmpty ||
-        _passwordController.text.isEmpty) {
-      return;
-    }
-
-    setState(() {
-      _submitting = true;
-      _error = null;
-    });
-
+  Future<void> _load() async {
     try {
-      await context.read<Session>().requestActivation(
-        _telController.text.trim(),
-        _passwordController.text,
-      );
-    } on ApiException catch (e) {
-      if (mounted) setState(() => _error = e.message);
-    } catch (e) {
-      // Toute autre erreur (stockage du téléphone, réponse inattendue...) :
-      // sans message, le bouton semblait simplement ne rien faire.
-      debugPrint('Connexion impossible : $e');
+      final code = await ApiClient.instance.etablissement;
+      final branding = await ApiClient.instance.brandingEnCache;
+      if (mounted) {
+        setState(() {
+          _code = code;
+          _branding = branding;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Impossible de lire votre établissement.');
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _change() async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await ApiClient.instance.oublierEtablissement();
+      if (mounted) {
+        setState(() {
+          _code = null;
+          _branding = null;
+        });
+      }
+    } catch (_) {
       if (mounted) {
         setState(
-          () => _error =
-              'Connexion impossible sur ce téléphone. Réessayez ; si le problème persiste, réinstallez l\'application.',
+          () => _error = 'Impossible de changer d’établissement. Réessayez.',
         );
       }
     } finally {
-      if (mounted) setState(() => _submitting = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AuditronColors.brand900,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 40),
-              // Logo de l'établissement s'il est connu, logo Auditron sinon :
-              // une seule app, mais l'enseignant doit reconnaître son lycée.
-              _branding?['logo_url'] != null
-                  ? Image.network(
-                      _branding!['logo_url'] as String,
-                      height: 88,
-                      errorBuilder: (_, _, _) =>
-                          Image.asset('assets/logo.png', height: 88),
-                    )
-                  : Image.asset('assets/logo.png', height: 88),
-              const SizedBox(height: 20),
-              Text(
-                (_branding?['nom'] as String?) ?? 'Auditron X',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 26,
-                  fontWeight: FontWeight.w900,
+  Widget _footer(bool busy) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      if (_error != null) AuthError(_error!),
+      if (_code != null)
+        TextButton.icon(
+          onPressed: busy
+              ? null
+              : () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
                 ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                "L'assiduité intelligente au service de l'éducation.",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: AuditronColors.gold500,
-                  fontSize: 13,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-              const SizedBox(height: 32),
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: _chargementEtablissement
-                    ? const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 24),
-                        child: Center(
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      )
-                    // Étape 1 : l'établissement. Étape 2 : les identifiants.
-                    : _etablissement == null
-                    ? ChoixEtablissement(
-                        onChoisi: (branding) => setState(() {
-                          _branding = branding;
-                          _etablissement = branding?['code'] as String?;
-                        }),
-                      )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const Text(
-                            'Connectez-vous avec votre numéro de téléphone et votre mot de passe.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: AuditronColors.ink700),
-                          ),
-                          const SizedBox(height: 20),
-                          TextField(
-                            controller: _telController,
-                            keyboardType: TextInputType.phone,
-                            decoration: const InputDecoration(
-                              labelText: 'Téléphone',
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: _passwordController,
-                            obscureText: _obscurePassword,
-                            decoration: InputDecoration(
-                              labelText: 'Mot de passe',
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _obscurePassword
-                                      ? Icons.visibility_outlined
-                                      : Icons.visibility_off_outlined,
-                                ),
-                                tooltip: _obscurePassword
-                                    ? 'Afficher le mot de passe'
-                                    : 'Masquer le mot de passe',
-                                onPressed: () => setState(
-                                  () => _obscurePassword = !_obscurePassword,
-                                ),
-                              ),
-                            ),
-                            onSubmitted: (_) => _submit(),
-                          ),
-                          if (_error != null) ...[
-                            const SizedBox(height: 12),
-                            Text(
-                              _error!,
-                              style: const TextStyle(color: Colors.red),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                          const SizedBox(height: 20),
-                          FilledButton(
-                            onPressed: _submitting ? null : _submit,
-                            child: _submitting
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Text('Se connecter'),
-                          ),
-                          const SizedBox(height: 12),
-                          TextButton(
-                            onPressed: _submitting
-                                ? null
-                                : () => Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => const AdminLoginScreen(),
-                                    ),
-                                  ),
-                            child: const Text(
-                              'Se connecter en tant qu\'administrateur',
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: _submitting
-                                ? null
-                                : _changerEtablissement,
-                            child: Text(
-                              'Changer d\'établissement ($_etablissement)',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ),
-                          if (!_chargementEtablissement)
-                            TextButton.icon(
-                              onPressed: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const PlateformeLoginScreen(),
-                                ),
-                              ),
-                              icon: const Icon(
-                                Icons.business_outlined,
-                                size: 18,
-                              ),
-                              label: const Text(
-                                'Connexion équipe Auditron',
-                                style: TextStyle(color: Colors.white),
-                              ),
-                            ),
-                        ],
-                      ),
-              ),
-            ],
+          icon: const Icon(Icons.admin_panel_settings_outlined, size: 18),
+          label: const Text(
+            'Espace administration',
+            textAlign: TextAlign.center,
           ),
         ),
+      TextButton.icon(
+        onPressed: busy
+            ? null
+            : () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const PlateformeLoginScreen(),
+                ),
+              ),
+        icon: const Icon(Icons.business_outlined, size: 18),
+        label: const Text(
+          'Connexion équipe Auditron',
+          textAlign: TextAlign.center,
+        ),
       ),
+    ],
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading || _code == null) {
+      return AuthScaffold(
+        title: 'Votre établissement',
+        subtitle:
+            'Le code communiqué par votre établissement, ou son QR d’enrôlement.',
+        icon: Icons.apartment_outlined,
+        step: 0,
+        steps: 3,
+        footer: _footer(_loading || _choosing),
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : ChoixEtablissement(
+                onBusyChanged: (busy) => setState(() => _choosing = busy),
+                onChoisi: (branding) async {
+                  final code = await ApiClient.instance.etablissement;
+                  if (mounted) {
+                    setState(() {
+                      _code = code;
+                      _branding = branding;
+                      _error = null;
+                      _choosing = false;
+                    });
+                  }
+                },
+              ),
+      );
+    }
+    return CredentialLoginScreen(
+      key: ValueKey(_code),
+      scope: 'Espace enseignant',
+      phone: true,
+      steps: 3,
+      stepOffset: 1,
+      contextLabel: '${_branding?['nom'] ?? 'Établissement'} · $_code',
+      contextLogoUrl: _branding?['logo_url'] as String?,
+      savedIdentifier: context.read<Session>().lastTel,
+      login: (telephone, password) =>
+          context.read<Session>().requestActivation(telephone, password),
+      onBack: _change,
+      footerBuilder: _footer,
     );
   }
 }

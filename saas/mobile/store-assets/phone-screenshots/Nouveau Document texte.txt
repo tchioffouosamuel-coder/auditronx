@@ -1,0 +1,66 @@
+Crée une vidéo publicitaire professionnelle en motion design pour Auditron-X, une solution numérique de gestion des présences et de l’assiduité destinée aux établissements scolaires.
+
+FORMAT
+Durée : 30 secondes.
+Format vertical 9:16, résolution 1080 × 1920.
+Langue : français.
+Prévoir des marges suffisantes pour que les textes restent visibles sur les réseaux sociaux.
+
+DIRECTION ARTISTIQUE
+Adopte un style technologique, moderne et élégant.
+Utilise une palette vert émeraude, blanc et anthracite, adaptée au logo fourni.
+Associe typographie animée, interfaces lisibles, smartphone et borne de pointage.
+Privilégie des transitions fluides, des mouvements précis et une hiérarchie visuelle claire.
+Utilise le logo et les captures réelles d’Auditron-X lorsqu’ils sont fournis.
+Le nom « Auditron-X » doit rester parfaitement lisible.
+
+SCÉNARIO
+
+0 à 5 secondes
+Afficher Auditron-X dès l’ouverture.
+Animer un registre papier, une horloge et des lignes de présence qui s’accumulent.
+Texte : « Présences, retards, absences… »
+Voix off : « Le suivi des présences vous prend trop de temps ? »
+
+5 à 10 secondes
+Transformer le registre en interface numérique.
+Montrer un scan de QR code sur smartphone, puis une confirmation de pointage.
+Texte : « Un scan. Un pointage enregistré. »
+Voix off : « Avec Auditron-X, simplifiez le pointage par QR code. »
+
+10 à 16 secondes
+Faire apparaître un tableau de bord avec les statuts :
+« Présent », « En retard », « Absent » et « Signalé ».
+Animer les informations de façon claire, sans surcharge.
+Texte : « Une vision claire de l’assiduité »
+Voix off : « Retrouvez les présences, les retards et les absences dans un tableau de bord clair. »
+
+16 à 22 secondes
+Mettre en mouvement un calendrier, un justificatif et un rapport PDF.
+Montrer un jour marqué « Signalé » et la mise à jour du bilan.
+Texte : « Signalements intégrés. Bilans accessibles. »
+Voix off : « Prenez en compte les signalements et accédez à vos bilans d’assiduité. »
+
+22 à 26 secondes
+Réunir dans une composition harmonieuse le smartphone, la borne de pointage et le tableau de bord.
+Texte : « Pour vos enseignants et votre personnel administratif »
+Voix off : « Une solution pensée pour les enseignants et le personnel administratif. »
+
+26 à 30 secondes
+Terminer sur le logo Auditron-X, bien centré et mis en valeur.
+Texte principal : « Auditron-X »
+Texte secondaire : « Simplifiez le suivi des présences. »
+Appel à l’action : « Découvrez la solution »
+Adresse : « auditronx.com »
+Voix off : « Auditron-X. Simplifiez le suivi des présences. Découvrez la solution sur auditronx.com. »
+
+SON
+Musique instrumentale moderne, dynamique et discrète sous la voix.
+Voix française chaleureuse, assurée et naturelle.
+Ajouter des effets sonores subtils pour le scan, les confirmations et les transitions.
+
+QUALITÉ ATTENDUE
+Textes courts, lisibles et sans fautes.
+Interfaces cohérentes avec le produit, sans données personnelles réelles.
+Aucun élément ne doit masquer les textes ou le logo.
+Le message doit rester compréhensible même sans le son.
