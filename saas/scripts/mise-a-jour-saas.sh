@@ -28,7 +28,16 @@ LOG_FILE="$LOG_DIR/mise-a-jour-saas.log"
 LOCK_FILE="/tmp/auditron-saas-update.lock"
 
 mkdir -p "$LOG_DIR"
-exec > >(tee -a "$LOG_FILE") 2>&1
+
+# Journalisation sans substitution de processus (<( ) ou >( )), non supportee
+# sur certains hebergements mutualises (erreur /dev/fd/63).
+# Le script se relance lui-meme et envoie sa sortie vers tee (ecran + fichier).
+if [ -z "${AUDITRON_SAAS_LOGGING:-}" ]; then
+    export AUDITRON_SAAS_LOGGING=1
+    status=0
+    bash "${BASH_SOURCE[0]}" "$@" 2>&1 | tee -a "$LOG_FILE" || status=$?
+    exit "$status"
+fi
 
 echo
 echo "=== Mise a jour SaaS - $(date '+%Y-%m-%d %H:%M:%S') ==="
