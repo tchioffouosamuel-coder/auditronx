@@ -160,8 +160,8 @@
             <th style="width:7%">Cours</th>
             <th>Prévu début</th>
             <th>Prévu fin</th>
-            <th>Arrivée</th>
-            <th>Départ</th>
+            <th>Scan 1</th>
+            <th>Scan 2</th>
             <th>Retard (min)</th>
             <th>Anticip. (min)</th>
             <th>Périodes à rattraper</th>
@@ -183,10 +183,10 @@
                     <td class="bold">0.00</td>
                     <td style="color:#0666cc">Signalé ({{ ucfirst($d['type_signalement'] ?? 'Excuse') }})</td>
                 @elseif($d['absent'])
-                    <td colspan="3" class="center bold">ABSENT</td>
+                    <td colspan="3" class="center bold">AUCUN POINTAGE</td>
                     <td>-</td>
                     <td class="bold">{{ number_format($d['periodes_a_rattraper'], 2, '.', '') }}</td>
-                    <td>Absence</td>
+                    <td>Aucun pointage</td>
                 @elseif($d['heure_arrivee'] === null && $d['heure_depart'] !== null)
                     <td>-</td>
                     <td>{{ $d['heure_depart'] }}</td>
@@ -242,7 +242,7 @@
             <td class="bold">{{ number_format($taux_assiduite, 1, '.', '') }}%</td>
         </tr>
         <tr>
-            <td class="text-left bold">Périodes à rattraper (absence)</td>
+            <td class="text-left bold">Périodes à rattraper (aucun pointage)</td>
             <td class="bold">{{ number_format($total_periodes_absence, 2, '.', '') }}</td>
             <td class="text-left bold">TOTAL périodes à rattraper</td>
             <td class="bold">{{ number_format($total_periodes_a_rattraper + $total_periodes_absence, 2, '.', '') }}</td>
