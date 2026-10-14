@@ -94,7 +94,8 @@ if [ "${AUDITRON_DEPLOY_PULL:-1}" != "0" ] && [ -d "$REPO_ROOT/.git" ]; then
 fi
 
 cd "$API_DIR"
-run composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
+run composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-scripts
+run php artisan package:discover --ansi
 run php artisan down --retry=60
 
 cleanup() {
