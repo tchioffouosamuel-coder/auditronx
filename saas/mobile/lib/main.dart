@@ -17,6 +17,7 @@ import 'services/plateforme_session.dart';
 import 'services/push_notifications.dart';
 import 'services/session.dart';
 import 'theme.dart';
+import 'widgets/app_update_gate.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -59,7 +60,11 @@ class AuditronXApp extends StatelessWidget {
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
-        home: const _RootGate(),
+        // Mise à jour in-app (§maj-app) : la modale est montée sous le
+        // Navigator (et non dans `builder`, qui n'en a aucun au-dessus de
+        // lui) pour pouvoir s'afficher par-dessus l'écran courant, quel que
+        // soit l'espace — enseignant, admin ou plateforme.
+        home: const AppUpdateGate(child: _RootGate()),
       ),
     );
   }
