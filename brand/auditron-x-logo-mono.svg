@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="Auditron X">
+  <title>Auditron X</title>
+  <defs>
+    <linearGradient id="vert" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0A6844"/><stop offset="1" stop-color="#0A6844"/></linearGradient>
+    <linearGradient id="or-v" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0A6844"/><stop offset="1" stop-color="#0A6844"/></linearGradient>
+    <linearGradient id="or-h" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0A6844"/><stop offset="1" stop-color="#0A6844"/></linearGradient>
+    <linearGradient id="patte-v" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0A6844"/><stop offset="1" stop-color="#0A6844"/></linearGradient>
+    <linearGradient id="patte-h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0A6844"/><stop offset="1" stop-color="#0A6844"/></linearGradient>
+    <linearGradient id="touche" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#FFFFFF"/></linearGradient>
+    <linearGradient id="encre" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0A6844"/><stop offset="1" stop-color="#0A6844"/></linearGradient>
+    <linearGradient id="biseau" x1="0" y1="0" x2=".35" y2="1">
+      <stop offset="0" stop-color="#000000" stop-opacity="0"/>
+      <stop offset=".72" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity=".16"/>
+    </linearGradient>
+    <filter id="ombre" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="2.2" stdDeviation="2.2" flood-color="#00180F" flood-opacity=".45"/>
+    </filter>
+    
+  </defs>
+
+  
+  <!-- pattes metalliques -->
+  <g><rect x="55.35" y="18.00" width="3.2" height="20.0" rx="1.2" fill="url(#patte-v)"/><rect x="55.35" y="162.00" width="3.2" height="20.0" rx="1.2" fill="url(#patte-v)"/><rect x="18.00" y="55.35" width="20.0" height="3.2" rx="1.2" fill="url(#patte-h)"/><rect x="162.00" y="55.35" width="20.0" height="3.2" rx="1.2" fill="url(#patte-h)"/><rect x="67.65" y="18.00" width="3.2" height="20.0" rx="1.2" fill="url(#patte-v)"/><rect x="67.65" y="162.00" width="3.2" height="20.0" rx="1.2" fill="url(#patte-v)"/><rect x="18.00" y="67.65" width="20.0" height="3.2" rx="1.2" fill="url(#patte-h)"/><rect x="162.00" y="67.65" width="20.0" height="3.2" rx="1.2" fill="url(#patte-h)"/><rect x="79.95" y="18.00" width="3.2" height="20.0" rx="1.2" fill="url(#patte-v)"/><rect x="79.95" y="162.00" width="3.2" height="20.0" rx="1.2" fill="url(#patte-v)"/><rect x="18.00" y="79.95" width="20.0" height="3.2" rx="1.2" fill="url(#patte-h)"/><rect x="162.00" y="79.95" width="20.0" height="3.2" rx="1.2" fill="url(#patte-h)"/><rect x="92.25" y="18.00" width="3.2" height="20.0" rx="1.2" fill="url(#patte-v)"/><rect x="92.25" y="162.00" width="3.2" height="20.0" rx="1.2" fill="url(#patte-v)"/><rect x="18.00" y="92.25" width="20.0" height="3.2" rx="1.2" fill="url(#patte-h)"/><rect x="162.00" y="92.25" width="20.0" height="3.2" rx="1.2" fill="url(#patte-h)"/><rect x="104.55" y="18.00" width="3.2" height="20.0" rx="1.2" fill="url(#patte-v)"/><rect x="104.55" y="162.00" width="3.2" height="20.0" rx="1.2" fill="url(#patte-v)"/><rect x="18.00" y="104.55" width="20.0" height="3.2" rx="1.2" fill="url(#patte-h)"/><rect x="162.00" y="104.55" width="20.0" height="3.2" rx="1.2" fill="url(#patte-h)"/><rect x="116.85" y="18.00" width="3.2" height="20.0" rx="1.2" fill="url(#patte-v)"/><rect x="116.85" y="162.00" width="3.2" height="20.0" rx="1.2" fill="url(#patte-v)"/><rect x="18.00" y="116.85" width="20.0" height="3.2" rx="1.2" fill="url(#patte-h)"/><rect x="162.00" y="116.85" width="20.0" height="3.2" rx="1.2" fill="url(#patte-h)"/><rect x="129.15" y="18.00" width="3.2" height="20.0" rx="1.2" fill="url(#patte-v)"/><rect x="129.15" y="162.00" width="3.2" height="20.0" rx="1.2" fill="url(#patte-v)"/><rect x="18.00" y="129.15" width="20.0" height="3.2" rx="1.2" fill="url(#patte-h)"/><rect x="162.00" y="129.15" width="20.0" height="3.2" rx="1.2" fill="url(#patte-h)"/><rect x="141.45" y="18.00" width="3.2" height="20.0" rx="1.2" fill="url(#patte-v)"/><rect x="141.45" y="162.00" width="3.2" height="20.0" rx="1.2" fill="url(#patte-v)"/><rect x="18.00" y="141.45" width="20.0" height="3.2" rx="1.2" fill="url(#patte-h)"/><rect x="162.00" y="141.45" width="20.0" height="3.2" rx="1.2" fill="url(#patte-h)"/></g>
+
+  <!-- corps du circuit -->
+  <rect x="34" y="34" width="132" height="132" rx="14" fill="url(#vert)"/>
+  
+  <g><rect x="54.25" y="34.00" width="5.4" height="8.0" rx="1.4" fill="url(#or-v)"/><rect x="54.25" y="158.00" width="5.4" height="8.0" rx="1.4" fill="url(#or-v)"/><rect x="34.00" y="54.25" width="8.0" height="5.4" rx="1.4" fill="url(#or-h)"/><rect x="158.00" y="54.25" width="8.0" height="5.4" rx="1.4" fill="url(#or-h)"/><rect x="66.55" y="34.00" width="5.4" height="8.0" rx="1.4" fill="url(#or-v)"/><rect x="66.55" y="158.00" width="5.4" height="8.0" rx="1.4" fill="url(#or-v)"/><rect x="34.00" y="66.55" width="8.0" height="5.4" rx="1.4" fill="url(#or-h)"/><rect x="158.00" y="66.55" width="8.0" height="5.4" rx="1.4" fill="url(#or-h)"/><rect x="78.85" y="34.00" width="5.4" height="8.0" rx="1.4" fill="url(#or-v)"/><rect x="78.85" y="158.00" width="5.4" height="8.0" rx="1.4" fill="url(#or-v)"/><rect x="34.00" y="78.85" width="8.0" height="5.4" rx="1.4" fill="url(#or-h)"/><rect x="158.00" y="78.85" width="8.0" height="5.4" rx="1.4" fill="url(#or-h)"/><rect x="91.15" y="34.00" width="5.4" height="8.0" rx="1.4" fill="url(#or-v)"/><rect x="91.15" y="158.00" width="5.4" height="8.0" rx="1.4" fill="url(#or-v)"/><rect x="34.00" y="91.15" width="8.0" height="5.4" rx="1.4" fill="url(#or-h)"/><rect x="158.00" y="91.15" width="8.0" height="5.4" rx="1.4" fill="url(#or-h)"/><rect x="103.45" y="34.00" width="5.4" height="8.0" rx="1.4" fill="url(#or-v)"/><rect x="103.45" y="158.00" width="5.4" height="8.0" rx="1.4" fill="url(#or-v)"/><rect x="34.00" y="103.45" width="8.0" height="5.4" rx="1.4" fill="url(#or-h)"/><rect x="158.00" y="103.45" width="8.0" height="5.4" rx="1.4" fill="url(#or-h)"/><rect x="115.75" y="34.00" width="5.4" height="8.0" rx="1.4" fill="url(#or-v)"/><rect x="115.75" y="158.00" width="5.4" height="8.0" rx="1.4" fill="url(#or-v)"/><rect x="34.00" y="115.75" width="8.0" height="5.4" rx="1.4" fill="url(#or-h)"/><rect x="158.00" y="115.75" width="8.0" height="5.4" rx="1.4" fill="url(#or-h)"/><rect x="128.05" y="34.00" width="5.4" height="8.0" rx="1.4" fill="url(#or-v)"/><rect x="128.05" y="158.00" width="5.4" height="8.0" rx="1.4" fill="url(#or-v)"/><rect x="34.00" y="128.05" width="8.0" height="5.4" rx="1.4" fill="url(#or-h)"/><rect x="158.00" y="128.05" width="8.0" height="5.4" rx="1.4" fill="url(#or-h)"/><rect x="140.35" y="34.00" width="5.4" height="8.0" rx="1.4" fill="url(#or-v)"/><rect x="140.35" y="158.00" width="5.4" height="8.0" rx="1.4" fill="url(#or-v)"/><rect x="34.00" y="140.35" width="8.0" height="5.4" rx="1.4" fill="url(#or-h)"/><rect x="158.00" y="140.35" width="8.0" height="5.4" rx="1.4" fill="url(#or-h)"/></g>
+  <circle cx="44" cy="44" r="1.7" fill="#FFFFFF" opacity=".9"/><circle cx="156" cy="44" r="1.7" fill="#FFFFFF" opacity=".9"/><circle cx="44" cy="156" r="1.7" fill="#FFFFFF" opacity=".9"/><circle cx="156" cy="156" r="1.7" fill="#FFFFFF" opacity=".9"/>
+
+  <!-- gravure interieure -->
+  <rect x="51.75" y="51.75" width="96.5" height="96.5" rx="13" fill="none" stroke="#FFFFFF" stroke-width="5.5"/>
+  
+  
+
+  <!-- touche -->
+  <g ><rect x="55" y="55" width="90" height="90" rx="14" fill="url(#touche)"/></g>
+  
+
+  <!-- monogramme AX -->
+  
+  <path d="M 95.88,75.75 L 103.00,75.87 L 112.50,91.87 L 113.88,91.25 L 119.88,83.25 L 128.12,83.25 L 116.75,99.87 L 130.62,123.99 L 122.50,124.12 L 114.38,110.12 L 111.75,107.12 L 99.00,124.12 L 90.50,124.12 L 108.12,98.75 L 101.50,86.87 L 99.88,84.62 L 91.62,97.99 L 102.50,98.37 L 99.25,104.75 L 97.88,105.99 L 88.12,106.25 L 77.75,124.12 L 69.38,124.25 L 89.88,85.49 Z" transform="translate(100 100) scale(.93) translate(-100 -100) translate(1.2 1.2)" fill="url(#encre)"/>
+</svg>
