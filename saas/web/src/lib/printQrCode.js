@@ -7,7 +7,10 @@ import { notify } from './swal'
  * au point de contrôle (§4.1/§4.3).
  */
 export async function printQrCode({ value, label }) {
-  const dataUrl = await QRCode.toDataURL(value, { width: 480, margin: 2 })
+  // 1024 px de source pour que l'agrandissement à 120 mm reste net : à cette
+  // taille d'impression, les 480 px d'origine donnaient des modules flous que
+  // les scanners accrochaient mal de loin.
+  const dataUrl = await QRCode.toDataURL(value, { width: 1024, margin: 2 })
 
   const win = window.open('', '_blank', 'width=600,height=700')
   if (!win) {
@@ -22,6 +25,10 @@ export async function printQrCode({ value, label }) {
         <meta charset="utf-8" />
         <title>QR — ${label ?? value}</title>
         <style>
+          @page {
+            size: A4 portrait;
+            margin: 10mm;
+          }
           body {
             margin: 0;
             font-family: system-ui, sans-serif;
@@ -35,11 +42,16 @@ export async function printQrCode({ value, label }) {
             padding: 32px;
           }
           img {
-            width: 320px;
-            height: 320px;
+            /* Côté exprimé en mm : le PDF doit sortir au même format quel que
+               soit le DPI de l'aperçu. 120 mm tient dans la largeur utile d'un
+               A4 (190 mm) et reste scannable à plusieurs mètres du mur. */
+            width: 120mm;
+            height: 120mm;
+            max-width: 100%;
+            image-rendering: pixelated;
           }
           h1 {
-            font-size: 18px;
+            font-size: 22px;
             margin: 16px 0 4px;
           }
           p {
