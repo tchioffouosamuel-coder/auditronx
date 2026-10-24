@@ -1,5 +1,42 @@
 import QRCode from 'qrcode'
+import api from './api'
 import { notify } from './swal'
+
+/** Échappe le texte injecté dans le document d'impression construit en chaîne. */
+const escapeHtml = (valeur) =>
+  String(valeur ?? '').replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
+  )
+
+/**
+ * Entête officiel bilingue, identique à celui des PDF générés par l'API
+ * (`resources/views/pdf/partials/entete.blade.php`). L'identité vient de
+ * `GET /parametres/etablissement` : la planche imprimée ne doit pas figer un
+ * nom d'établissement côté front.
+ */
+async function enteteEtablissement() {
+  try {
+    const { data } = await api.get('/parametres/etablissement')
+    const logo = data.logo_url
+      ? `<img class="logo" src="${escapeHtml(data.logo_url)}" alt="Logo" />`
+      : ''
+
+    return `
+      <table class="entete">
+        <tr>
+          <td>${escapeHtml(data.pays)}<br />${escapeHtml(data.devise)}<br />${escapeHtml(data.nom)}</td>
+          <td>${logo}</td>
+          <td>${escapeHtml(data.pays_en)}<br />${escapeHtml(data.devise_en)}<br />${escapeHtml(data.nom_en)}</td>
+        </tr>
+      </table>
+    `
+  } catch {
+    // Mieux vaut imprimer le QR sans entête que bloquer la pose du point de
+    // contrôle parce que l'API est momentanément injoignable.
+    return ''
+  }
+}
 
 /**
  * Génère un QR code pour `value` et ouvre l'aperçu d'impression du navigateur
@@ -7,7 +44,10 @@ import { notify } from './swal'
  * au point de contrôle (§4.1/§4.3).
  */
 export async function printQrCode({ value, label }) {
-  const dataUrl = await QRCode.toDataURL(value, { width: 480, margin: 2 })
+  const [dataUrl, entete] = await Promise.all([
+    QRCode.toDataURL(value, { width: 480, margin: 2 }),
+    enteteEtablissement(),
+  ])
 
   const win = window.open('', '_blank', 'width=600,height=700')
   if (!win) {
@@ -20,7 +60,7 @@ export async function printQrCode({ value, label }) {
     <html lang="fr">
       <head>
         <meta charset="utf-8" />
-        <title>QR — ${label ?? value}</title>
+        <title>QR — ${escapeHtml(label ?? value)}</title>
         <style>
           body {
             margin: 0;
@@ -33,6 +73,25 @@ export async function printQrCode({ value, label }) {
           .card {
             text-align: center;
             padding: 32px;
+          }
+          .entete {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 16px;
+            font-size: 9px;
+          }
+          .entete td {
+            border: none;
+            text-align: center;
+            vertical-align: middle;
+            width: 40%;
+          }
+          .entete td:nth-child(2) {
+            width: 20%;
+          }
+          .entete .logo {
+            width: auto;
+            height: 48px;
           }
           img {
             width: 320px;
@@ -52,9 +111,10 @@ export async function printQrCode({ value, label }) {
       </head>
       <body>
         <div class="card">
+          ${entete}
           <img src="${dataUrl}" alt="QR code" />
-          ${label ? `<h1>${label}</h1>` : ''}
-          <p>${value}</p>
+          ${label ? `<h1>${escapeHtml(label)}</h1>` : ''}
+          <p>${escapeHtml(value)}</p>
         </div>
       </body>
     </html>

@@ -97,6 +97,7 @@
 </head>
 
 <body>
+    @include('pdf.partials.entete')
     <h1>Journal hebdomadaire des présences</h1>
     <div class="periode">
         Semaine du {{ $debut->locale('fr')->translatedFormat('d F Y') }}

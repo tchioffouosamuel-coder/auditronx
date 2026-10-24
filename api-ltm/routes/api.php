@@ -133,7 +133,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/assiduite/sans-presence/pdf', [AssiduiteController::class, 'sansPresencePdf']);
     Route::get('/statistiques/export-zip', [StatistiquesController::class, 'exportZip']);
 
-    // Configuration (§4.2) — horaire fixe du personnel administratif.
+    // Configuration (§4.2) — identité de l'établissement, horaire fixe du personnel administratif.
+    Route::get('/parametres/etablissement', [ParametreController::class, 'etablissement']);
     Route::get('/parametres/horaires-administratifs', [ParametreController::class, 'horairesAdministratifs']);
     Route::put('/parametres/horaires-administratifs', [ParametreController::class, 'definirHorairesAdministratifs'])->middleware('backoffice');
 

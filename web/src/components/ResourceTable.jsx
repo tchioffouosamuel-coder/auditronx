@@ -66,8 +66,13 @@ async function fetchAllPages(url) {
  * de gestion simple (classes, disciplines, féries, accréditations, ...).
  *
  * `fields`: [{ key, label, type: 'text'|'number'|'select', options?, optionsUrl?,
- *              optionLabel?, required? }]
+ *              optionLabel?, required?, toForm?(value) }]
  * `columns`: [{ key, label, render?(row) }] — par défaut dérivées de `fields`.
+ *
+ * `toForm` normalise la valeur lue sur la ligne avant de pré-remplir le
+ * formulaire d'édition : une colonne SQL `time` revient en « 08:10:00 » alors
+ * que l'API n'accepte que « 08:10 », et une liste déroulante ne retrouvait
+ * donc pas son option.
  */
 export default function ResourceTable({ title, resource, fields, columns, idKey = 'id', extraRowActions }) {
   const [rows, setRows] = useState([])
@@ -115,7 +120,12 @@ export default function ResourceTable({ title, resource, fields, columns, idKey 
   }
 
   function openEdit(row) {
-    setFormValues(row)
+    setFormValues(
+      fields.reduce(
+        (acc, f) => (f.toForm ? { ...acc, [f.key]: f.toForm(row[f.key]) } : acc),
+        { ...row },
+      ),
+    )
     setFormErrors({})
     setEditing(row)
   }

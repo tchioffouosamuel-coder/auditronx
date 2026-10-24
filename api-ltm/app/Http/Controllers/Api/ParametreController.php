@@ -6,9 +6,28 @@ use App\Http\Controllers\Controller;
 use App\Services\HoraireAttendu;
 use Illuminate\Http\Request;
 
-/** Configuration (§4.2) — horaire fixe du personnel administratif. */
+/** Configuration (§4.2) — horaire fixe du personnel administratif, identité de l'établissement. */
 class ParametreController extends Controller
 {
+    /**
+     * GET /api/parametres/etablissement
+     *
+     * Identité officielle imprimée en entête des documents générés. Les PDF
+     * la lisent directement dans la configuration ; les impressions pilotées
+     * par le navigateur (planches de QR codes) passent par cette route pour
+     * porter le même entête que les PDF.
+     */
+    public function etablissement()
+    {
+        $logo = config('etablissement.logo');
+
+        return response()->json(config('etablissement') + [
+            // Les PDF embarquent le fichier par `public_path()` ; un navigateur
+            // a besoin d'une URL, et `null` quand le logo n'est pas déployé.
+            'logo_url' => file_exists(public_path($logo)) ? asset($logo) : null,
+        ]);
+    }
+
     /** GET /api/parametres/horaires-administratifs */
     public function horairesAdministratifs(HoraireAttendu $horaires)
     {

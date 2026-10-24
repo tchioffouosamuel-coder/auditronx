@@ -88,19 +88,7 @@
 </head>
 
 <body>
-    <table style="border:none;margin-bottom:8px">
-        <tr>
-            <td style="border:none;width:40%;text-align:center;font-size:8px">REPUBLIQUE DU CAMEROUN<br>Paix - Travail -
-                Patrie<br>LYCEE TECHNIQUE DE MEIGANGA</td>
-            <td style="border:none;width:20%;text-align:center">
-                @if (file_exists(public_path('logo.png')))
-                    <img src="{{ public_path('logo.png') }}" alt="Logo" style="height:40px">
-                @endif
-            </td>
-            <td style="border:none;width:40%;text-align:center;font-size:8px">REPUBLIC OF CAMEROON<br>Peace - Work -
-                Fatherland<br>G.T.H.S MEIGANGA</td>
-        </tr>
-    </table>
+    @include('pdf.partials.entete')
     <h1>Bilan mensuel d'assiduité et de
         ponctualité<br>{{ \Carbon\Carbon::createFromFormat('m', $mois)->locale('fr')->translatedFormat('F') }}
         {{ $annee }}</h1>

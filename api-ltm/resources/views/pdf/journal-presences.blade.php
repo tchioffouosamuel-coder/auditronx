@@ -46,6 +46,7 @@
 </head>
 
 <body>
+    @include('pdf.partials.entete')
     <h1>Journal des présences</h1>
     <div class="date">{{ $date->locale('fr')->translatedFormat('l d F Y') }}</div>
     @if ($presences->isEmpty())
