@@ -35,7 +35,7 @@ function formatJourMois(iso) {
  * liste que les présences enregistrées, un absent n'y figure donc pas du tout.
  * Cette grille part du personnel attendu, ce qui rend les absences visibles.
  */
-export default function JournalHebdomadaire() {
+export default function JournalHebdomadaire({ categorie = 'enseignant' }) {
   const [semaine, setSemaine] = useState(() => lundiDe(todayIso()))
   const [donnees, setDonnees] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -48,7 +48,7 @@ export default function JournalHebdomadaire() {
     setErreur(null)
 
     api
-      .get('/assiduite/journal-hebdomadaire', { params: { semaine } })
+      .get('/assiduite/journal-hebdomadaire', { params: { semaine, categorie } })
       .then(({ data }) => {
         if (!annule) setDonnees(data)
       })
@@ -62,7 +62,7 @@ export default function JournalHebdomadaire() {
     return () => {
       annule = true
     }
-  }, [semaine])
+  }, [semaine, categorie])
 
   const lignes = useMemo(() => {
     const toutes = donnees?.lignes ?? []
@@ -123,13 +123,28 @@ export default function JournalHebdomadaire() {
           type="button"
           onClick={() =>
             downloadFile(
-              `/assiduite/journal-hebdomadaire/pdf?semaine=${semaine}`,
-              `journal-hebdomadaire-${semaine}.pdf`,
+              `/assiduite/journal-hebdomadaire/pdf?semaine=${semaine}&categorie=${categorie}`,
+              `journal-hebdomadaire-${categorie}-${semaine}.pdf`,
             )
           }
-          className="btn-primary ml-auto"
+          className="btn-secondary ml-auto"
         >
-          Télécharger la semaine en PDF
+          Semaine en PDF
+        </button>
+        {/* Le Word sert aux journaux qui repartent retouchés (visa, mentions
+            manuscrites saisies, en-tête de l'établissement) — impossible sur
+            un PDF. */}
+        <button
+          type="button"
+          onClick={() =>
+            downloadFile(
+              `/assiduite/journal-hebdomadaire/word?semaine=${semaine}&categorie=${categorie}`,
+              `journal-hebdomadaire-${categorie}-${semaine}.docx`,
+            )
+          }
+          className="btn-primary"
+        >
+          Semaine en Word
         </button>
       </div>
 
@@ -232,8 +247,9 @@ export default function JournalHebdomadaire() {
       </div>
 
       <p className="mt-3 text-xs text-ink-300">
-        ABS : attendu selon l’emploi du temps, aucun pointage. · : non attendu ce jour-là.
-        — : taux indisponible, aucun jour attendu sur la semaine.
+        ABS : attendu selon l’emploi du temps, aucun pointage. SIG : absence signalée.
+        FÉR : jour férié. OK : assiduité garantie par la fonction (direction).
+        · : non attendu ce jour-là. — : taux indisponible, aucun jour attendu sur la semaine.
       </p>
     </div>
   )
@@ -267,6 +283,19 @@ function Cellule({ cellule }) {
 
   if (cellule.a_venir && !cellule.present) {
     return <td className="px-3 py-2 text-center text-ink-300">–</td>
+  }
+
+  // Le chef d'établissement n'a pas d'horaire opposable : un jour attendu sans
+  // pointage ne se lit pas comme une absence (cf. HoraireAttendu côté API).
+  if (cellule.assiduite_garantie && !cellule.present) {
+    return (
+      <td
+        className="bg-brand-50 px-3 py-2 text-center text-xs font-semibold text-brand-700"
+        title="Assiduité garantie par la fonction (direction)"
+      >
+        OK
+      </td>
+    )
   }
 
   if (cellule.est_signale && !cellule.present) {

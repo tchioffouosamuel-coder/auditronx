@@ -40,13 +40,23 @@ class AssiduiteCalculator
             }
         }
 
+        // Le chef d'établissement n'a pas d'horaire opposable : ses jours
+        // attendus sont tous réputés assurés, taux compris (voir
+        // HoraireAttendu::assiduiteGarantie).
+        $garantie = $this->horaires->assiduiteGarantie($enseignant);
+
         return [
             // Champ historique : les signalements valident aussi l'assiduite.
-            'jours_presents' => $valides,
+            'jours_presents' => $garantie ? $attendus : $valides,
             'jours_attendus' => $attendus,
             'jours_signales' => $signales,
             'jours_scannes' => $datesPointees->count(),
-            'taux_assiduite' => $attendus > 0 ? round($valides / $attendus * 100, 1) : 0.0,
+            'assiduite_garantie' => $garantie,
+            'taux_assiduite' => match (true) {
+                $garantie => 100.0,
+                $attendus > 0 => round($valides / $attendus * 100, 1),
+                default => 0.0,
+            },
         ];
     }
 }

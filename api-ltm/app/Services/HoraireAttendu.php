@@ -32,7 +32,31 @@ class HoraireAttendu
 
     public const DEFAUT_HEURE_FIN = '15:30';
 
+    /**
+     * Fonctions reconnues comme direction de l'établissement. Le chef
+     * d'établissement n'est soumis à aucun horaire opposable : il est en
+     * mission, en réunion d'autorité ou en déplacement officiel sans que cela
+     * constitue une absence, et un taux dégradé dans les journaux ne
+     * signifierait donc rien. Son assiduité est garantie à 100 % (voir
+     * `assiduiteGarantie`).
+     */
+    public const CLE_FONCTIONS_DIRECTION = 'fonctions_direction';
+
+    public const DEFAUT_FONCTIONS_DIRECTION = [
+        'chef d etablissement',
+        'chef etablissement',
+        'proviseur',
+        'principal',
+        'directeur',
+        'directrice',
+        'directeur general',
+        'directrice generale',
+    ];
+
     private ?array $parametres = null;
+
+    /** @var string[]|null */
+    private ?array $fonctionsDirection = null;
 
     /** Libellés des jours fériés indexés par date `Y-m-d`, chargés une seule fois. */
     private ?Collection $feries = null;
@@ -45,6 +69,44 @@ class HoraireAttendu
     public function estAdministratif(Enseignant $enseignant): bool
     {
         return mb_strtolower(trim((string) $enseignant->section)) === self::SECTION_ADMINISTRATIVE;
+    }
+
+    /**
+     * Le chef d'établissement, repéré par sa fonction. La liste est
+     * paramétrable (`fonctions_direction`, valeurs séparées par des
+     * virgules) : les intitulés varient d'un établissement à l'autre
+     * (proviseur, principal, directeur...).
+     */
+    public function estChefEtablissement(Enseignant $enseignant): bool
+    {
+        $this->fonctionsDirection ??= array_values(array_filter(array_map(
+            fn (string $fonction) => $this->normaliser($fonction),
+            explode(',', Parametre::get(
+                self::CLE_FONCTIONS_DIRECTION,
+                implode(',', self::DEFAUT_FONCTIONS_DIRECTION),
+            )),
+        ), fn (string $fonction) => $fonction !== ''));
+
+        return in_array($this->normaliser((string) $enseignant->fonction), $this->fonctionsDirection, true);
+    }
+
+    /**
+     * L'assiduité de cette personne est-elle acquise d'office ? Les journaux
+     * et bilans comptent alors chaque jour attendu comme assuré, sans quoi un
+     * chef d'établissement en mission apparaîtrait absent.
+     */
+    public function assiduiteGarantie(Enseignant $enseignant): bool
+    {
+        return $this->estChefEtablissement($enseignant);
+    }
+
+    /** Minuscules sans accents ni ponctuation : « Chef d'Établissement » -> « chef d etablissement ». */
+    private function normaliser(string $valeur): string
+    {
+        $sansAccents = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $valeur);
+        $valeur = mb_strtolower($sansAccents !== false ? $sansAccents : $valeur);
+
+        return trim(preg_replace('/\s+/', ' ', preg_replace('/[^a-z0-9]+/', ' ', $valeur)));
     }
 
     /**

@@ -122,7 +122,7 @@ class AdminEmploisScreen extends StatelessWidget {
         SpreadsheetActionsBar(entity: 'emplois', onImported: refresh),
       ],
       customListBuilder: (context, items, onEdit, onDelete) =>
-          _GroupedEmploisList(items: items, onEdit: onEdit, onDelete: onDelete),
+          _EmploisTabs(items: items, onEdit: onEdit, onDelete: onDelete),
     );
   }
 }
@@ -413,6 +413,402 @@ class _CourseDetailsSheet extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Deux entrées de lecture sur le même jeu de créneaux : par classe (vue
+/// historique) et par enseignant — un administrateur cherche souvent
+/// l'emploi du temps d'un enseignant précis pour corriger une séance.
+class _EmploisTabs extends StatelessWidget {
+  final List<dynamic> items;
+  final Future<void> Function(Map<String, dynamic>) onEdit;
+  final Future<void> Function(Map<String, dynamic>) onDelete;
+
+  const _EmploisTabs({
+    required this.items,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          TabBar(
+            labelColor: AuditronColors.brand700,
+            indicatorColor: AuditronColors.brand700,
+            tabs: const [
+              Tab(icon: Icon(Icons.school_outlined, size: 20), text: 'Classes'),
+              Tab(
+                icon: Icon(Icons.person_outline, size: 20),
+                text: 'Enseignants',
+              ),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _GroupedEmploisList(
+                  items: items,
+                  onEdit: onEdit,
+                  onDelete: onDelete,
+                ),
+                _TeachersList(items: items, onEdit: onEdit, onDelete: onDelete),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Onglet « Enseignants » : un enseignant par ligne (nom + volume de
+/// séances), avec recherche. Un appui ouvre son emploi du temps dans un
+/// sheet, où chaque séance peut être modifiée ou supprimée.
+class _TeachersList extends StatefulWidget {
+  final List<dynamic> items;
+  final Future<void> Function(Map<String, dynamic>) onEdit;
+  final Future<void> Function(Map<String, dynamic>) onDelete;
+
+  const _TeachersList({
+    required this.items,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  State<_TeachersList> createState() => _TeachersListState();
+}
+
+class _TeachersListState extends State<_TeachersList> {
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  /// Regroupe par `enseignant_id` (et non par nom) : après une édition,
+  /// l'API renvoie le créneau sans ses relations, donc certains éléments
+  /// n'ont plus que l'identifiant. Le nom est alors repris d'un autre
+  /// créneau du même enseignant.
+  List<_TeacherGroup> _groups() {
+    final byTeacher = <String, List<Map<String, dynamic>>>{};
+    final names = <String, String>{};
+    for (final raw in widget.items) {
+      final item = Map<String, dynamic>.from(raw as Map);
+      final key =
+          '${item['enseignant_id'] ?? item['enseignant']?['id'] ?? item['enseignant']?['nom'] ?? '—'}';
+      byTeacher.putIfAbsent(key, () => []).add(item);
+      final nom = item['enseignant']?['nom']?.toString();
+      if (nom != null && nom.isNotEmpty) names[key] = nom;
+    }
+    final groups =
+        byTeacher.entries
+            .map(
+              (entry) => _TeacherGroup(
+                name: names[entry.key] ?? 'Enseignant #${entry.key}',
+                items: entry.value,
+              ),
+            )
+            .toList()
+          ..sort(
+            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+          );
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return groups;
+    return groups
+        .where((group) => group.name.toLowerCase().contains(query))
+        .toList();
+  }
+
+  Future<void> _openSchedule(_TeacherGroup group) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => _TeacherScheduleSheet(
+        group: group,
+        // Le sheet est fermé avant l'action : le formulaire d'édition et la
+        // confirmation de suppression sont eux aussi des sheets/dialogs, et
+        // la liste affichée ici serait de toute façon périmée après coup.
+        onEdit: (item) async {
+          Navigator.pop(sheetContext);
+          await widget.onEdit(item);
+        },
+        onDelete: (item) async {
+          Navigator.pop(sheetContext);
+          await widget.onDelete(item);
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final groups = _groups();
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: TextField(
+            controller: _searchController,
+            onChanged: (value) => setState(() => _query = value),
+            decoration: InputDecoration(
+              hintText: 'Rechercher un enseignant…',
+              isDense: true,
+              prefixIcon: const Icon(Icons.search, size: 20),
+              suffixIcon: _query.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _query = '');
+                      },
+                    ),
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ),
+        Expanded(
+          child: groups.isEmpty
+              ? ListView(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        _query.trim().isEmpty
+                            ? 'Aucun enseignant.'
+                            : 'Aucun enseignant pour « ${_query.trim()} ».',
+                      ),
+                    ),
+                  ],
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  itemCount: groups.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final group = groups[index];
+                    return Card(
+                      child: ListTile(
+                        onTap: () => _openSchedule(group),
+                        leading: CircleAvatar(
+                          backgroundColor: AuditronColors.brand700.withValues(
+                            alpha: 0.12,
+                          ),
+                          child: Text(
+                            group.initials,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: AuditronColors.brand700,
+                            ),
+                          ),
+                        ),
+                        title: Text(
+                          group.name,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          group.summary,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TeacherGroup {
+  final String name;
+  final List<Map<String, dynamic>> items;
+
+  const _TeacherGroup({required this.name, required this.items});
+
+  String get initials {
+    final parts = name
+        .split(RegExp(r'[\s-]+'))
+        .where((part) => part.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return '?';
+    return parts
+        .take(2)
+        .map((part) => part.substring(0, 1).toUpperCase())
+        .join();
+  }
+
+  String get summary {
+    final days = items
+        .map((item) => (item['jour'] as num?)?.toInt() ?? 0)
+        .toSet()
+        .length;
+    final seances = items.length == 1 ? '1 séance' : '${items.length} séances';
+    return '$seances · ${days == 1 ? '1 jour' : '$days jours'}';
+  }
+}
+
+/// Emploi du temps d'un enseignant, jour par jour, avec édition et
+/// suppression de chaque séance.
+class _TeacherScheduleSheet extends StatelessWidget {
+  final _TeacherGroup group;
+  final Future<void> Function(Map<String, dynamic>) onEdit;
+  final Future<void> Function(Map<String, dynamic>) onDelete;
+
+  const _TeacherScheduleSheet({
+    required this.group,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final byDay = <int, List<Map<String, dynamic>>>{};
+    for (final item in group.items) {
+      byDay
+          .putIfAbsent((item['jour'] as num?)?.toInt() ?? 0, () => [])
+          .add(item);
+    }
+    final days = byDay.keys.toList()..sort();
+    final today = DateTime.now().weekday;
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Center(
+              child: Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.black26,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    group.name,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    group.summary,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AuditronColors.brand700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 16),
+            Flexible(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+                children: [
+                  for (final day in days) ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                      child: Text(
+                        _DaysSchedule._dayName(day),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: day == today ? AuditronColors.brand700 : null,
+                        ),
+                      ),
+                    ),
+                    for (final item
+                        in (byDay[day]!..sort(
+                          (a, b) => '${a['heure_debut']}'.compareTo(
+                            '${b['heure_debut']}',
+                          ),
+                        )))
+                      _TeacherCourseTile(
+                        item: item,
+                        onEdit: onEdit,
+                        onDelete: onDelete,
+                      ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TeacherCourseTile extends StatelessWidget {
+  final Map<String, dynamic> item;
+  final Future<void> Function(Map<String, dynamic>) onEdit;
+  final Future<void> Function(Map<String, dynamic>) onDelete;
+
+  const _TeacherCourseTile({
+    required this.item,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final classe =
+        item['classe']?['nom']?.toString() ??
+        item['classe_id']?.toString() ??
+        'Classe';
+    final discipline =
+        item['discipline']?['nom']?.toString() ??
+        item['discipline_id']?.toString() ??
+        'Matière';
+    return ListTile(
+      leading: Icon(Icons.access_time, color: AuditronColors.brand700),
+      title: Text(
+        '${item['heure_debut']}–${item['heure_fin']} · $classe',
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text(
+        '$discipline${item['salle'] != null ? ' · ${item['salle']}' : ''}'
+        '${item['type_cours'] != null ? ' · ${item['type_cours']}' : ''}',
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: 'Modifier',
+            icon: const Icon(Icons.edit, size: 19),
+            onPressed: () => onEdit(item),
+          ),
+          IconButton(
+            tooltip: 'Supprimer',
+            icon: const Icon(Icons.delete_outline, size: 19),
+            onPressed: () => onDelete(item),
+          ),
+        ],
       ),
     );
   }
