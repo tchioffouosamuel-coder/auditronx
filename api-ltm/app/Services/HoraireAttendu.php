@@ -14,6 +14,10 @@ use Illuminate\Support\Collection;
  * temps ; le personnel administratif (section « Administration ») suit un
  * horaire fixe configurable, indépendant de tout emploi du temps : par défaut
  * du lundi au vendredi, de 07h30 à 15h30.
+ *
+ * Priorité : emploi du temps spécial (plage par jour, attribuée nominativement
+ * — voir `EmploiDuTempsSpecial`), puis horaire administratif global, puis
+ * cours du jour.
  */
 class HoraireAttendu
 {
@@ -55,11 +59,37 @@ class HoraireAttendu
 
     private ?array $parametres = null;
 
+    /** Horaires spéciaux déjà chargés, indexés par `enseignants.id`. */
+    private array $horairesSpeciaux = [];
+
     /** @var string[]|null */
     private ?array $fonctionsDirection = null;
 
     /** Libellés des jours fériés indexés par date `Y-m-d`, chargés une seule fois. */
     private ?Collection $feries = null;
+
+    /**
+     * Cette personne suit-elle un emploi du temps spécial ? C'est le fait d'en
+     * avoir un qui l'y soumet : aucune case à cocher ni section réservée, un
+     * emploi du temps spécial peut être attribué à n'importe quel membre du
+     * personnel.
+     */
+    public function aHoraireSpecial(Enseignant $enseignant): bool
+    {
+        return $this->horaireSpecial($enseignant)->isNotEmpty();
+    }
+
+    /**
+     * Plages spéciales de cette personne, mémorisées : la grille hebdomadaire
+     * interroge l'horaire six fois par membre du personnel, et une requête par
+     * cellule coûterait 6 x effectif allers-retours.
+     */
+    private function horaireSpecial(Enseignant $enseignant): Collection
+    {
+        return $this->horairesSpeciaux[$enseignant->id] ??= $enseignant->relationLoaded('emploiDuTempsSpecial')
+            ? $enseignant->emploiDuTempsSpecial
+            : $enseignant->emploiDuTempsSpecial()->get();
+    }
 
     /**
      * Comparaison insensible à la casse : `enseignants.section` porte des
@@ -171,6 +201,23 @@ class HoraireAttendu
         // absent ni en retard, et le jour sort du dénominateur des taux.
         if ($this->estFerie($date)) {
             return null;
+        }
+
+        // Un emploi du temps spécial prime sur tout le reste : il décrit une
+        // activité générale, sans cours, et son titulaire peut aussi bien
+        // relever de la section « Administration » que de l'enseignement.
+        if ($this->aHoraireSpecial($enseignant)) {
+            $plage = $this->horaireSpecial($enseignant)->firstWhere('jour', $date->isoWeekday());
+
+            if (! $plage) {
+                return null;
+            }
+
+            return [
+                'heure_debut' => $plage->heure_debut,
+                'heure_fin' => $plage->heure_fin,
+                'minutes' => (int) Carbon::parse($plage->heure_debut)->diffInMinutes(Carbon::parse($plage->heure_fin)),
+            ];
         }
 
         if ($this->estAdministratif($enseignant)) {

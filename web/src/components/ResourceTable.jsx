@@ -1,64 +1,11 @@
 import { useEffect, useState } from 'react'
-import Select from 'react-select'
 import api from '../lib/api'
+import fetchAllPages from '../lib/fetchAllPages'
 import { confirmAction } from '../lib/swal'
 import DataTable from './DataTable'
 import Modal from './Modal'
 import PasswordInput from './PasswordInput'
-
-const SELECT_STYLES = {
-  control: (base, state) => ({
-    ...base,
-    minHeight: '2.5rem',
-    borderColor: state.isFocused ? 'var(--color-brand-500)' : 'var(--color-ink-100)',
-    boxShadow: state.isFocused ? '0 0 0 2px var(--color-brand-100)' : 'none',
-    '&:hover': { borderColor: 'var(--color-brand-500)' },
-  }),
-  option: (base, state) => ({
-    ...base,
-    backgroundColor: state.isSelected
-      ? 'var(--color-brand-700)'
-      : state.isFocused
-        ? 'var(--color-brand-50)'
-        : 'white',
-    color: state.isSelected ? 'white' : 'var(--color-ink-900)',
-  }),
-  menu: (base) => ({ ...base, zIndex: 50 }),
-}
-
-/** Garde-fou : plafonne le nombre d'allers-retours si l'API pagine à l'infini. */
-const MAX_PAGES = 100
-
-/**
- * Récupère l'intégralité d'une ressource en suivant la pagination Laravel.
- *
- * La recherche, le tri et la pagination de `DataTable` travaillent sur le
- * tableau déjà en mémoire : ne lire que la première page revenait à chercher
- * dans les 25 (ou 50) premières lignes seulement — un enseignant classé après
- * la lettre B ressortait en « 0 résultat » alors qu'il existe bien en base.
- * Les listes déroulantes souffraient du même tronquage. On agrège donc toutes
- * les pages avant d'afficher.
- */
-async function fetchAllPages(url) {
-  const all = []
-  let page = 1
-  let lastPage = 1
-
-  do {
-    const { data } = await api.get(url, { params: { page } })
-
-    if (Array.isArray(data)) {
-      all.push(...data)
-      break
-    }
-
-    all.push(...(data.data ?? []))
-    lastPage = Number(data.last_page ?? 1)
-    page += 1
-  } while (page <= lastPage && page <= MAX_PAGES)
-
-  return all
-}
+import SearchSelect from './SearchSelect'
 
 /**
  * Table CRUD générique pilotée par un schéma de champs — évite de réécrire le
@@ -202,28 +149,16 @@ export default function ResourceTable({ title, resource, fields, columns, idKey 
                 <label key={f.key} className="mb-3 block text-sm">
                   <span className="mb-1 block text-ink-700">{f.label}</span>
                   {f.type === 'select' ? (
-                    (() => {
-                      const rawOptions = f.options ?? optionsByField[f.key] ?? []
-                      const selectOptions = rawOptions.map((opt) => ({
+                    <SearchSelect
+                      id={`field-${f.key}`}
+                      required={f.required}
+                      options={(f.options ?? optionsByField[f.key] ?? []).map((opt) => ({
                         value: opt.id ?? opt.value,
                         label: opt.label ?? (f.optionLabel ? opt[f.optionLabel] : opt.nom ?? opt.label),
-                      }))
-                      const current = formValues[f.key] ?? ''
-                      const selected = selectOptions.find((o) => String(o.value) === String(current)) ?? null
-
-                      return (
-                        <Select
-                          inputId={`field-${f.key}`}
-                          styles={SELECT_STYLES}
-                          isClearable={!f.required}
-                          placeholder="Rechercher…"
-                          noOptionsMessage={() => 'Aucun résultat'}
-                          options={selectOptions}
-                          value={selected}
-                          onChange={(opt) => setFormValues((v) => ({ ...v, [f.key]: opt?.value ?? '' }))}
-                        />
-                      )
-                    })()
+                      }))}
+                      value={formValues[f.key] ?? ''}
+                      onChange={(value) => setFormValues((v) => ({ ...v, [f.key]: value }))}
+                    />
                   ) : f.type === 'password' ? (
                     <PasswordInput
                       required={f.required}

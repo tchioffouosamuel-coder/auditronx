@@ -9,6 +9,7 @@ import 'admin_assiduite_screen.dart';
 import 'admin_bornes_screen.dart';
 import 'admin_cahier_texte_screen.dart';
 import 'admin_classes_screen.dart';
+import 'admin_configuration_screen.dart';
 import 'admin_dashboard_screen.dart';
 import 'admin_devices_screen.dart';
 import 'admin_disciplines_screen.dart';
@@ -188,6 +189,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             icon: Icons.fact_check_outlined,
             screen: const AdminJournalAuditScreen(),
           ),
+        _AdminMenuEntry(
+          title: 'Configuration',
+          icon: Icons.tune,
+          screen: const AdminConfigurationScreen(),
+        ),
       ],
     ),
   ];

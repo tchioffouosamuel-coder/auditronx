@@ -69,6 +69,16 @@ class Enseignant extends Model implements AuthenticatableContract
         return $this->hasMany(EmploiDuTemps::class);
     }
 
+    /**
+     * Plages de présence attendues d'un personnel dont l'activité est
+     * générale. Non vide, elle prime sur `emploiDuTemps` et sur l'horaire
+     * administratif global pour tout le calcul d'assiduité.
+     */
+    public function emploiDuTempsSpecial(): HasMany
+    {
+        return $this->hasMany(EmploiDuTempsSpecial::class);
+    }
+
     public function signalements(): HasMany
     {
         return $this->hasMany(Signalement::class);

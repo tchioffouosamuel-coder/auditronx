@@ -98,7 +98,21 @@
             <td>{{ $enseignant->matricule ?? '-' }}</td>
         </tr>
     </table>
-    @if (!empty($horaire_administratif))
+    @if (!empty($horaire_special))
+        <h2>EMPLOI DU TEMPS SPÉCIAL</h2>
+        <table>
+            <tr>
+                <th style="width:12%">Jour</th>
+                <th>Horaires</th>
+            </tr>
+            @foreach ($emploi_special as $plage)
+                <tr>
+                    <td class="bold">{{ [1 => 'Lundi', 2 => 'Mardi', 3 => 'Mercredi', 4 => 'Jeudi', 5 => 'Vendredi', 6 => 'Samedi', 7 => 'Dimanche'][$plage->jour] ?? '-' }}</td>
+                    <td>{{ $plage->heure_debut }} - {{ $plage->heure_fin }}</td>
+                </tr>
+            @endforeach
+        </table>
+    @elseif (!empty($horaire_administratif))
         <h2>HORAIRE DE TRAVAIL (PERSONNEL ADMINISTRATIF)</h2>
         <table>
             <tr>
@@ -214,7 +228,7 @@
         <tr>
             <td class="text-left bold">Total retard (min)</td>
             <td>{{ round($total_retard_minutes) }}</td>
-            <td class="text-left bold">{{ !empty($horaire_administratif) ? 'Jours de travail prévus' : 'Jours de cours prévus' }}</td>
+            <td class="text-left bold">{{ !empty($horaire_administratif) || !empty($horaire_special) ? 'Jours de travail prévus' : 'Jours de cours prévus' }}</td>
             <td>{{ $jours_attendus }}</td>
         </tr>
         <tr>
@@ -223,18 +237,30 @@
             <td class="text-left bold">Présences validées</td>
             <td>{{ $presences_valides }}</td>
         </tr>
-        <tr>
-            <td class="text-left bold">Périodes à rattraper (présence)</td>
-            <td class="bold">{{ number_format($total_periodes_a_rattraper, 2, '.', '') }}</td>
-            <td class="text-left bold">Taux d'assiduité</td>
-            <td class="bold">{{ number_format($taux_assiduite, 1, '.', '') }}%</td>
-        </tr>
-        <tr>
-            <td class="text-left bold">Périodes à rattraper (aucun pointage)</td>
-            <td class="bold">{{ number_format($total_periodes_absence, 2, '.', '') }}</td>
-            <td class="text-left bold">TOTAL périodes à rattraper</td>
-            <td class="bold">{{ number_format($total_periodes_a_rattraper + $total_periodes_absence, 2, '.', '') }}</td>
-        </tr>
+        @if (!empty($horaire_special))
+            {{-- Activité générale : aucun cours n'est manqué, donc rien à
+                 rattraper. La ligne reste affichée pour que la fiche réponde
+                 explicitement à la question plutôt que de laisser un blanc. --}}
+            <tr>
+                <td class="text-left bold">Périodes à rattraper</td>
+                <td class="bold">Sans objet</td>
+                <td class="text-left bold">Taux d'assiduité</td>
+                <td class="bold">{{ number_format($taux_assiduite, 1, '.', '') }}%</td>
+            </tr>
+        @else
+            <tr>
+                <td class="text-left bold">Périodes à rattraper (présence)</td>
+                <td class="bold">{{ number_format($total_periodes_a_rattraper, 2, '.', '') }}</td>
+                <td class="text-left bold">Taux d'assiduité</td>
+                <td class="bold">{{ number_format($taux_assiduite, 1, '.', '') }}%</td>
+            </tr>
+            <tr>
+                <td class="text-left bold">Périodes à rattraper (aucun pointage)</td>
+                <td class="bold">{{ number_format($total_periodes_absence, 2, '.', '') }}</td>
+                <td class="text-left bold">TOTAL périodes à rattraper</td>
+                <td class="bold">{{ number_format($total_periodes_a_rattraper + $total_periodes_absence, 2, '.', '') }}</td>
+            </tr>
+        @endif
     </table>
     <div style="margin-top:10px;text-align:right;font-size:9px">Fait à Meiganga, le
         {{ \Carbon\Carbon::now()->locale('fr')->translatedFormat('d F Y') }}<br><br><br><br><strong>Le

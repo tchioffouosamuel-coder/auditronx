@@ -1,14 +1,33 @@
 import 'package:flutter/material.dart';
 
+import '../../services/admin_api_client.dart';
 import '../../widgets/admin/admin_crud_screen.dart';
 import '../../widgets/admin/admin_field_spec.dart';
 import '../../widgets/admin/spreadsheet_actions.dart';
 import '../../theme.dart';
 
+/// « 08:10:00 » (colonne SQL `time`) -> « 08:10 » attendu par l'API.
+String heureMinute(dynamic valeur) {
+  final texte = valeur?.toString() ?? '';
+  return texte.length >= 5 ? texte.substring(0, 5) : texte;
+}
+
+/// « 08:10:00 » -> « 08h10 », pour l'affichage.
+String heureAffichee(dynamic valeur) =>
+    heureMinute(valeur).replaceFirst(':', 'h');
+
+String plageAffichee(dynamic debut, dynamic fin) =>
+    '${heureAffichee(debut)}–${heureAffichee(fin)}';
+
 /// Gestion des emplois du temps (§4.2 — admin-mobile) — équivalent mobile de
-/// `EmploisPage.jsx`. Le serveur rejette les créneaux qui se chevauchent pour
-/// un même enseignant/classe un même jour avec une erreur 422 sur
-/// `heure_debut` ; [AdminCrudScreen] affiche déjà ce message via un SnackBar.
+/// `EmploisPage.jsx`. Trois lectures du même jeu de créneaux : par classe, par
+/// enseignant, et les chevauchements restants.
+///
+/// Le serveur rejette à la saisie les créneaux qui se chevauchent pour un même
+/// enseignant/classe un même jour (422 sur `heure_debut`, message nommant la
+/// séance en cause, affiché par [AdminCrudScreen] via un SnackBar). L'onglet
+/// « Chevauchements » montre ceux qui sont déjà en base — un import Excel ou
+/// des données antérieures à ce contrôle en laissent passer.
 class AdminEmploisScreen extends StatelessWidget {
   const AdminEmploisScreen({super.key});
 
@@ -20,42 +39,6 @@ class AdminEmploisScreen extends StatelessWidget {
     AdminFieldOption(5, 'Vendredi'),
     AdminFieldOption(6, 'Samedi'),
     AdminFieldOption(7, 'Dimanche'),
-  ];
-
-  static const List<AdminFieldOption> _heuresDebut = [
-    AdminFieldOption('07:30', '07h30'),
-    AdminFieldOption('08:10', '08h10'),
-    AdminFieldOption('08:50', '08h50'),
-    AdminFieldOption('09:30', '09h30'),
-    AdminFieldOption('10:10', '10h10'),
-    AdminFieldOption('10:20', '10h20'),
-    AdminFieldOption('11:00', '11h00'),
-    AdminFieldOption('11:40', '11h40'),
-    AdminFieldOption('12:00', '12h00'),
-    AdminFieldOption('12:40', '12h40'),
-    AdminFieldOption('13:20', '13h20'),
-    AdminFieldOption('13:30', '13h30'),
-    AdminFieldOption('14:10', '14h10'),
-    AdminFieldOption('14:50', '14h50'),
-    AdminFieldOption('15:30', '15h30'),
-  ];
-
-  static const List<AdminFieldOption> _heuresFin = [
-    AdminFieldOption('08:10', '08h10'),
-    AdminFieldOption('08:50', '08h50'),
-    AdminFieldOption('09:30', '09h30'),
-    AdminFieldOption('10:10', '10h10'),
-    AdminFieldOption('10:20', '10h20'),
-    AdminFieldOption('11:00', '11h00'),
-    AdminFieldOption('11:40', '11h40'),
-    AdminFieldOption('12:00', '12h00'),
-    AdminFieldOption('12:40', '12h40'),
-    AdminFieldOption('13:20', '13h20'),
-    AdminFieldOption('13:30', '13h30'),
-    AdminFieldOption('14:10', '14h10'),
-    AdminFieldOption('14:50', '14h50'),
-    AdminFieldOption('15:30', '15h30'),
-    AdminFieldOption('16:10', '16h10'),
   ];
 
   static final List<AdminFieldSpec> _fields = [
@@ -87,19 +70,29 @@ class AdminEmploisScreen extends StatelessWidget {
       required: true,
       options: _jours,
     ),
-    const AdminFieldSpec(
-      key: 'heure_debut',
-      label: 'Heure de début',
+    // Une période est un couple début/fin, configuré par l'établissement
+    // (menu Configuration). `expandValue` renseigne les deux clés attendues
+    // par l'API à partir du seul choix de l'utilisateur.
+    AdminFieldSpec(
+      key: 'periode',
+      label: 'Période de cours',
       type: AdminFieldType.select,
       required: true,
-      options: _heuresDebut,
-    ),
-    const AdminFieldSpec(
-      key: 'heure_fin',
-      label: 'Heure de fin',
-      type: AdminFieldType.select,
-      required: true,
-      options: _heuresFin,
+      optionsEndpoint: '/periodes-cours',
+      optionValue: (item) =>
+          '${heureMinute(item['heure_debut'])}|${heureMinute(item['heure_fin'])}',
+      optionLabel: (item) =>
+          item['libelle_complet']?.toString() ??
+          plageAffichee(item['heure_debut'], item['heure_fin']),
+      valueFrom: (item) =>
+          '${heureMinute(item['heure_debut'])}|${heureMinute(item['heure_fin'])}',
+      expandValue: (value) {
+        final parts = value.toString().split('|');
+        return {
+          'heure_debut': parts.first,
+          'heure_fin': parts.length > 1 ? parts[1] : parts.first,
+        };
+      },
     ),
     const AdminFieldSpec(key: 'salle', label: 'Salle'),
     const AdminFieldSpec(key: 'type_cours', label: 'Type de cours'),
@@ -116,7 +109,8 @@ class AdminEmploisScreen extends StatelessWidget {
       itemTitle: (item) =>
           '${item['classe']?['nom'] ?? item['classe_id']} — ${item['discipline']?['nom'] ?? item['discipline_id']}',
       itemSubtitle: (item) =>
-          '${item['enseignant']?['nom'] ?? ''} · jour ${item['jour']} · ${item['heure_debut']}–${item['heure_fin']}'
+          '${item['enseignant']?['nom'] ?? ''} · ${_DaysSchedule._dayName((item['jour'] as num?)?.toInt() ?? 0)}'
+          ' · ${plageAffichee(item['heure_debut'], item['heure_fin'])}'
           '${item['salle'] != null ? ' · ${item['salle']}' : ''}',
       headerActions: (context, refresh) => [
         SpreadsheetActionsBar(entity: 'emplois', onImported: refresh),
@@ -289,7 +283,8 @@ class _CourseTile extends StatelessWidget {
       leading: Icon(Icons.menu_book_outlined, color: AuditronColors.brand700),
       title: Text(discipline, overflow: TextOverflow.ellipsis),
       subtitle: Text(
-        '$teacher · ${item['heure_debut']}–${item['heure_fin']}${item['salle'] != null ? ' · ${item['salle']}' : ''}',
+        '$teacher · ${plageAffichee(item['heure_debut'], item['heure_fin'])}'
+        '${item['salle'] != null ? ' · ${item['salle']}' : ''}',
         overflow: TextOverflow.ellipsis,
       ),
       trailing: Row(
@@ -336,7 +331,10 @@ class _CourseDetailsSheet extends StatelessWidget {
                 'Jour',
                 _DaysSchedule._dayName((item['jour'] as num?)?.toInt() ?? 0),
               ),
-              ('Horaire', '${item['heure_debut']}–${item['heure_fin']}'),
+              (
+                'Horaire',
+                plageAffichee(item['heure_debut'], item['heure_fin']),
+              ),
               ('Salle', item['salle']),
               ('Type de cours', item['type_cours']),
             ]
@@ -418,10 +416,11 @@ class _CourseDetailsSheet extends StatelessWidget {
   }
 }
 
-/// Deux entrées de lecture sur le même jeu de créneaux : par classe (vue
-/// historique) et par enseignant — un administrateur cherche souvent
-/// l'emploi du temps d'un enseignant précis pour corriger une séance.
-class _EmploisTabs extends StatelessWidget {
+/// Trois entrées de lecture sur le même jeu de créneaux : par classe (vue
+/// historique), par enseignant — un administrateur cherche souvent l'emploi
+/// du temps d'un enseignant précis pour corriger une séance — et les
+/// chevauchements restants.
+class _EmploisTabs extends StatefulWidget {
   final List<dynamic> items;
   final Future<void> Function(Map<String, dynamic>) onEdit;
   final Future<void> Function(Map<String, dynamic>) onDelete;
@@ -433,19 +432,56 @@ class _EmploisTabs extends StatelessWidget {
   });
 
   @override
+  State<_EmploisTabs> createState() => _EmploisTabsState();
+}
+
+class _EmploisTabsState extends State<_EmploisTabs> {
+  late Future<List<Map<String, dynamic>>> _conflits;
+
+  @override
+  void initState() {
+    super.initState();
+    _conflits = _chargerConflits();
+  }
+
+  /// Les conflits sont recalculés par le serveur sur l'ensemble des créneaux :
+  /// la liste rechargée après une édition reflète donc la résolution.
+  @override
+  void didUpdateWidget(covariant _EmploisTabs ancien) {
+    super.didUpdateWidget(ancien);
+    if (!identical(ancien.items, widget.items)) {
+      setState(() => _conflits = _chargerConflits());
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _chargerConflits() async {
+    final data = await AdminApiClient.instance.get('/emplois/conflits');
+    final liste = data is Map && data['data'] is List
+        ? data['data'] as List
+        : const [];
+    return liste.cast<Map<String, dynamic>>();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Column(
         children: [
           TabBar(
             labelColor: AuditronColors.brand700,
             indicatorColor: AuditronColors.brand700,
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             tabs: const [
               Tab(icon: Icon(Icons.school_outlined, size: 20), text: 'Classes'),
               Tab(
                 icon: Icon(Icons.person_outline, size: 20),
                 text: 'Enseignants',
+              ),
+              Tab(
+                icon: Icon(Icons.warning_amber_outlined, size: 20),
+                text: 'Chevauchements',
               ),
             ],
           ),
@@ -453,15 +489,293 @@ class _EmploisTabs extends StatelessWidget {
             child: TabBarView(
               children: [
                 _GroupedEmploisList(
-                  items: items,
-                  onEdit: onEdit,
-                  onDelete: onDelete,
+                  items: widget.items,
+                  onEdit: widget.onEdit,
+                  onDelete: widget.onDelete,
                 ),
-                _TeachersList(items: items, onEdit: onEdit, onDelete: onDelete),
+                _TeachersList(
+                  items: widget.items,
+                  onEdit: widget.onEdit,
+                  onDelete: widget.onDelete,
+                ),
+                _ConflitsList(
+                  conflits: _conflits,
+                  onEdit: widget.onEdit,
+                  onDelete: widget.onDelete,
+                ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+String _libelleMotifs(List<dynamic> motifs) => motifs
+    .map((motif) => motif == 'enseignant' ? 'même enseignant' : 'même classe')
+    .join(' et ');
+
+/// Désignation lisible d'une séance : ce que l'alerte doit nommer pour qu'on
+/// sache quoi déplacer sans parcourir la grille à la main.
+String _designation(Map<String, dynamic> creneau) {
+  final discipline =
+      creneau['discipline']?['nom']?.toString() ??
+      'Matière #${creneau['discipline_id']}';
+  final classe =
+      creneau['classe']?['nom']?.toString() ??
+      'Classe #${creneau['classe_id']}';
+  final enseignant =
+      creneau['enseignant']?['nom']?.toString() ??
+      'Enseignant #${creneau['enseignant_id']}';
+  return '$discipline · $classe · $enseignant';
+}
+
+/// Alertes de chevauchement : quel cours, quel enseignant, quelle classe, et
+/// une action « Résoudre » qui ouvre le sheet d'arbitrage.
+class _ConflitsList extends StatelessWidget {
+  final Future<List<Map<String, dynamic>>> conflits;
+  final Future<void> Function(Map<String, dynamic>) onEdit;
+  final Future<void> Function(Map<String, dynamic>) onDelete;
+
+  const _ConflitsList({
+    required this.conflits,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  Future<void> _resoudre(
+    BuildContext context,
+    Map<String, dynamic> conflit,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => _ResolutionSheet(
+        conflit: conflit,
+        // Le sheet se ferme avant l'action : le formulaire d'édition et la
+        // confirmation de suppression sont eux aussi des sheets/dialogs, et la
+        // liste affichée ici serait de toute façon périmée après coup.
+        onEdit: (creneau) async {
+          Navigator.pop(sheetContext);
+          await onEdit(creneau);
+        },
+        onDelete: (creneau) async {
+          Navigator.pop(sheetContext);
+          await onDelete(creneau);
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: conflits,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return const Padding(
+            padding: EdgeInsets.all(24),
+            child: Text('Impossible de vérifier les chevauchements.'),
+          );
+        }
+
+        final liste = snapshot.data ?? const <Map<String, dynamic>>[];
+
+        if (liste.isEmpty) {
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Card(
+                color: Colors.green.shade50,
+                child: const ListTile(
+                  leading: Icon(
+                    Icons.check_circle_outline,
+                    color: Colors.green,
+                  ),
+                  title: Text('Aucun chevauchement'),
+                  subtitle: Text(
+                    "Chaque enseignant et chaque classe n'a qu'une séance à la fois.",
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+
+        return ListView.separated(
+          padding: const EdgeInsets.all(16),
+          itemCount: liste.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 8),
+          itemBuilder: (context, index) {
+            final conflit = liste[index];
+            final jour = _DaysSchedule._dayName(
+              (conflit['jour'] as num?)?.toInt() ?? 0,
+            );
+            return Card(
+              color: Colors.amber.shade50,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$jour · '
+                      '${plageAffichee(conflit['heure_debut'], conflit['heure_fin'])} · '
+                      '${_libelleMotifs(conflit['motifs'] as List? ?? const [])}',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 8),
+                    for (final cle in const ['a', 'b'])
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          '• ${_designation(conflit[cle] as Map<String, dynamic>)}'
+                          ' (${plageAffichee((conflit[cle] as Map)['heure_debut'], (conflit[cle] as Map)['heure_fin'])})',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton.icon(
+                        onPressed: () => _resoudre(context, conflit),
+                        icon: const Icon(Icons.build_outlined, size: 18),
+                        label: const Text('Résoudre'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+/// Sheet de résolution : les deux séances en présence, et pour chacune
+/// l'arbitrage possible — la déplacer (période, jour, salle) ou la supprimer.
+class _ResolutionSheet extends StatelessWidget {
+  final Map<String, dynamic> conflit;
+  final Future<void> Function(Map<String, dynamic>) onEdit;
+  final Future<void> Function(Map<String, dynamic>) onDelete;
+
+  const _ResolutionSheet({
+    required this.conflit,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  Widget _carte(BuildContext context, String cle, String titre) {
+    final creneau = conflit[cle] as Map<String, dynamic>;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              titre,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.4,
+                color: AuditronColors.brand700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              creneau['discipline']?['nom']?.toString() ?? 'Matière',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '${creneau['classe']?['nom'] ?? 'Classe'} · '
+              '${creneau['enseignant']?['nom'] ?? 'Enseignant'}',
+              style: const TextStyle(fontSize: 13),
+            ),
+            Text(
+              '${plageAffichee(creneau['heure_debut'], creneau['heure_fin'])}'
+              '${creneau['salle'] != null ? ' · ${creneau['salle']}' : ''}',
+              style: const TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => onEdit(creneau),
+                    icon: const Icon(Icons.schedule, size: 18),
+                    label: const Text('Déplacer'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () => onDelete(creneau),
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    label: const Text('Supprimer'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final jour = _DaysSchedule._dayName(
+      (conflit['jour'] as num?)?.toInt() ?? 0,
+    );
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.black26,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Résoudre le chevauchement',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '$jour de '
+                '${plageAffichee(conflit['heure_debut'], conflit['heure_fin'])}, '
+                'ces deux séances se superposent '
+                '(${_libelleMotifs(conflit['motifs'] as List? ?? const [])}). '
+                "Déplacez-en une sur une autre période, ou supprimez celle qui est en trop.",
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 14),
+              _carte(context, 'a', 'SÉANCE 1'),
+              _carte(context, 'b', 'SÉANCE 2'),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -787,7 +1101,7 @@ class _TeacherCourseTile extends StatelessWidget {
     return ListTile(
       leading: Icon(Icons.access_time, color: AuditronColors.brand700),
       title: Text(
-        '${item['heure_debut']}–${item['heure_fin']} · $classe',
+        '${plageAffichee(item['heure_debut'], item['heure_fin'])} · $classe',
         overflow: TextOverflow.ellipsis,
       ),
       subtitle: Text(

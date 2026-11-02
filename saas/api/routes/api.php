@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\DeviceController;
 use App\Http\Controllers\Api\DeviceLogController;
 use App\Http\Controllers\Api\DisciplineController;
 use App\Http\Controllers\Api\EmploiDuTempsController;
+use App\Http\Controllers\Api\EmploiDuTempsSpecialController;
 use App\Http\Controllers\Api\EnseignantController;
 use App\Http\Controllers\Api\EtablissementCourantController;
 use App\Http\Controllers\Api\FerieController;
@@ -25,6 +26,7 @@ use App\Http\Controllers\Api\MyPresenceController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OtpController;
 use App\Http\Controllers\Api\ParametreController;
+use App\Http\Controllers\Api\PeriodeCoursController;
 use App\Http\Controllers\Api\PresenceValidationController;
 use App\Http\Controllers\Api\ProgrammeController;
 use App\Http\Controllers\Api\QrPointController;
@@ -109,8 +111,26 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('classes', ClasseController::class)
         ->parameters(['classes' => 'classe']);
     Route::apiResource('disciplines', DisciplineController::class);
+    // Avant l'apiResource : `emplois/{emploiDuTemp}` capterait sinon « conflits ».
+    Route::get('/emplois/conflits', [EmploiDuTempsController::class, 'conflits']);
     Route::apiResource('emplois', EmploiDuTempsController::class)
         ->parameters(['emplois' => 'emploiDuTemp']);
+
+    // Configuration de la grille horaire : les périodes alimentent les listes
+    // déroulantes de l'emploi du temps. Lecture ouverte à tout compte
+    // authentifié (l'app mobile en a besoin pour ses formulaires), écriture
+    // réservée au backoffice.
+    Route::get('/periodes-cours', [PeriodeCoursController::class, 'index']);
+    Route::apiResource('periodes-cours', PeriodeCoursController::class)
+        ->except(['index'])
+        ->parameters(['periodes-cours' => 'periodeCour'])
+        ->middleware('backoffice');
+
+    // Emplois du temps spéciaux : plages de présence d'un personnel dont
+    // l'activité est générale (§4.2 — Assiduité).
+    Route::apiResource('emplois-speciaux', EmploiDuTempsSpecialController::class)
+        ->parameters(['emplois-speciaux' => 'emploiSpecial'])
+        ->middleware('backoffice');
     Route::post('/signalements/bulk', [SignalementController::class, 'storeBulk']);
     Route::apiResource('signalements', SignalementController::class);
     Route::apiResource('feries', FerieController::class)

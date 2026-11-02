@@ -1,6 +1,6 @@
 /// Type de champ pour un formulaire généré par [AdminCrudScreen] — miroir
 /// simplifié des `type` supportés par `ResourceTable.jsx` côté web.
-enum AdminFieldType { text, number, date, select, checkbox, password }
+enum AdminFieldType { text, number, date, time, select, checkbox, password }
 
 /// Une option statique pour un champ [AdminFieldType.select].
 class AdminFieldOption {
@@ -36,6 +36,16 @@ class AdminFieldSpec {
   /// Aide affichée sous le champ (ex: "laisser vide pour ne pas changer").
   final String? helperText;
 
+  /// Éclate la valeur choisie en plusieurs clés JSON au lieu de la seule
+  /// [key]. Une période de cours est un couple début/fin : la choisir doit
+  /// renseigner `heure_debut` et `heure_fin` d'un coup, deux listes
+  /// indépendantes laissant composer des créneaux impossibles.
+  final Map<String, dynamic> Function(dynamic value)? expandValue;
+
+  /// Reconstruit la valeur du champ à partir de l'élément édité, quand elle ne
+  /// se lit pas simplement sur [key] (pendant de [expandValue]).
+  final dynamic Function(Map<String, dynamic> item)? valueFrom;
+
   const AdminFieldSpec({
     required this.key,
     required this.label,
@@ -46,5 +56,7 @@ class AdminFieldSpec {
     this.optionValue,
     this.optionLabel,
     this.helperText,
+    this.expandValue,
+    this.valueFrom,
   });
 }

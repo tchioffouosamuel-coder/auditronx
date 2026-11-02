@@ -34,6 +34,10 @@ class BilanIndividuel
             ->keyBy(fn($presence) => $presence->date->toDateString());
         $signalements = $enseignant->signalements()
             ->whereDate('date', '<=', $fin->toDateString())->get();
+        // Une activité générale ne se découpe pas en cours : son titulaire
+        // n'a donc rien à rattraper, ni sur une absence ni sur un départ
+        // anticipé. Retards et minutes d'anticipation restent comptés.
+        $sansRattrapage = $this->horaires->aHoraireSpecial($enseignant);
         $details = [];
         $joursAttendus = $presencesValides = 0;
         $totalRetard = $totalAnticipation = $totalPeriodesPresence = $totalPeriodesAbsence = 0;
@@ -53,14 +57,14 @@ class BilanIndividuel
             $anticipation = $presence?->heure_depart ? max(0, (int) floor(($heureFin->timestamp - $presence->heure_depart->timestamp) / 60)) : 0;
             $signale = $signalement !== null;
             $absent = !$futur && !$signale && (!$presence || (!$presence->heure_arrivee && !$presence->heure_depart));
-            $periodesRattraper = $absent ? $periodesPrevues : (int) ceil($anticipation / 40);
+            $periodesRattraper = $sansRattrapage ? 0 : ($absent ? $periodesPrevues : (int) ceil($anticipation / 40));
             $valide = $signale || (bool) ($presence?->heure_arrivee || $presence?->heure_depart);
             if (!$futur) $joursAttendus++;
             if ($valide && !$futur) $presencesValides++;
             if (!$futur) {
                 $totalRetard += $retard;
                 $totalAnticipation += $anticipation;
-                if ($absent) $totalPeriodesAbsence += $periodesPrevues;
+                if ($absent) $totalPeriodesAbsence += $sansRattrapage ? 0 : $periodesPrevues;
                 else $totalPeriodesPresence += $periodesRattraper;
             }
             $details[] = [
@@ -87,6 +91,10 @@ class BilanIndividuel
             'annee' => $debut->year,
             'emploi_par_jour' => $emploiParJour,
             'horaire_administratif' => $this->horaires->estAdministratif($enseignant) ? $this->horaires->parametresAdministratifs() : null,
+            'horaire_special' => $sansRattrapage,
+            'emploi_special' => $sansRattrapage
+                ? $enseignant->emploiDuTempsSpecial()->orderBy('jour')->get()
+                : collect(),
             'details' => $details,
             'total_retard_minutes' => $totalRetard,
             'total_anticipation_minutes' => $totalAnticipation,

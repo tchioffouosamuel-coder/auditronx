@@ -478,14 +478,22 @@ class _AdminCrudFormState extends State<_AdminCrudForm> {
   void initState() {
     super.initState();
     for (final f in widget.fields) {
-      final initialValue = widget.initial?[f.key];
+      final initialValue = f.valueFrom != null && widget.initial != null
+          ? f.valueFrom!(widget.initial!)
+          : widget.initial?[f.key];
       _values[f.key] = f.type == AdminFieldType.checkbox
           ? (initialValue == true)
           : initialValue;
       if (f.type != AdminFieldType.select &&
           f.type != AdminFieldType.checkbox) {
+        // Une colonne SQL `time` revient en « 08:10:00 » alors que l'API
+        // n'accepte que « 08:10 » : sans cette coupe, rouvrir une fiche pour
+        // la modifier la renvoyait en 422 sans y avoir touché.
+        final texte = initialValue?.toString() ?? '';
         _controllers[f.key] = TextEditingController(
-          text: initialValue?.toString() ?? '',
+          text: f.type == AdminFieldType.time && texte.length >= 5
+              ? texte.substring(0, 5)
+              : texte,
         );
       }
       if (f.type == AdminFieldType.password) _obscure[f.key] = true;
@@ -506,7 +514,13 @@ class _AdminCrudFormState extends State<_AdminCrudForm> {
       switch (f.type) {
         case AdminFieldType.select:
         case AdminFieldType.checkbox:
-          if (_values[f.key] != null) body[f.key] = _values[f.key];
+          if (_values[f.key] != null) {
+            if (f.expandValue != null) {
+              body.addAll(f.expandValue!(_values[f.key]));
+            } else {
+              body[f.key] = _values[f.key];
+            }
+          }
           break;
         case AdminFieldType.number:
           final text = _controllers[f.key]!.text.trim();
@@ -517,6 +531,7 @@ class _AdminCrudFormState extends State<_AdminCrudForm> {
           if (text.isNotEmpty) body[f.key] = text;
           break;
         case AdminFieldType.date:
+        case AdminFieldType.time:
         case AdminFieldType.text:
           final text = _controllers[f.key]!.text.trim();
           body[f.key] = text.isEmpty ? null : text;
@@ -524,6 +539,29 @@ class _AdminCrudFormState extends State<_AdminCrudForm> {
       }
     }
     return body;
+  }
+
+  /// Sélecteur d'heure rendant toujours « HH:MM » — le format attendu par
+  /// l'API (`date_format:H:i`), et non le « 8:05 AM » d'une locale anglaise.
+  Future<void> _pickTime(AdminFieldSpec f) async {
+    final texte = _controllers[f.key]!.text;
+    final parts = texte.split(':');
+    final courant = parts.length >= 2
+        ? TimeOfDay(
+            hour: int.tryParse(parts[0]) ?? 8,
+            minute: int.tryParse(parts[1]) ?? 0,
+          )
+        : const TimeOfDay(hour: 8, minute: 0);
+
+    final picked = await showTimePicker(context: context, initialTime: courant);
+
+    if (picked != null) {
+      setState(() {
+        _controllers[f.key]!.text =
+            '${picked.hour.toString().padLeft(2, '0')}:'
+            '${picked.minute.toString().padLeft(2, '0')}';
+      });
+    }
   }
 
   Future<void> _pickDate(AdminFieldSpec f) async {
@@ -612,6 +650,20 @@ class _AdminCrudFormState extends State<_AdminCrudForm> {
           decoration: InputDecoration(
             labelText: f.label + (f.required ? ' *' : ''),
             suffixIcon: const Icon(Icons.calendar_today, size: 18),
+          ),
+          validator: f.required
+              ? (v) => (v == null || v.isEmpty) ? 'Champ requis' : null
+              : null,
+        );
+      case AdminFieldType.time:
+        return TextFormField(
+          controller: _controllers[f.key],
+          readOnly: true,
+          onTap: () => _pickTime(f),
+          decoration: InputDecoration(
+            labelText: f.label + (f.required ? ' *' : ''),
+            helperText: f.helperText,
+            suffixIcon: const Icon(Icons.schedule, size: 18),
           ),
           validator: f.required
               ? (v) => (v == null || v.isEmpty) ? 'Champ requis' : null
