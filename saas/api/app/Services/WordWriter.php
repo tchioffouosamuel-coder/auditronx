@@ -34,6 +34,54 @@ class WordWriter
         return new self('paysage');
     }
 
+    /**
+     * En-tête officiel de l'établissement : la tutelle française à gauche, son
+     * équivalent anglais à droite, sur un tableau sans bordures.
+     *
+     * Le bandeau se place avant le titre et n'imprime rien s'il n'est pas
+     * renseigné, comme dans les PDF (cf. `pdf.partials.entete`).
+     *
+     * @param  array{gauche: string[], droite: string[], contact: string}  $colonnes
+     */
+    public function enteteEtablissement(array $colonnes): self
+    {
+        if ($colonnes['gauche'] === [] && $colonnes['droite'] === []) {
+            return $this;
+        }
+
+        $cellule = fn (array $lignes) => '<w:tc><w:tcPr><w:tcW w:w="2500" w:type="pct"/></w:tcPr>'
+            .($lignes === []
+                ? '<w:p/>'
+                : implode('', array_map(
+                    fn (string $ligne) => $this->xmlParagraphe($ligne, [
+                        'taille' => 16,
+                        'centre' => true,
+                        'apres' => 0,
+                    ]),
+                    $lignes,
+                )))
+            .'</w:tc>';
+
+        $this->corps[] = '<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/>'
+            .'<w:tblLayout w:type="fixed"/></w:tblPr>'
+            .'<w:tblGrid><w:gridCol w:w="4500"/><w:gridCol w:w="4500"/></w:tblGrid>'
+            .'<w:tr>'.$cellule($colonnes['gauche']).$cellule($colonnes['droite']).'</w:tr>'
+            .'</w:tbl>';
+
+        if ($colonnes['contact'] !== '') {
+            $this->paragraphe($colonnes['contact'], [
+                'taille' => 14,
+                'centre' => true,
+                'couleur' => '555555',
+            ]);
+        } else {
+            // Word fusionnerait le tableau suivant avec celui de l'en-tête.
+            $this->corps[] = '<w:p/>';
+        }
+
+        return $this;
+    }
+
     public function titre(string $texte): self
     {
         return $this->paragraphe($texte, ['taille' => 28, 'gras' => true, 'centre' => true, 'apres' => 60]);

@@ -46,6 +46,7 @@
 </head>
 
 <body>
+    @include('pdf.partials.entete')
     <h1>Enseignants sans aucune présence enregistrée</h1>
     <div class="date">Situation au {{ $date->locale('fr')->translatedFormat('l d F Y') }}</div>
     @if ($enseignants->isEmpty())

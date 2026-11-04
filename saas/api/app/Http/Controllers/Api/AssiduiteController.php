@@ -7,6 +7,7 @@ use App\Http\Controllers\Traits\AccessibleEnseignants;
 use App\Models\Enseignant;
 use App\Models\Presence;
 use App\Services\AssiduiteCalculator;
+use App\Services\EnteteEtablissement;
 use App\Services\HoraireAttendu;
 use App\Services\WordWriter;
 use Carbon\Carbon;
@@ -130,6 +131,7 @@ class AssiduiteController extends Controller
         $presences = $this->presencesDuJour($request, $date, $horaires);
 
         $document = (new WordWriter)
+            ->enteteEtablissement(app(EnteteEtablissement::class)->colonnes())
             ->titre('Journal des présences')
             ->sousTitre(self::LIBELLES_CATEGORIE[$categorie].' — '.$this->dateEnToutesLettres($date))
             ->tableau(
@@ -178,6 +180,7 @@ class AssiduiteController extends Controller
         $largeurs = array_merge([24, 12], array_fill(0, $semaine['jours']->count(), 8), [9, 7]);
 
         $document = WordWriter::paysage()
+            ->enteteEtablissement(app(EnteteEtablissement::class)->colonnes())
             ->titre('Journal hebdomadaire des présences')
             ->sousTitre(self::LIBELLES_CATEGORIE[$categorie].' — semaine du '
                 .$this->dateEnToutesLettres($semaine['debut']).' au '.$this->dateEnToutesLettres($semaine['fin']))
@@ -209,6 +212,7 @@ class AssiduiteController extends Controller
         $bilan = $this->moisParSection($request, $assiduite, $horaires);
 
         $document = (new WordWriter)
+            ->enteteEtablissement(app(EnteteEtablissement::class)->colonnes())
             ->titre('Bilan mensuel d’assiduité')
             ->sousTitre(self::LIBELLES_CATEGORIE[$categorie].' — '.$bilan['libelle']);
 

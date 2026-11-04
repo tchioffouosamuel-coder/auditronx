@@ -492,6 +492,155 @@ function EmploisSpeciaux() {
 }
 
 /* -------------------------------------------------------------------------- */
+/* En-tête officiel des documents                                              */
+/* -------------------------------------------------------------------------- */
+
+/** Champs de l'en-tête, colonne par colonne, dans l'ordre d'impression. */
+const ENTETE_FRANCAIS = [
+  ['republique', 'République'],
+  ['devise', 'Devise'],
+  ['ministere', 'Ministère de tutelle'],
+  ['delegation', 'Délégation'],
+  ['etablissement', 'Établissement'],
+]
+
+const ENTETE_ANGLAIS = [
+  ['republique_en', 'Republic'],
+  ['devise_en', 'Motto'],
+  ['ministere_en', 'Ministry'],
+  ['delegation_en', 'Delegation'],
+  ['etablissement_en', 'School'],
+]
+
+const ENTETE_VIDE = Object.fromEntries(
+  [...ENTETE_FRANCAIS, ...ENTETE_ANGLAIS, ['contact', '']].map(([cle]) => [cle, '']),
+)
+
+/**
+ * Bandeau officiel repris en haut des documents exportés (journaux, bilans,
+ * fiches). Il était écrit en dur dans les vues PDF du serveur : le nom d'un
+ * établissement s'imprimait donc sur les documents de tous les autres.
+ *
+ * Une ligne laissée vide n'est pas imprimée — un établissement qui ne dépend
+ * d'aucune délégation régionale n'a pas à inventer la mention.
+ */
+function EnteteEtablissement() {
+  const [valeurs, setValeurs] = useState(ENTETE_VIDE)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    api.get('/parametres/entete-etablissement').then(({ data }) => {
+      setValeurs({ ...ENTETE_VIDE, ...data })
+      setLoading(false)
+    })
+  }, [])
+
+  function definir(cle, valeur) {
+    setValeurs((actuelles) => ({ ...actuelles, [cle]: valeur }))
+  }
+
+  async function save(e) {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      const { data } = await api.put('/parametres/entete-etablissement', valeurs)
+      setValeurs({ ...ENTETE_VIDE, ...data })
+      notify('En-tête de l’établissement enregistré.', { icon: 'success' })
+    } catch (error) {
+      notify(messageErreur(error, "L'enregistrement a échoué."), { icon: 'error' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const colonne = (champs) =>
+    champs.map(([cle]) => (valeurs[cle] || '').trim()).filter((ligne) => ligne !== '')
+
+  const gauche = colonne(ENTETE_FRANCAIS)
+  const droite = colonne(ENTETE_ANGLAIS)
+  const contact = (valeurs.contact || '').trim()
+
+  if (loading) return <LoadingState />
+
+  return (
+    <form onSubmit={save} className={`max-w-4xl ${CARTE}`}>
+      <h2 className="text-sm font-medium text-ink-900">En-tête des documents</h2>
+      <p className="mt-1 mb-4 text-sm text-ink-500">
+        Ces lignes coiffent les journaux, bilans et fiches exportés en PDF ou en Word. Une ligne
+        laissée vide n’est pas imprimée.
+      </p>
+
+      {/* Aperçu : évite d'exporter un document pour vérifier une saisie. */}
+      <div className="mb-6 rounded-lg bg-ink-50 p-4 text-center text-[11px] leading-snug text-ink-900">
+        {gauche.length === 0 && droite.length === 0 ? (
+          <p className="text-ink-500">
+            Aucun en-tête : les documents commenceront directement par leur titre.
+          </p>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                {gauche.map((ligne) => (
+                  <div key={ligne}>{ligne}</div>
+                ))}
+              </div>
+              <div>
+                {droite.map((ligne) => (
+                  <div key={ligne}>{ligne}</div>
+                ))}
+              </div>
+            </div>
+            {contact !== '' && <div className="mt-2 text-[10px] text-ink-500">{contact}</div>}
+          </>
+        )}
+      </div>
+
+      <div className="grid gap-6 sm:grid-cols-2">
+        {[
+          ['Colonne française', ENTETE_FRANCAIS],
+          ['Colonne anglaise', ENTETE_ANGLAIS],
+        ].map(([titre, champs]) => (
+          <fieldset key={titre}>
+            <legend className="mb-2 text-xs font-semibold tracking-wide text-brand-700 uppercase">
+              {titre}
+            </legend>
+            {champs.map(([cle, label]) => (
+              <label key={cle} className="mb-3 block text-sm">
+                <span className="mb-1 block text-ink-700">{label}</span>
+                <input
+                  type="text"
+                  maxLength={150}
+                  value={valeurs[cle] || ''}
+                  onChange={(e) => definir(cle, e.target.value)}
+                  className="field py-2"
+                />
+              </label>
+            ))}
+          </fieldset>
+        ))}
+      </div>
+
+      <label className="mt-2 block max-w-xl text-sm">
+        <span className="mb-1 block text-ink-700">Ligne de contact</span>
+        <input
+          type="text"
+          maxLength={150}
+          placeholder="BP 42 Ngaoundal — Tél. 699 00 00 00"
+          value={valeurs.contact || ''}
+          onChange={(e) => definir('contact', e.target.value)}
+          className="field py-2"
+        />
+      </label>
+
+      <button type="submit" disabled={saving} className="btn-primary mt-5">
+        {saving ? 'Enregistrement…' : 'Enregistrer'}
+      </button>
+    </form>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
 
 export default function ConfigurationPage() {
   const [tab, setTab] = useState('periodes')
@@ -500,6 +649,7 @@ export default function ConfigurationPage() {
     ['periodes', 'Périodes de cours'],
     ['speciaux', 'Emplois du temps spéciaux'],
     ['administratif', 'Horaires administratifs'],
+    ['entete', 'En-tête de l’établissement'],
   ]
 
   return (
@@ -523,6 +673,7 @@ export default function ConfigurationPage() {
       {tab === 'periodes' && <PeriodesCours />}
       {tab === 'speciaux' && <EmploisSpeciaux />}
       {tab === 'administratif' && <HorairesAdministratifs />}
+      {tab === 'entete' && <EnteteEtablissement />}
     </div>
   )
 }

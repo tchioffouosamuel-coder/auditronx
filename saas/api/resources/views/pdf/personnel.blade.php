@@ -41,6 +41,7 @@
 </head>
 
 <body>
+    @include('pdf.partials.entete')
     <h1>Liste du personnel</h1>
     @if ($personnel->isEmpty())
         <p class="empty">Aucun personnel enregistré.</p>

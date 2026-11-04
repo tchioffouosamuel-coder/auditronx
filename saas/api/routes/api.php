@@ -184,6 +184,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/parametres/horaires-administratifs', [ParametreController::class, 'horairesAdministratifs']);
     Route::put('/parametres/horaires-administratifs', [ParametreController::class, 'definirHorairesAdministratifs'])->middleware('backoffice');
 
+    // En-tête officiel imprimé en haut des documents (§4.2).
+    Route::get('/parametres/entete-etablissement', [ParametreController::class, 'enteteEtablissement']);
+    Route::put('/parametres/entete-etablissement', [ParametreController::class, 'definirEnteteEtablissement'])->middleware('backoffice');
+
     // Validation des présences (§4.2)
     Route::get('/presences/validation', [PresenceValidationController::class, 'index']);
     Route::post('/presences/validation/toggle', [PresenceValidationController::class, 'toggle']);
