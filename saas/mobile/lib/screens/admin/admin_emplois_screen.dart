@@ -19,6 +19,44 @@ String heureAffichee(dynamic valeur) =>
 String plageAffichee(dynamic debut, dynamic fin) =>
     '${heureAffichee(debut)}–${heureAffichee(fin)}';
 
+/// Durée d'une période, en minutes — même convention que le calcul des
+/// périodes à rattraper côté API (BilanIndividuel, RetardsController) et que
+/// `ConfigurationPage.jsx` côté web.
+const int dureePeriodeMinutes = 40;
+
+/// Heure de fin à partir d'une heure de début (« HH:MM ») et d'un nombre de
+/// périodes : évite de saisir une fin incohérente avec le début.
+String finApresPeriodes(String? heureDebut, String? nombrePeriodes) {
+  final parts = heureDebut?.split(':');
+  final nb = int.tryParse(nombrePeriodes ?? '');
+  if (parts == null || parts.length < 2 || nb == null || nb < 1) return '';
+  final h = int.tryParse(parts[0]);
+  final m = int.tryParse(parts[1]);
+  if (h == null || m == null) return '';
+
+  final total = h * 60 + m + nb * dureePeriodeMinutes;
+  final heure = (total ~/ 60) % 24;
+  final minute = total % 60;
+  return '${heure.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+}
+
+/// Nombre de périodes entre deux heures (arrondi, minimum 1) — pour
+/// pré-remplir le formulaire en édition.
+String nombrePeriodesEntre(dynamic heureDebut, dynamic heureFin) {
+  final debut = heureMinute(heureDebut).split(':');
+  final fin = heureMinute(heureFin).split(':');
+  if (debut.length < 2 || fin.length < 2) return '1';
+  final h1 = int.tryParse(debut[0]);
+  final m1 = int.tryParse(debut[1]);
+  final h2 = int.tryParse(fin[0]);
+  final m2 = int.tryParse(fin[1]);
+  if (h1 == null || m1 == null || h2 == null || m2 == null) return '1';
+
+  final diff = (h2 * 60 + m2) - (h1 * 60 + m1);
+  final nb = (diff / dureePeriodeMinutes).round();
+  return (nb < 1 ? 1 : nb).toString();
+}
+
 /// Gestion des emplois du temps (§4.2 — admin-mobile) — équivalent mobile de
 /// `EmploisPage.jsx`. Trois lectures du même jeu de créneaux : par classe, par
 /// enseignant, et les chevauchements restants.

@@ -76,6 +76,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           }
 
           final d = snapshot.data!;
+          final sections =
+              (d['classement_par_section'] as List?)
+                  ?.cast<Map<String, dynamic>>() ??
+              const [];
+          final scannes = _dashboardPeople(d['scannes']);
+          final signales = _dashboardPeople(d['signales_liste']);
+          final absents = _dashboardPeople(d['absents_liste']);
+          final retardataires = _dashboardPeople(d['retardataires_liste']);
+
           final cards = [
             _KpiCard(
               label: 'Effectif total',
@@ -86,26 +95,39 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               label: 'Présents',
               value: '${d['presents']}',
               color: AuditronColors.brand600,
+              onTap: () => _openPeopleSheet(
+                context,
+                title: 'Déjà scannés',
+                people: scannes,
+                icon: Icons.check_circle,
+                color: AuditronColors.brand600,
+              ),
             ),
             _KpiCard(
               label: 'Absents',
               value: '${d['absents']}',
               color: Colors.red,
+              onTap: () => _openPeopleSheet(
+                context,
+                title: 'Absents selon l\'emploi du temps',
+                people: absents,
+                icon: Icons.cancel,
+                color: Colors.red,
+              ),
             ),
             _KpiCard(
               label: 'Retardataires',
               value: '${d['retardataires']}',
               color: AuditronColors.orange700,
+              onTap: () => _openPeopleSheet(
+                context,
+                title: 'Retardataires',
+                people: retardataires,
+                icon: Icons.schedule,
+                color: AuditronColors.orange700,
+              ),
             ),
           ];
-          final sections =
-              (d['classement_par_section'] as List?)
-                  ?.cast<Map<String, dynamic>>() ??
-              const [];
-          final scannes = _dashboardPeople(d['scannes']);
-          final signales = _dashboardPeople(d['signales_liste']);
-          final absents = _dashboardPeople(d['absents_liste']);
-          final retardataires = _dashboardPeople(d['retardataires_liste']);
 
           return ListView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -156,6 +178,23 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               else
                 _SectionAttendance(sections: sections),
               const SizedBox(height: 20),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  Icons.flag_outlined,
+                  color: AuditronColors.ink500,
+                ),
+                title: Text('Signalés (${signales.length})'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _openPeopleSheet(
+                  context,
+                  title: 'Signalés',
+                  people: signales,
+                  icon: Icons.flag_outlined,
+                  color: AuditronColors.ink500,
+                ),
+              ),
+              const SizedBox(height: 8),
               const Divider(height: 1),
               if (widget.onSignalements != null)
                 ListTile(
@@ -179,31 +218,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: widget.onAssiduite,
                 ),
-              const SizedBox(height: 20),
-              _DashboardPeopleSection(
-                title: 'Déjà scannés',
-                people: scannes,
-                icon: Icons.check_circle,
-                color: AuditronColors.brand600,
-              ),
-              _DashboardPeopleSection(
-                title: 'Absents selon l\'emploi du temps',
-                people: absents,
-                icon: Icons.cancel,
-                color: Colors.red,
-              ),
-              _DashboardPeopleSection(
-                title: 'Retardataires',
-                people: retardataires,
-                icon: Icons.schedule,
-                color: AuditronColors.orange700,
-              ),
-              _DashboardPeopleSection(
-                title: 'Signalés',
-                people: signales,
-                icon: Icons.flag_outlined,
-                color: AuditronColors.ink500,
-              ),
             ],
           );
         },
@@ -219,23 +233,27 @@ List<Map<String, dynamic>> _dashboardPeople(dynamic value) =>
         .toList() ??
     const [];
 
-class _DashboardPeopleSection extends StatelessWidget {
-  final String title;
-  final List<Map<String, dynamic>> people;
-  final IconData icon;
-  final Color color;
-
-  const _DashboardPeopleSection({
-    required this.title,
-    required this.people,
-    required this.icon,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
+/// Ouvre un bottom sheet listant les personnes d'une card KPI tapée — évite
+/// de garder les quatre listes toujours affichées sous le tableau de bord.
+Future<void> _openPeopleSheet(
+  BuildContext context, {
+  required String title,
+  required List<Map<String, dynamic>> people,
+  required IconData icon,
+  required Color color,
+}) => showModalBottomSheet<void>(
+  context: context,
+  isScrollControlled: true,
+  useSafeArea: true,
+  showDragHandle: true,
+  backgroundColor: Colors.white,
+  builder: (context) => DraggableScrollableSheet(
+    expand: false,
+    initialChildSize: 0.6,
+    minChildSize: 0.3,
+    maxChildSize: 0.92,
+    builder: (context, scrollController) => Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -243,9 +261,6 @@ class _DashboardPeopleSection extends StatelessWidget {
             children: [
               Icon(icon, color: color, size: 20),
               const SizedBox(width: 8),
-              // « Absents selon l'emploi du temps (12) » ne tient pas à côté
-              // de l'icône sur un écran étroit : sans Expanded, le Row
-              // débordait au lieu de tronquer.
               Expanded(
                 child: Text(
                   '$title (${people.length})',
@@ -256,51 +271,66 @@ class _DashboardPeopleSection extends StatelessWidget {
               ),
             ],
           ),
-          if (people.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Text(
-                'Aucune personne.',
-                style: TextStyle(color: AuditronColors.ink500),
-              ),
-            )
-          else
-            ...people.map((person) {
-              final cours =
-                  (person['cours'] as List?)
-                      ?.whereType<Map>()
-                      .map(
-                        (c) =>
-                            '${c['classe'] ?? '—'} ${c['heure_debut'] ?? ''}-${c['heure_fin'] ?? ''}',
-                      )
-                      .join(' · ') ??
-                  '';
-              final horaires = [
-                if (person['est_signale'] == true)
-                  'Signalé : ${person['type_signalement'] ?? 'Justificatif'}',
-                if (person['heure_arrivee'] != null)
-                  'Arrivée ${person['heure_arrivee']}',
-                if (person['heure_depart'] != null)
-                  'Départ ${person['heure_depart']}',
-                if (person['minutes_retard'] != null &&
-                    person['minutes_retard'] != 0)
-                  '${person['minutes_retard']} min de retard',
-              ].join(' · ');
-              return ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(icon, color: color, size: 18),
-                title: Text(person['nom']?.toString() ?? '—'),
-                subtitle: Text(
-                  [person['matricule'], horaires, cours]
-                      .where((v) => v != null && v.toString().isNotEmpty)
-                      .join(' · '),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 2,
-                ),
-              );
-            }),
+          const SizedBox(height: 8),
+          Expanded(
+            child: people.isEmpty
+                ? const Center(
+                    child: Text(
+                      'Aucune personne.',
+                      style: TextStyle(color: AuditronColors.ink500),
+                    ),
+                  )
+                : ListView.builder(
+                    controller: scrollController,
+                    itemCount: people.length,
+                    itemBuilder: (context, i) =>
+                        _PersonTile(person: people[i], icon: icon, color: color),
+                  ),
+          ),
         ],
+      ),
+    ),
+  ),
+);
+
+class _PersonTile extends StatelessWidget {
+  final Map<String, dynamic> person;
+  final IconData icon;
+  final Color color;
+
+  const _PersonTile({required this.person, required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final cours =
+        (person['cours'] as List?)
+            ?.whereType<Map>()
+            .map(
+              (c) =>
+                  '${c['classe'] ?? '—'} ${c['heure_debut'] ?? ''}-${c['heure_fin'] ?? ''}',
+            )
+            .join(' · ') ??
+        '';
+    final horaires = [
+      if (person['est_signale'] == true)
+        'Signalé : ${person['type_signalement'] ?? 'Justificatif'}',
+      if (person['heure_arrivee'] != null)
+        'Arrivée ${person['heure_arrivee']}',
+      if (person['heure_depart'] != null) 'Départ ${person['heure_depart']}',
+      if (person['minutes_retard'] != null && person['minutes_retard'] != 0)
+        '${person['minutes_retard']} min de retard',
+    ].join(' · ');
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon, color: color, size: 18),
+      title: Text(person['nom']?.toString() ?? '—'),
+      subtitle: Text(
+        [person['matricule'], horaires, cours]
+            .where((v) => v != null && v.toString().isNotEmpty)
+            .join(' · '),
+        overflow: TextOverflow.ellipsis,
+        maxLines: 2,
       ),
     );
   }
@@ -310,48 +340,67 @@ class _KpiCard extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
+  final VoidCallback? onTap;
 
   const _KpiCard({
     required this.label,
     required this.value,
     required this.color,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                label,
-                style: const TextStyle(
-                  color: AuditronColors.ink500,
-                  fontSize: 12,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        label,
+                        style: const TextStyle(
+                          color: AuditronColors.ink500,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (onTap != null)
+                    const Icon(
+                      Icons.chevron_right,
+                      size: 16,
+                      color: AuditronColors.ink100,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  value,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                value,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

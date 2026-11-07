@@ -46,6 +46,22 @@ class AdminFieldSpec {
   /// se lit pas simplement sur [key] (pendant de [expandValue]).
   final dynamic Function(Map<String, dynamic> item)? valueFrom;
 
+  /// Valeur pré-remplie à la création d'un nouvel élément (ignorée en
+  /// édition, où [valueFrom] ou [key] priment).
+  final dynamic defaultValue;
+
+  /// Clés d'autres champs du même formulaire dont un changement recalcule
+  /// celui-ci via [compute]. Un champ qui en déclare un devient lecture
+  /// seule : sa valeur ne se saisit plus, elle se déduit (ex. l'heure de fin,
+  /// déduite du début et d'un nombre de périodes).
+  final List<String>? recomputeFrom;
+
+  /// Recalcule la valeur texte de ce champ à partir des valeurs texte
+  /// actuelles des autres champs du formulaire, indexées par clé. Appelé à
+  /// chaque changement d'un champ listé dans [recomputeFrom], et à
+  /// l'ouverture du formulaire.
+  final String Function(Map<String, String> valeurs)? compute;
+
   const AdminFieldSpec({
     required this.key,
     required this.label,
@@ -58,5 +74,8 @@ class AdminFieldSpec {
     this.helperText,
     this.expandValue,
     this.valueFrom,
+    this.defaultValue,
+    this.recomputeFrom,
+    this.compute,
   });
 }

@@ -496,9 +496,9 @@ class _AdminCrudFormState extends State<_AdminCrudForm> {
   void initState() {
     super.initState();
     for (final f in widget.fields) {
-      final initialValue = f.valueFrom != null && widget.initial != null
-          ? f.valueFrom!(widget.initial!)
-          : widget.initial?[f.key];
+      final initialValue = widget.initial != null
+          ? (f.valueFrom != null ? f.valueFrom!(widget.initial!) : widget.initial?[f.key])
+          : f.defaultValue;
       _values[f.key] = f.type == AdminFieldType.checkbox
           ? (initialValue == true)
           : initialValue;
@@ -515,6 +515,29 @@ class _AdminCrudFormState extends State<_AdminCrudForm> {
         );
       }
       if (f.type == AdminFieldType.password) _obscure[f.key] = true;
+    }
+
+    // Deuxième passe : les champs calculés (ex. l'heure de fin, déduite du
+    // début et d'un nombre de périodes) ont besoin que TOUS les contrôleurs
+    // existent déjà, y compris ceux des champs déclarés après eux.
+    for (final f in widget.fields) {
+      if (f.compute == null) continue;
+      _recompute(f);
+      for (final cle in f.recomputeFrom ?? const <String>[]) {
+        _controllers[cle]?.addListener(() => _recompute(f));
+      }
+    }
+  }
+
+  /// Relit les valeurs texte courantes des autres champs et met à jour le
+  /// contrôleur de [f] — voir [AdminFieldSpec.compute].
+  void _recompute(AdminFieldSpec f) {
+    final valeurs = <String, String>{
+      for (final entry in _controllers.entries) entry.key: entry.value.text,
+    };
+    final calcule = f.compute!(valeurs);
+    if (_controllers[f.key]!.text != calcule) {
+      _controllers[f.key]!.text = calcule;
     }
   }
 
@@ -674,14 +697,16 @@ class _AdminCrudFormState extends State<_AdminCrudForm> {
               : null,
         );
       case AdminFieldType.time:
+        final calcule = f.compute != null;
         return TextFormField(
           controller: _controllers[f.key],
           readOnly: true,
-          onTap: () => _pickTime(f),
+          enabled: !calcule,
+          onTap: calcule ? null : () => _pickTime(f),
           decoration: InputDecoration(
             labelText: f.label + (f.required ? ' *' : ''),
-            helperText: f.helperText,
-            suffixIcon: const Icon(Icons.schedule, size: 18),
+            helperText: f.helperText ?? (calcule ? 'Calculée automatiquement' : null),
+            suffixIcon: Icon(calcule ? Icons.calculate_outlined : Icons.schedule, size: 18),
           ),
           validator: f.required
               ? (v) => (v == null || v.isEmpty) ? 'Champ requis' : null

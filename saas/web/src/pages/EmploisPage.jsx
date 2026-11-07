@@ -26,6 +26,28 @@ export const toHeureAffichee = (valeur) => toHeureMinute(valeur).replace(':', 'h
 
 const plageAffichee = (debut, fin) => `${toHeureAffichee(debut)}–${toHeureAffichee(fin)}`
 
+/** Durée d'une période, en minutes — même convention que le calcul des périodes à rattraper côté API (BilanIndividuel, RetardsController). */
+export const DUREE_PERIODE_MINUTES = 40
+
+/** Heure de fin à partir d'une heure de début et d'un nombre de périodes : évite de saisir une fin incohérente avec le début. */
+export function finApresPeriodes(heureDebut, nombrePeriodes) {
+  if (!heureDebut || !nombrePeriodes) return ''
+  const [h, m] = heureDebut.split(':').map(Number)
+  const total = h * 60 + m + Number(nombrePeriodes) * DUREE_PERIODE_MINUTES
+  const heure = Math.floor(total / 60) % 24
+  const minute = total % 60
+  return `${String(heure).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+}
+
+/** Nombre de périodes entre deux heures (arrondi, minimum 1) — pour pré-remplir le formulaire en édition. */
+export function nombrePeriodesEntre(heureDebut, heureFin) {
+  if (!heureDebut || !heureFin) return 1
+  const [h1, m1] = heureDebut.split(':').map(Number)
+  const [h2, m2] = heureFin.split(':').map(Number)
+  const diff = h2 * 60 + m2 - (h1 * 60 + m1)
+  return Math.max(1, Math.round(diff / DUREE_PERIODE_MINUTES))
+}
+
 const nomClasse = (creneau) => creneau.classe?.nom ?? `Classe #${creneau.classe_id}`
 const nomDiscipline = (creneau) => creneau.discipline?.nom ?? `Matière #${creneau.discipline_id}`
 const nomEnseignant = (creneau) => creneau.enseignant?.nom ?? `Enseignant #${creneau.enseignant_id}`

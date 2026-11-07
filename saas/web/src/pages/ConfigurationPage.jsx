@@ -4,7 +4,7 @@ import SearchSelect from '../components/SearchSelect'
 import api from '../lib/api'
 import fetchAllPages from '../lib/fetchAllPages'
 import { confirmAction, notify } from '../lib/swal'
-import { JOURS, nomJour, toHeureAffichee, toHeureMinute } from './EmploisPage'
+import { JOURS, finApresPeriodes, nomJour, nombrePeriodesEntre, toHeureAffichee, toHeureMinute } from './EmploisPage'
 
 /** Messages de validation Laravel aplatis en une phrase. */
 function messageErreur(error, defaut) {
@@ -124,6 +124,7 @@ function PeriodesCours() {
   const [periodes, setPeriodes] = useState([])
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(PERIODE_VIDE)
+  const [nbPeriodes, setNbPeriodes] = useState(1)
   const [edition, setEdition] = useState(null) // id en cours de modification
   const [saving, setSaving] = useState(false)
 
@@ -143,17 +144,31 @@ function PeriodesCours() {
 
   function reinitialiser() {
     setForm(PERIODE_VIDE)
+    setNbPeriodes(1)
     setEdition(null)
   }
 
   function modifier(periode) {
     setEdition(periode.id)
+    const heureDebut = toHeureMinute(periode.heure_debut)
+    const heureFin = toHeureMinute(periode.heure_fin)
+    setNbPeriodes(nombrePeriodesEntre(heureDebut, heureFin))
     setForm({
       ordre: periode.ordre,
       libelle: periode.libelle ?? '',
-      heure_debut: toHeureMinute(periode.heure_debut),
-      heure_fin: toHeureMinute(periode.heure_fin),
+      heure_debut: heureDebut,
+      heure_fin: heureFin,
     })
+  }
+
+  /** Début ou nombre de périodes changé : la fin se recalcule, jamais saisie à la main. */
+  function definirDebut(heureDebut) {
+    setForm((f) => ({ ...f, heure_debut: heureDebut, heure_fin: finApresPeriodes(heureDebut, nbPeriodes) }))
+  }
+
+  function definirNbPeriodes(valeur) {
+    setNbPeriodes(valeur)
+    setForm((f) => ({ ...f, heure_fin: finApresPeriodes(f.heure_debut, valeur) }))
   }
 
   async function enregistrer(e) {
@@ -267,23 +282,29 @@ function PeriodesCours() {
             type="time"
             required
             value={form.heure_debut}
-            onChange={(e) => setForm((f) => ({ ...f, heure_debut: e.target.value }))}
+            onChange={(e) => definirDebut(e.target.value)}
             className="field py-2"
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-ink-700">Fin</span>
+          <span className="mb-1 block text-ink-700">Nombre de périodes</span>
           <input
-            type="time"
+            type="number"
+            min="1"
+            max="12"
             required
-            value={form.heure_fin}
-            onChange={(e) => setForm((f) => ({ ...f, heure_fin: e.target.value }))}
-            className="field py-2"
+            value={nbPeriodes}
+            onChange={(e) => definirNbPeriodes(e.target.value)}
+            className="field w-24 py-2"
           />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-ink-700">Fin</span>
+          <input type="time" readOnly disabled value={form.heure_fin} className="field py-2 opacity-70" />
         </label>
         <button
           type="submit"
-          disabled={saving}
+          disabled={saving || !form.heure_debut}
           className="btn-primary"
         >
           {edition ? 'Modifier' : 'Ajouter'}
@@ -316,6 +337,7 @@ function EmploisSpeciaux() {
   const [personnel, setPersonnel] = useState([])
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(PLAGE_VIDE)
+  const [nbPeriodes, setNbPeriodes] = useState(1)
   const [edition, setEdition] = useState(null)
   const [saving, setSaving] = useState(false)
 
@@ -337,17 +359,31 @@ function EmploisSpeciaux() {
 
   function reinitialiser() {
     setForm(PLAGE_VIDE)
+    setNbPeriodes(1)
     setEdition(null)
   }
 
   function modifier(plage) {
     setEdition(plage.id)
+    const heureDebut = toHeureMinute(plage.heure_debut)
+    const heureFin = toHeureMinute(plage.heure_fin)
+    setNbPeriodes(nombrePeriodesEntre(heureDebut, heureFin))
     setForm({
       enseignant_id: plage.enseignant_id,
       jour: plage.jour,
-      heure_debut: toHeureMinute(plage.heure_debut),
-      heure_fin: toHeureMinute(plage.heure_fin),
+      heure_debut: heureDebut,
+      heure_fin: heureFin,
     })
+  }
+
+  /** Début ou nombre de périodes changé : la fin se recalcule, jamais saisie à la main. */
+  function definirDebut(heureDebut) {
+    setForm((f) => ({ ...f, heure_debut: heureDebut, heure_fin: finApresPeriodes(heureDebut, nbPeriodes) }))
+  }
+
+  function definirNbPeriodes(valeur) {
+    setNbPeriodes(valeur)
+    setForm((f) => ({ ...f, heure_fin: finApresPeriodes(f.heure_debut, valeur) }))
   }
 
   async function enregistrer(e) {
@@ -460,23 +496,29 @@ function EmploisSpeciaux() {
             type="time"
             required
             value={form.heure_debut}
-            onChange={(e) => setForm((f) => ({ ...f, heure_debut: e.target.value }))}
+            onChange={(e) => definirDebut(e.target.value)}
             className="field py-2"
           />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-ink-700">Fin</span>
+          <span className="mb-1 block text-ink-700">Nombre de périodes</span>
           <input
-            type="time"
+            type="number"
+            min="1"
+            max="12"
             required
-            value={form.heure_fin}
-            onChange={(e) => setForm((f) => ({ ...f, heure_fin: e.target.value }))}
-            className="field py-2"
+            value={nbPeriodes}
+            onChange={(e) => definirNbPeriodes(e.target.value)}
+            className="field w-24 py-2"
           />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-ink-700">Fin</span>
+          <input type="time" readOnly disabled value={form.heure_fin} className="field py-2 opacity-70" />
         </label>
         <button
           type="submit"
-          disabled={saving || !form.enseignant_id || !form.jour}
+          disabled={saving || !form.enseignant_id || !form.jour || !form.heure_debut}
           className="btn-primary"
         >
           {edition ? 'Modifier' : 'Ajouter'}

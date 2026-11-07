@@ -10,7 +10,8 @@ import '../../theme.dart';
 import '../../widgets/admin/admin_crud_screen.dart';
 import '../../widgets/admin/admin_field_spec.dart';
 import '../../widgets/admin/admin_select_field.dart';
-import 'admin_emplois_screen.dart' show heureAffichee, plageAffichee;
+import 'admin_emplois_screen.dart'
+    show finApresPeriodes, heureAffichee, nombrePeriodesEntre, plageAffichee;
 
 const List<AdminFieldOption> _jours = [
   AdminFieldOption(1, 'Lundi'),
@@ -118,11 +119,23 @@ class _PeriodesTab extends StatelessWidget {
       type: AdminFieldType.time,
       required: true,
     ),
-    const AdminFieldSpec(
+    AdminFieldSpec(
+      key: 'nombre_periodes',
+      label: 'Nombre de périodes',
+      type: AdminFieldType.number,
+      required: true,
+      defaultValue: 1,
+      valueFrom: (item) =>
+          nombrePeriodesEntre(item['heure_debut'], item['heure_fin']),
+    ),
+    AdminFieldSpec(
       key: 'heure_fin',
       label: 'Heure de fin',
       type: AdminFieldType.time,
       required: true,
+      recomputeFrom: const ['heure_debut', 'nombre_periodes'],
+      compute: (valeurs) =>
+          finApresPeriodes(valeurs['heure_debut'], valeurs['nombre_periodes']),
     ),
   ];
 
@@ -173,11 +186,23 @@ class _EmploisSpeciauxTab extends StatelessWidget {
       type: AdminFieldType.time,
       required: true,
     ),
-    const AdminFieldSpec(
+    AdminFieldSpec(
+      key: 'nombre_periodes',
+      label: 'Nombre de périodes',
+      type: AdminFieldType.number,
+      required: true,
+      defaultValue: 1,
+      valueFrom: (item) =>
+          nombrePeriodesEntre(item['heure_debut'], item['heure_fin']),
+    ),
+    AdminFieldSpec(
       key: 'heure_fin',
       label: 'Heure de fin',
       type: AdminFieldType.time,
       required: true,
+      recomputeFrom: const ['heure_debut', 'nombre_periodes'],
+      compute: (valeurs) =>
+          finApresPeriodes(valeurs['heure_debut'], valeurs['nombre_periodes']),
     ),
   ];
 
