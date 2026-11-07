@@ -3,6 +3,7 @@
 namespace App\Models\Central;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /** Facture émise à un établissement pour un abonnement. */
 class Facture extends ModeleCentral
@@ -54,6 +55,11 @@ class Facture extends ModeleCentral
     public function abonnement(): BelongsTo
     {
         return $this->belongsTo(Abonnement::class);
+    }
+
+    public function lignes(): HasMany
+    {
+        return $this->hasMany(FactureLigne::class)->orderBy('ordre');
     }
 
     public function estEnRetard(): bool

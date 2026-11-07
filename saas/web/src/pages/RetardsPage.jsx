@@ -74,8 +74,9 @@ export default function RetardsPage() {
           { key: 'nom', label: 'Nom' },
           { key: 'matricule', label: 'Matricule' },
           { key: 'section', label: 'Section' },
-          { key: 'jours_retard', label: 'Jours de retard' },
-          { key: 'minutes_retard_total', label: 'Minutes cumulées' },
+          { key: 'nb_jours_retard', label: 'Jours de retard' },
+          { key: 'total_retard_minutes', label: 'Minutes cumulées' },
+          { key: 'taux_ponctualite', label: 'Taux ponctualité', render: (l) => `${l.taux_ponctualite}%` },
         ]}
         renderActions={(l) => (
           <button

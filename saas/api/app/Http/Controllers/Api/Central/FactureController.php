@@ -38,7 +38,9 @@ class FactureController extends Controller
         $data = $request->validate([
             'etablissement_id' => ['required', 'exists:central.etablissements,id'],
             'abonnement_id' => ['nullable', 'exists:central.abonnements,id'],
-            'montant' => ['required', 'numeric', 'min:0'],
+            'lignes' => ['required', 'array', 'min:1'],
+            'lignes.*.libelle' => ['required', 'string', 'max:255'],
+            'lignes.*.montant' => ['required', 'numeric', 'min:0'],
             'devise' => ['sometimes', 'string', 'max:8'],
             'emise_le' => ['sometimes', 'date'],
             'echeance_le' => ['nullable', 'date'],
@@ -50,14 +52,26 @@ class FactureController extends Controller
             : null;
 
         $facture = Facture::create([
-            ...$data,
+            'etablissement_id' => $data['etablissement_id'],
+            'abonnement_id' => $data['abonnement_id'] ?? null,
             'numero' => $this->prochainNumero(),
+            'montant' => collect($data['lignes'])->sum(fn ($ligne) => (float) $ligne['montant']),
             'devise' => $data['devise'] ?? $abonnement?->devise ?? 'XAF',
             'emise_le' => $data['emise_le'] ?? now()->toDateString(),
+            'echeance_le' => $data['echeance_le'] ?? null,
+            'notes' => $data['notes'] ?? null,
             'statut' => Facture::STATUT_EMISE,
         ]);
 
-        return response()->json(['data' => $facture->load('etablissement:id,code,nom')], 201);
+        $facture->lignes()->createMany(
+            collect($data['lignes'])->values()->map(fn ($ligne, $index) => [
+                'libelle' => $ligne['libelle'],
+                'montant' => $ligne['montant'],
+                'ordre' => $index,
+            ])->all()
+        );
+
+        return response()->json(['data' => $facture->load(['etablissement:id,code,nom', 'lignes'])], 201);
     }
 
     public function marquePayee(Request $request, Facture $facture)
@@ -81,7 +95,7 @@ class FactureController extends Controller
 
     public function pdf(Facture $facture)
     {
-        $facture->load(['etablissement', 'abonnement.plan']);
+        $facture->load(['etablissement', 'abonnement.plan', 'lignes']);
 
         return Pdf::loadView('pdf.facture-plateforme', ['facture' => $facture])
             ->setPaper('a4')

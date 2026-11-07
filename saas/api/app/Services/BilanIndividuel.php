@@ -22,6 +22,7 @@ class BilanIndividuel
     public function __construct(
         private readonly RetardCalculator $retards,
         private readonly HoraireAttendu $horaires,
+        private readonly PonctualiteCalculator $ponctualite,
     ) {}
 
     /** Données attendues par la vue `pdf.retards-individuel` (hors `debut`/`fin`). */
@@ -39,7 +40,7 @@ class BilanIndividuel
         // anticipé. Retards et minutes d'anticipation restent comptés.
         $sansRattrapage = $this->horaires->aHoraireSpecial($enseignant);
         $details = [];
-        $joursAttendus = $presencesValides = 0;
+        $joursAttendus = $presencesValides = $joursPonctuels = 0;
         $totalRetard = $totalAnticipation = $totalPeriodesPresence = $totalPeriodesAbsence = 0;
 
         for ($date = $debut->copy()->startOfDay(); $date->lte($fin); $date->addDay()) {
@@ -61,6 +62,7 @@ class BilanIndividuel
             $valide = $signale || (bool) ($presence?->heure_arrivee || $presence?->heure_depart);
             if (!$futur) $joursAttendus++;
             if ($valide && !$futur) $presencesValides++;
+            if (!$futur && !$absent && $retard === 0) $joursPonctuels++;
             if (!$futur) {
                 $totalRetard += $retard;
                 $totalAnticipation += $anticipation;
@@ -103,6 +105,7 @@ class BilanIndividuel
             'jours_attendus' => $joursAttendus,
             'presences_valides' => $presencesValides,
             'taux_assiduite' => $joursAttendus > 0 ? $presencesValides / $joursAttendus * 100 : 0,
+            ...$this->ponctualite->calculer($joursAttendus, $joursPonctuels, $totalRetard),
         ];
     }
 

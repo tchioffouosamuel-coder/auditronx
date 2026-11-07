@@ -115,6 +115,10 @@
                     <th colspan="2" class="absence-col">ABSENCES</th>
                     <th rowspan="2" class="total-col" style="width:7%">TOTAL<br>Périodes</th>
                     <th rowspan="2" class="assiduite-col">Taux<br>d'assiduité</th>
+                    <th rowspan="2" class="assiduite-col">Taux<br>ponctualité</th>
+                    @if (!empty($classement))
+                        <th rowspan="2" class="assiduite-col">Rang</th>
+                    @endif
                 </tr>
                 <tr>
                     <th class="retard-col">Jours</th>
@@ -145,6 +149,10 @@
                         <td class="absence-col bold">{{ $ens['periodes_absence'] }}</td>
                         <td class="total-col">{{ $ens['periodes_totales'] }}</td>
                         <td class="assiduite-col">{{ number_format($ens['taux_assiduite'], 1) }}%</td>
+                        <td class="assiduite-col">{{ number_format($ens['taux_ponctualite'], 1) }}%</td>
+                        @if (!empty($classement))
+                            <td class="assiduite-col">{{ $loop->iteration }}</td>
+                        @endif
                     </tr>
                 @endforeach
             </tbody>
@@ -164,6 +172,10 @@
                     <td class="total-col">{{ number_format(array_sum(array_column($data, 'periodes_totales')), 1) }}
                     </td>
                     <td class="assiduite-col"></td>
+                    <td class="assiduite-col"></td>
+                    @if (!empty($classement))
+                        <td class="assiduite-col"></td>
+                    @endif
                 </tr>
             </tfoot>
         </table>
@@ -172,8 +184,9 @@
             &nbsp; <span style="background:#cfe2ff;padding:2px 4px;border:1px solid #000">ANTICIPATIONS</span> = Départ
             anticipé &nbsp; <span style="background:#f8d7da;padding:2px 4px;border:1px solid #000">ABSENCES</span> =
             Absence complète &nbsp; <strong>Pér.</strong> = Périodes de 40 min à rattraper</div>
-        <p style="font-size:7px"><strong>NOTE:</strong> Classement par ordre alphabétique des noms. Les jours signalés
-            sont considérés comme valides pour le taux d'assiduité.</p>
+        <p style="font-size:7px"><strong>NOTE:</strong>
+            {{ !empty($classement) ? 'Classement par ordre décroissant du taux de ponctualité (départagé par un coefficient régressif sur les minutes de retard cumulées).' : 'Classement par ordre alphabétique des noms.' }}
+            Les jours signalés sont considérés comme valides pour le taux d'assiduité.</p>
     @endif
     <div style="margin-top:10px;text-align:right;font-size:8px">Fait à Meiganga, le
         {{ \Carbon\Carbon::now()->locale('fr')->translatedFormat('d F Y') }}<br><br><br><br><strong>Le

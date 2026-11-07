@@ -172,7 +172,7 @@ class JoursFeriesTest extends TestCase
         // Arrivée 25 min après le cours, tolérance 10 min : 15 min de retard.
         $avant = collect($this->getJson('/api/retards')->assertOk()->json())
             ->firstWhere('enseignant_id', $enseignant->id);
-        $this->assertSame(15, $avant['minutes_retard_total']);
+        $this->assertSame(15, $avant['total_retard_minutes']);
 
         $this->ferier(now(), 'Fête de la jeunesse');
 
@@ -180,8 +180,8 @@ class JoursFeriesTest extends TestCase
         // retard est ramené à zéro : la personne n'était pas attendue.
         $apres = collect($this->getJson('/api/retards')->assertOk()->json())
             ->firstWhere('enseignant_id', $enseignant->id);
-        $this->assertSame(0, $apres['jours_retard']);
-        $this->assertSame(0, $apres['minutes_retard_total']);
+        $this->assertSame(0, $apres['nb_jours_retard']);
+        $this->assertSame(0, $apres['total_retard_minutes']);
     }
 
     public function test_un_jour_ferie_ne_declenche_pas_dalerte_dabsence(): void

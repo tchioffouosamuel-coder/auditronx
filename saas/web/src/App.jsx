@@ -23,6 +23,7 @@ import JournalAuditPage from "./pages/JournalAuditPage";
 import LoginPage from "./pages/LoginPage";
 import MoniteurBornesPage from "./pages/MoniteurBornesPage";
 import PersonnelPage from "./pages/PersonnelPage";
+import PonctualitePage from "./pages/PonctualitePage";
 import RetardsPage from "./pages/RetardsPage";
 import SignalementsPage from "./pages/SignalementsPage";
 import ConnexionPlateformePage from "./pages/plateforme/ConnexionPage";
@@ -94,6 +95,7 @@ export default function App() {
             <Route path="/emplois" element={<EmploisPage />} />
             <Route path="/accreditations" element={<AccreditationsPage />} />
             <Route path="/retards" element={<RetardsPage />} />
+            <Route path="/ponctualite" element={<PonctualitePage />} />
             <Route path="/assiduite" element={<AssiduitePage />} />
             <Route path="/validation" element={<ValidationPage />} />
             <Route path="/signalements" element={<SignalementsPage />} />

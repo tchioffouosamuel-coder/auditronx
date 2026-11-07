@@ -261,6 +261,12 @@
                 <td class="bold">{{ number_format($total_periodes_a_rattraper + $total_periodes_absence, 2, '.', '') }}</td>
             </tr>
         @endif
+        <tr>
+            <td class="text-left bold">Jours ponctuels</td>
+            <td>{{ $jours_ponctuels }} / {{ $jours_prevus }}</td>
+            <td class="text-left bold">Taux de ponctualité</td>
+            <td class="bold">{{ number_format($taux_ponctualite, 1, '.', '') }}%</td>
+        </tr>
     </table>
     <div style="margin-top:10px;text-align:right;font-size:9px">Fait à Meiganga, le
         {{ \Carbon\Carbon::now()->locale('fr')->translatedFormat('d F Y') }}<br><br><br><br><strong>Le

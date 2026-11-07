@@ -74,7 +74,7 @@ export default function FacturationPage() {
           const { data } = await apiCentral.post("/factures", {
             etablissement_id: souscription.etablissement_id,
             abonnement_id: abonnementId,
-            montant: plan.prix,
+            lignes: [{ libelle: `Abonnement — ${plan.nom}`, montant: plan.prix }],
             devise: plan.devise,
           });
           factureId = data.data.id;
@@ -333,7 +333,7 @@ export default function FacturationPage() {
           {estSuperAdmin && (
             <button
               type="button"
-              onClick={() => setEmission({})}
+              onClick={() => setEmission({ lignes: [{ libelle: "", montant: "" }] })}
               className="rounded-lg bg-ink-900 px-3 py-1.5 text-xs font-semibold text-white"
             >
               Émettre
@@ -504,17 +504,72 @@ export default function FacturationPage() {
               onChange={(v) => setEmission({ ...emission, etablissement_id: v })}
             />
 
-            <label className="block text-sm">
-              <span className="mb-1 block font-medium text-ink-700">Montant</span>
-              <input
-                type="number"
-                min="0"
-                required
-                value={emission.montant ?? ""}
-                onChange={(e) => setEmission({ ...emission, montant: e.target.value })}
-                className="field w-full"
-              />
-            </label>
+            <div className="space-y-2">
+              <span className="mb-1 block text-sm font-medium text-ink-700">Lignes de facture</span>
+              {(emission.lignes ?? []).map((ligne, index) => (
+                <div key={index} className="flex items-start gap-2">
+                  <input
+                    type="text"
+                    required
+                    placeholder="Libellé"
+                    value={ligne.libelle ?? ""}
+                    onChange={(e) => {
+                      const lignes = [...emission.lignes];
+                      lignes[index] = { ...ligne, libelle: e.target.value };
+                      setEmission({ ...emission, lignes });
+                    }}
+                    className="field flex-1"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    required
+                    placeholder="Montant"
+                    value={ligne.montant ?? ""}
+                    onChange={(e) => {
+                      const lignes = [...emission.lignes];
+                      lignes[index] = { ...ligne, montant: e.target.value };
+                      setEmission({ ...emission, lignes });
+                    }}
+                    className="field w-28"
+                  />
+                  <button
+                    type="button"
+                    disabled={emission.lignes.length <= 1}
+                    onClick={() =>
+                      setEmission({
+                        ...emission,
+                        lignes: emission.lignes.filter((_, i) => i !== index),
+                      })
+                    }
+                    className="btn-secondary px-2 py-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="Retirer cette ligne"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() =>
+                  setEmission({
+                    ...emission,
+                    lignes: [...(emission.lignes ?? []), { libelle: "", montant: "" }],
+                  })
+                }
+                className="btn-secondary w-full"
+              >
+                Ajouter une ligne
+              </button>
+              <div className="flex justify-between border-t border-ink-100 pt-2 text-sm font-semibold text-ink-900">
+                <span>Total</span>
+                <span>
+                  {money(
+                    (emission.lignes ?? []).reduce((total, l) => total + Number(l.montant || 0), 0),
+                  )}
+                </span>
+              </div>
+            </div>
 
             <label className="block text-sm">
               <span className="mb-1 block font-medium text-ink-700">Échéance</span>

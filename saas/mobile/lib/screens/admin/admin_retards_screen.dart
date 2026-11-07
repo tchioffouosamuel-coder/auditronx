@@ -392,7 +392,7 @@ class _AdminRetardsScreenState extends State<AdminRetardsScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  '${l['jours_retard'] ?? 0} jours de retard · ${l['minutes_retard_total'] ?? 0} min cumulées',
+                                  '${l['nb_jours_retard'] ?? 0} jours de retard · ${l['total_retard_minutes'] ?? 0} min cumulées · ${l['taux_ponctualite'] ?? 0}% ponctualité',
                                   style: const TextStyle(
                                     color: AuditronColors.orange700,
                                     fontWeight: FontWeight.w700,

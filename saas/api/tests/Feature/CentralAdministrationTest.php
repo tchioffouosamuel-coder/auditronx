@@ -119,6 +119,33 @@ class CentralAdministrationTest extends TestCase
         $this->postJson("/api/central/factures/{$facture->id}/annule")->assertUnprocessable();
     }
 
+    public function test_une_facture_est_emise_avec_plusieurs_lignes_et_le_total_est_calcule(): void
+    {
+        $this->admin();
+
+        $response = $this->postJson('/api/central/factures', [
+            'etablissement_id' => Etablissement::firstOrFail()->id,
+            'lignes' => [
+                ['libelle' => 'Abonnement — Plan Essentiel', 'montant' => 15000],
+                ['libelle' => 'Bornes supplémentaires (x2)', 'montant' => 5000],
+            ],
+        ])->assertCreated();
+
+        $facture = $response->json('data');
+        $this->assertEquals(20000, $facture['montant']);
+        $this->assertCount(2, $facture['lignes']);
+
+        $this->assertDatabaseHas('facture_lignes', [
+            'facture_id' => $facture['id'],
+            'libelle' => 'Abonnement — Plan Essentiel',
+            'montant' => 15000,
+        ], 'central');
+
+        $this->get("/api/central/factures/{$facture['id']}/pdf")
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+    }
+
     public function test_les_indicateurs_historiques_du_tableau_de_bord_sont_exposes(): void
     {
         $this->admin();

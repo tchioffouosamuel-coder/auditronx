@@ -114,9 +114,9 @@ class HoraireAdministratifTest extends TestCase
         $lignes = collect($this->getJson('/api/retards?debut='.self::MERCREDI.'&fin='.self::MERCREDI)->assertOk()->json());
 
         // 25 min après 07:30, moins 10 min de tolérance.
-        $this->assertSame(15, $lignes->firstWhere('enseignant_id', $enRetard->id)['minutes_retard_total']);
-        $this->assertSame(1, $lignes->firstWhere('enseignant_id', $enRetard->id)['jours_retard']);
-        $this->assertSame(0, $lignes->firstWhere('enseignant_id', $ponctuel->id)['jours_retard']);
+        $this->assertSame(15, $lignes->firstWhere('enseignant_id', $enRetard->id)['total_retard_minutes']);
+        $this->assertSame(1, $lignes->firstWhere('enseignant_id', $enRetard->id)['nb_jours_retard']);
+        $this->assertSame(0, $lignes->firstWhere('enseignant_id', $ponctuel->id)['nb_jours_retard']);
     }
 
     public function test_un_administratif_est_attendu_du_lundi_au_vendredi_sans_emploi_du_temps(): void
@@ -152,7 +152,7 @@ class HoraireAdministratifTest extends TestCase
             ->assertOk();
 
         $retards = collect($this->getJson('/api/retards?debut='.self::MERCREDI.'&fin='.self::MERCREDI)->json());
-        $this->assertSame(0, $retards->firstWhere('enseignant_id', $administratif->id)['jours_retard']);
+        $this->assertSame(0, $retards->firstWhere('enseignant_id', $administratif->id)['nb_jours_retard']);
 
         $stats = collect($this->getJson('/api/assiduite/stats?debut=2026-09-21&fin=2026-09-27')->json());
         $this->assertSame(2, $stats->firstWhere('enseignant_id', $administratif->id)['jours_attendus']);

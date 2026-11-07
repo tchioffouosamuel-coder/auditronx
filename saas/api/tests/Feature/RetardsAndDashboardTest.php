@@ -61,8 +61,8 @@ class RetardsAndDashboardTest extends TestCase
         $response = $this->getJson('/api/retards')->assertOk();
         $ligne = collect($response->json())->firstWhere('enseignant_id', $enseignant->id);
 
-        $this->assertSame(1, $ligne['jours_retard']);
-        $this->assertSame(15, $ligne['minutes_retard_total']); // 25 min - 10 min de tolérance
+        $this->assertSame(1, $ligne['nb_jours_retard']);
+        $this->assertSame(15, $ligne['total_retard_minutes']); // 25 min - 10 min de tolérance
     }
 
     public function test_un_enseignant_arrive_dans_la_tolerance_nest_pas_en_retard(): void
@@ -81,7 +81,7 @@ class RetardsAndDashboardTest extends TestCase
         $response = $this->getJson('/api/retards')->assertOk();
         $ligne = collect($response->json())->firstWhere('enseignant_id', $enseignant->id);
 
-        $this->assertSame(0, $ligne['jours_retard']);
+        $this->assertSame(0, $ligne['nb_jours_retard']);
     }
 
     public function test_le_dashboard_compte_presents_absents_et_retardataires(): void
@@ -126,5 +126,70 @@ class RetardsAndDashboardTest extends TestCase
         $this->assertSame(0, $response->json('absents'));
         $this->assertSame(0, $response->json('retardataires'));
         $this->assertTrue($response->json('scannes.0.hors_emploi_du_temps'));
+    }
+
+    public function test_le_classement_de_ponctualite_departage_deux_enseignants_a_jours_ponctuels_egaux(): void
+    {
+        $this->actingAsBackoffice();
+
+        $hier = now()->subDay();
+
+        // Les deux enseignants ont un cours hier (ponctuel) et aujourd'hui
+        // (en retard) : même nombre de jours ponctuels (1/2), mais des
+        // minutes de retard cumulées différentes.
+        $peuEnRetard = Enseignant::factory()->create(['nom' => 'Peu En Retard']);
+        EmploiDuTemps::create([
+            'enseignant_id' => $peuEnRetard->id,
+            'classe_id' => Classe::factory()->create()->id,
+            'discipline_id' => Discipline::factory()->create()->id,
+            'jour' => $hier->isoWeekday(),
+            'heure_debut' => '08:00',
+            'heure_fin' => '09:00',
+        ]);
+        $this->creerCoursAujourdhui($peuEnRetard);
+        Presence::create([
+            'enseignant_id' => $peuEnRetard->id,
+            'date' => $hier->toDateString(),
+            'heure_arrivee' => $hier->toDateString() . ' 08:00:00',
+        ]);
+        Presence::create([
+            'enseignant_id' => $peuEnRetard->id,
+            'date' => now()->toDateString(),
+            'heure_arrivee' => now()->toDateString() . ' 08:30:00', // 20 min de retard après tolérance
+        ]);
+
+        $beaucoupEnRetard = Enseignant::factory()->create(['nom' => 'Beaucoup En Retard']);
+        EmploiDuTemps::create([
+            'enseignant_id' => $beaucoupEnRetard->id,
+            'classe_id' => Classe::factory()->create()->id,
+            'discipline_id' => Discipline::factory()->create()->id,
+            'jour' => $hier->isoWeekday(),
+            'heure_debut' => '08:00',
+            'heure_fin' => '09:00',
+        ]);
+        $this->creerCoursAujourdhui($beaucoupEnRetard);
+        Presence::create([
+            'enseignant_id' => $beaucoupEnRetard->id,
+            'date' => $hier->toDateString(),
+            'heure_arrivee' => $hier->toDateString() . ' 08:00:00',
+        ]);
+        Presence::create([
+            'enseignant_id' => $beaucoupEnRetard->id,
+            'date' => now()->toDateString(),
+            'heure_arrivee' => now()->toDateString() . ' 09:00:00', // 50 min de retard après tolérance
+        ]);
+
+        $response = $this->getJson('/api/retards/classement-ponctualite?debut=' . $hier->toDateString() . '&fin=' . now()->toDateString())
+            ->assertOk();
+        $classement = collect($response->json());
+        $ligneA = $classement->firstWhere('enseignant_id', $peuEnRetard->id);
+        $ligneB = $classement->firstWhere('enseignant_id', $beaucoupEnRetard->id);
+
+        $this->assertSame(1, $ligneA['jours_ponctuels']);
+        $this->assertSame(1, $ligneB['jours_ponctuels']);
+        $this->assertSame($ligneA['taux_ponctualite'], $ligneB['taux_ponctualite']);
+        $this->assertGreaterThan(0, $ligneB['total_retard_minutes']);
+        $this->assertGreaterThan($ligneB['score_ponctualite'], $ligneA['score_ponctualite']);
+        $this->assertSame($peuEnRetard->id, $classement->first()['enseignant_id']);
     }
 }

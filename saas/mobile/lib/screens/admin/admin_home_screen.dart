@@ -20,6 +20,7 @@ import 'admin_feries_screen.dart';
 import 'admin_fiche_progression_screen.dart';
 import 'admin_journal_audit_screen.dart';
 import 'admin_personnel_screen.dart';
+import 'admin_ponctualite_screen.dart';
 import 'admin_qr_points_screen.dart';
 import 'admin_retards_screen.dart';
 import 'admin_sans_presence_screen.dart';
@@ -139,6 +140,11 @@ class _AdminHomeScreenState extends State<_AdminHomeScreen> {
           title: 'Retards',
           icon: Icons.timer_outlined,
           screen: const AdminRetardsScreen(),
+        ),
+        _AdminMenuEntry(
+          title: 'Ponctualité',
+          icon: Icons.military_tech_outlined,
+          screen: const AdminPonctualiteScreen(),
         ),
         _AdminMenuEntry(
           title: 'Assiduité',

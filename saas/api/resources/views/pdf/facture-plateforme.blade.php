@@ -43,18 +43,18 @@
         <thead>
             <tr>
                 <th>Description</th>
-                <th>Référence</th>
                 <th>Montant</th>
             </tr>
         </thead>
         <tbody>
+            @foreach ($facture->lignes as $ligne)
+                <tr>
+                    <td>{{ $ligne->libelle }}</td>
+                    <td>{{ number_format((float) $ligne->montant, 0, ',', ' ') }} {{ $facture->devise }}</td>
+                </tr>
+            @endforeach
             <tr>
-                <td>Abonnement Auditron{{ $facture->abonnement?->plan?->nom ? ' — ' . $facture->abonnement->plan->nom : '' }}</td>
-                <td>{{ $facture->abonnement?->periodicite ?? '—' }}</td>
-                <td>{{ number_format((float) $facture->montant, 0, ',', ' ') }} {{ $facture->devise }}</td>
-            </tr>
-            <tr>
-                <td colspan="2" class="amount">Total</td>
+                <td class="amount">Total</td>
                 <td class="amount">{{ number_format((float) $facture->montant, 0, ',', ' ') }} {{ $facture->devise }}</td>
             </tr>
         </tbody>
