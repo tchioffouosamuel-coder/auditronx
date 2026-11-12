@@ -4,12 +4,55 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\EnteteEtablissement;
+use App\Services\GrilleHoraire;
 use App\Services\HoraireAttendu;
 use Illuminate\Http\Request;
 
-/** Configuration (§4.2) — horaire fixe du personnel administratif et en-tête des documents. */
+/**
+ * Configuration (§4.2) — grille horaire, horaire fixe du personnel
+ * administratif et en-tête des documents.
+ */
 class ParametreController extends Controller
 {
+    /**
+     * GET /api/parametres/grille-horaire
+     *
+     * La durée d'une période : elle décide de l'heure de fin déduite d'un
+     * nombre de périodes à la saisie d'un créneau, et du nombre de périodes
+     * d'une plage dans les bilans d'assiduité. Les formulaires web et mobile
+     * la lisent ici plutôt que de la tenir en dur.
+     */
+    public function grilleHoraire()
+    {
+        return response()->json([
+            'duree_periode_minutes' => GrilleHoraire::dureePeriodeMinutes(),
+            'duree_periode_min' => GrilleHoraire::DUREE_PERIODE_MIN,
+            'duree_periode_max' => GrilleHoraire::DUREE_PERIODE_MAX,
+        ]);
+    }
+
+    /**
+     * PUT /api/parametres/grille-horaire
+     *
+     * Changer la durée ne retouche pas les créneaux déjà saisis : leurs
+     * couples début/fin restent ce qu'ils sont, c'est leur décompte en
+     * périodes qui suit la nouvelle valeur.
+     */
+    public function definirGrilleHoraire(Request $request)
+    {
+        $data = $request->validate([
+            'duree_periode_minutes' => [
+                'required',
+                'integer',
+                'between:'.GrilleHoraire::DUREE_PERIODE_MIN.','.GrilleHoraire::DUREE_PERIODE_MAX,
+            ],
+        ]);
+
+        GrilleHoraire::definirDureePeriode((int) $data['duree_periode_minutes']);
+
+        return $this->grilleHoraire();
+    }
+
     /** GET /api/parametres/horaires-administratifs */
     public function horairesAdministratifs(HoraireAttendu $horaires)
     {

@@ -97,6 +97,62 @@ class PeriodesEtEmploiSpecialTest extends TestCase
         $this->assertSame('09:30', GrilleHoraire::finApresPeriodes('07:30', 3));
     }
 
+    public function test_la_duree_dune_periode_se_configure(): void
+    {
+        $this->actingAsBackoffice();
+
+        $this->getJson('/api/parametres/grille-horaire')
+            ->assertOk()
+            ->assertJsonPath('duree_periode_minutes', GrilleHoraire::DUREE_PERIODE_MINUTES);
+
+        $this->putJson('/api/parametres/grille-horaire', ['duree_periode_minutes' => 55])
+            ->assertOk()
+            ->assertJsonPath('duree_periode_minutes', 55);
+
+        // La nouvelle durée vaut pour les deux sens du calcul : l'heure de
+        // fin déduite d'un nombre de périodes, et le décompte d'une plage.
+        $this->assertSame(55, GrilleHoraire::dureePeriodeMinutes());
+        $this->assertSame('09:20', GrilleHoraire::finApresPeriodes('07:30', 2));
+        $this->assertSame(2, GrilleHoraire::periodesEntre('07:30', '09:20'));
+
+        $this->putJson('/api/parametres/grille-horaire', ['duree_periode_minutes' => 0])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('duree_periode_minutes');
+    }
+
+    public function test_le_refus_de_suppression_nomme_les_creneaux_en_cause(): void
+    {
+        $this->actingAsBackoffice();
+
+        $periode = PeriodeCours::where('heure_debut', '07:30')->firstOrFail();
+        $enseignant = Enseignant::factory()->create(['nom' => 'Mme Nkolo']);
+        $classe = Classe::factory()->create(['nom' => '6e A']);
+        $discipline = Discipline::factory()->create(['nom' => 'Mathématiques']);
+
+        EmploiDuTemps::create([
+            'enseignant_id' => $enseignant->id,
+            'classe_id' => $classe->id,
+            'discipline_id' => $discipline->id,
+            'jour' => 2,
+            'heure_debut' => '07:30',
+            'heure_fin' => '08:10',
+        ]);
+
+        $message = $this->deleteJson("/api/periodes-cours/{$periode->id}")
+            ->assertStatus(422)
+            ->json('errors.heure_debut.0');
+
+        foreach (['mardi', '07:30', '6e A', 'Mathématiques', 'Mme Nkolo'] as $attendu) {
+            $this->assertStringContainsString($attendu, $message);
+        }
+
+        // Et l'écran de configuration peut les lister pour les déplacer.
+        $this->getJson("/api/periodes-cours/{$periode->id}/creneaux")
+            ->assertOk()
+            ->assertJsonPath('data.0.classe', '6e A')
+            ->assertJsonPath('data.0.jour_libelle', 'mardi');
+    }
+
     public function test_une_periode_ne_peut_pas_doubler_une_plage_existante(): void
     {
         $this->actingAsBackoffice();

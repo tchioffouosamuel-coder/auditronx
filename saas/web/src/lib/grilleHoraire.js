@@ -1,8 +1,27 @@
 import { useEffect, useState } from 'react'
 import api from './api'
 
-/** Durée d'une période, en minutes — même convention que `App\Services\GrilleHoraire` côté serveur. */
-export const DUREE_PERIODE_MINUTES = 40
+/**
+ * Durée d'une période, en minutes, tant que la grille de l'établissement n'a
+ * pas été lue — même convention que `App\Services\GrilleHoraire` côté serveur.
+ * La valeur réelle se configure dans Configuration (« Durée d'une période »)
+ * et arrive par `GET /parametres/grille-horaire`.
+ */
+export const DUREE_PERIODE_PAR_DEFAUT = 40
+
+let dureePeriode = DUREE_PERIODE_PAR_DEFAUT
+
+/** Durée d'une période de cet établissement, en minutes. */
+export const dureePeriodeMinutes = () => dureePeriode
+
+/**
+ * Une durée nulle ou négative diviserait par zéro et ferait boucler le calcul
+ * d'une heure de fin : on ignore ce que le serveur enverrait de tel.
+ */
+export function definirDureePeriode(minutes) {
+  const valeur = Number(minutes)
+  if (Number.isFinite(valeur) && valeur > 0) dureePeriode = Math.floor(valeur)
+}
 
 /** Une colonne SQL `time` revient en « 08:10:00 » : on retombe sur « HH:MM ». */
 export const toHeureMinute = (valeur) => (valeur ? String(valeur).slice(0, 5) : '')
@@ -42,7 +61,10 @@ export function definirPauses(liste) {
     .sort((a, b) => a[0] - b[0])
 }
 
-/** Charge les pauses de l'établissement et les rend disponibles aux calculs ci-dessous. */
+/**
+ * Charge la grille de l'établissement — pauses et durée d'une période — et la
+ * rend disponible aux calculs ci-dessous.
+ */
 export function usePauses() {
   const [liste, setListe] = useState([])
 
@@ -55,6 +77,11 @@ export function usePauses() {
         setListe(pausesChargees)
       })
       .catch(() => definirPauses([]))
+
+    api
+      .get('/parametres/grille-horaire')
+      .then(({ data }) => definirDureePeriode(data.duree_periode_minutes))
+      .catch(() => {})
   }, [])
 
   return liste
@@ -85,7 +112,7 @@ export function finApresPeriodes(heureDebut, nombrePeriodes) {
   if (debut === null || !Number.isFinite(nb) || nb < 1) return ''
 
   let courant = debut
-  let restant = Math.floor(nb) * DUREE_PERIODE_MINUTES
+  let restant = Math.floor(nb) * dureePeriode
 
   // Une pause par tour au plus : la boucle ne peut pas s'emballer sur une
   // grille mal saisie.
@@ -107,5 +134,5 @@ export function finApresPeriodes(heureDebut, nombrePeriodes) {
 /** Nombre de périodes d'une plage (minimum 1), pauses déduites — pour pré-remplir le formulaire en édition. */
 export function nombrePeriodesEntre(heureDebut, heureFin) {
   const minutes = minutesHorsPause(heureDebut, heureFin)
-  return Math.max(1, Math.ceil(minutes / DUREE_PERIODE_MINUTES))
+  return Math.max(1, Math.ceil(minutes / dureePeriode))
 }

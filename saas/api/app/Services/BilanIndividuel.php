@@ -58,7 +58,7 @@ class BilanIndividuel
             $anticipation = $presence?->heure_depart ? max(0, (int) floor(($heureFin->timestamp - $presence->heure_depart->timestamp) / 60)) : 0;
             $signale = $signalement !== null;
             $absent = !$futur && !$signale && (!$presence || (!$presence->heure_arrivee && !$presence->heure_depart));
-            $periodesRattraper = $sansRattrapage ? 0 : ($absent ? $periodesPrevues : (int) ceil($anticipation / GrilleHoraire::DUREE_PERIODE_MINUTES));
+            $periodesRattraper = $sansRattrapage ? 0 : ($absent ? $periodesPrevues : (int) ceil($anticipation / GrilleHoraire::dureePeriodeMinutes()));
             $valide = $signale || (bool) ($presence?->heure_arrivee || $presence?->heure_depart);
             if (!$futur) $joursAttendus++;
             if ($valide && !$futur) $presencesValides++;

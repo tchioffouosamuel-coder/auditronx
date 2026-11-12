@@ -20,10 +20,15 @@ String heureAffichee(dynamic valeur) =>
 String plageAffichee(dynamic debut, dynamic fin) =>
     '${heureAffichee(debut)}–${heureAffichee(fin)}';
 
-/// Durée d'une période, en minutes — même convention que le calcul des
-/// périodes à rattraper côté API (GrilleHoraire, BilanIndividuel) et que
-/// `ConfigurationPage.jsx` côté web.
-const int dureePeriodeMinutes = 40;
+/// Durée d'une période, en minutes, tant que la grille de l'établissement
+/// n'a pas été lue : même convention que le calcul des périodes à rattraper
+/// côté API (GrilleHoraire, BilanIndividuel) et que `grilleHoraire.js` côté
+/// web. La valeur réelle se configure dans Configuration et arrive par
+/// `GET /parametres/grille-horaire` (voir [GrillePauses.dureePeriode]).
+const int dureePeriodeParDefaut = 40;
+
+/// Durée d'une période de cet établissement, en minutes.
+int get dureePeriodeMinutes => GrillePauses.dureePeriode;
 
 /// « 08:10 » -> 490 minutes depuis minuit ; `null` si l'heure n'en est pas
 /// une (champ vide, valeur abîmée) — une heure illisible prise pour minuit
@@ -63,6 +68,20 @@ class GrillePauses {
 
   static List<List<int>> get plages => _plages;
 
+  /// Durée d'une période telle que l'établissement l'a configurée.
+  static int _dureePeriode = dureePeriodeParDefaut;
+
+  static int get dureePeriode => _dureePeriode;
+
+  /// Une durée nulle ou négative diviserait par zéro et ferait boucler le
+  /// calcul d'une heure de fin : on ignore ce que le serveur enverrait de tel.
+  static void definirDureePeriode(dynamic minutes) {
+    final valeur = minutes is num
+        ? minutes.toInt()
+        : int.tryParse(minutes?.toString() ?? '');
+    if (valeur != null && valeur > 0) _dureePeriode = valeur;
+  }
+
   static void definir(List<dynamic> items) {
     final plages = <List<int>>[];
     for (final raw in items) {
@@ -92,10 +111,22 @@ class GrillePauses {
     } catch (_) {
       // Hors ligne et sans cache : on garde la dernière grille connue.
     }
+
+    try {
+      final grille = await OfflineCache.instance.readThrough(
+        cacheKeyDuree,
+        () => AdminApiClient.instance.get(endpointDuree),
+      );
+      if (grille is Map) definirDureePeriode(grille['duree_periode_minutes']);
+    } catch (_) {
+      // Idem : la dernière durée connue (ou celle par défaut) fait l'affaire.
+    }
   }
 
   static const String endpoint = '/periodes-cours?type=pause';
   static const String cacheKey = 'admin_pauses';
+  static const String endpointDuree = '/parametres/grille-horaire';
+  static const String cacheKeyDuree = 'admin_duree_periode';
 
   /// Après une modification des pauses (Configuration) : [charger] passe par
   /// le réseau en premier et réécrit le cache.
@@ -252,7 +283,9 @@ class _AdminEmploisScreenState extends State<AdminEmploisScreen> {
       type: AdminFieldType.number,
       required: true,
       defaultValue: 1,
-      helperText: 'Une période dure $dureePeriodeMinutes minutes, pauses non comprises.',
+      helperText:
+          'La durée d’une période est celle configurée pour l’établissement ; '
+          'les pauses ne comptent pas comme des périodes.',
       valueFrom: (item) =>
           nombrePeriodesEntre(item['heure_debut'], item['heure_fin']),
     ),

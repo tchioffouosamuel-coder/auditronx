@@ -4,7 +4,7 @@ import SearchSelect from '../components/SearchSelect'
 import api from '../lib/api'
 import fetchAllPages from '../lib/fetchAllPages'
 import { confirmAction, notify } from '../lib/swal'
-import { definirPauses } from '../lib/grilleHoraire'
+import { definirDureePeriode, definirPauses, dureePeriodeMinutes } from '../lib/grilleHoraire'
 import { JOURS, finApresPeriodes, nomJour, nombrePeriodesEntre, toHeureAffichee, toHeureMinute } from './EmploisPage'
 
 /** Messages de validation Laravel aplatis en une phrase. */
@@ -117,6 +117,82 @@ function HorairesAdministratifs() {
 const PERIODE_VIDE = { ordre: '', libelle: '', heure_debut: '', heure_fin: '' }
 
 /**
+ * Durée d'une période, en minutes. Toutes les grilles ne découpent pas
+ * l'heure de la même façon (40, 45, 50, 55 minutes selon l'établissement) :
+ * cette valeur décide de l'heure de fin déduite d'un nombre de périodes — ici
+ * comme à la saisie d'un emploi du temps, web et mobile — et du décompte des
+ * périodes d'une plage dans les bilans d'assiduité.
+ *
+ * [onChange] prévient le formulaire voisin : sa colonne « Fin » se recalcule
+ * tout de suite, sans recharger la page.
+ */
+function DureePeriode({ onChange }) {
+  const [minutes, setMinutes] = useState(dureePeriodeMinutes())
+  const [bornes, setBornes] = useState({ min: 5, max: 240 })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    api
+      .get('/parametres/grille-horaire')
+      .then(({ data }) => {
+        definirDureePeriode(data.duree_periode_minutes)
+        setMinutes(data.duree_periode_minutes)
+        setBornes({ min: data.duree_periode_min ?? 5, max: data.duree_periode_max ?? 240 })
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
+  async function enregistrer(e) {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      const { data } = await api.put('/parametres/grille-horaire', { duree_periode_minutes: Number(minutes) })
+      definirDureePeriode(data.duree_periode_minutes)
+      setMinutes(data.duree_periode_minutes)
+      onChange?.(data.duree_periode_minutes)
+      notify('Durée d’une période enregistrée.', { icon: 'success' })
+    } catch (error) {
+      notify(messageErreur(error, "L'enregistrement a échoué."), { icon: 'error' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <LoadingState />
+
+  return (
+    <form onSubmit={enregistrer} className={`mb-4 ${CARTE}`}>
+      <h2 className="text-sm font-medium text-ink-900">Durée d’une période</h2>
+      <p className="mt-1 mb-4 text-sm text-ink-500">
+        La durée d’une période de cours, en minutes. Elle sert à déduire l’heure de fin d’un créneau de son heure de
+        début et de son nombre de périodes, et à compter les périodes d’une plage dans les bilans d’assiduité. La
+        changer ne modifie aucun créneau déjà saisi : leurs horaires restent les mêmes, c’est leur décompte en
+        périodes qui suit la nouvelle valeur.
+      </p>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="text-sm">
+          <span className="mb-1 block text-ink-700">Minutes</span>
+          <input
+            type="number"
+            min={bornes.min}
+            max={bornes.max}
+            required
+            value={minutes}
+            onChange={(e) => setMinutes(e.target.value)}
+            className="field w-24 py-2"
+          />
+        </label>
+        <button type="submit" disabled={saving} className="btn-primary">
+          {saving ? 'Enregistrement…' : 'Enregistrer'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
+/**
  * Grille horaire de l'établissement. Ce sont ces périodes — et elles seules —
  * qui alimentent la liste déroulante « Période de cours » à la saisie d'un
  * créneau, côté web comme côté mobile.
@@ -204,6 +280,8 @@ function PeriodesCours() {
   }
 
   return (
+    <>
+    <DureePeriode onChange={() => setForm((f) => ({ ...f, heure_fin: finApresPeriodes(f.heure_debut, nbPeriodes) }))} />
     <div className={CARTE}>
       <h2 className="text-sm font-medium text-ink-900">Périodes de cours</h2>
       <p className="mt-1 mb-4 text-sm text-ink-500">
@@ -293,7 +371,6 @@ function PeriodesCours() {
           <input
             type="number"
             min="1"
-            max="12"
             required
             value={nbPeriodes}
             onChange={(e) => definirNbPeriodes(e.target.value)}
@@ -318,6 +395,7 @@ function PeriodesCours() {
         )}
       </form>
     </div>
+    </>
   )
 }
 
@@ -681,7 +759,6 @@ function EmploisSpeciaux() {
           <input
             type="number"
             min="1"
-            max="12"
             required
             value={nbPeriodes}
             onChange={(e) => definirNbPeriodes(e.target.value)}

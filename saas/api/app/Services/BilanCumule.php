@@ -91,7 +91,7 @@ class BilanCumule
                 $result['nb_jours_absence']++;
                 $result['periodes_absence'] += $periodes;
             } else {
-                $result['periodes_presence'] += (int) ceil($anticipation / GrilleHoraire::DUREE_PERIODE_MINUTES);
+                $result['periodes_presence'] += (int) ceil($anticipation / GrilleHoraire::dureePeriodeMinutes());
             }
         }
 

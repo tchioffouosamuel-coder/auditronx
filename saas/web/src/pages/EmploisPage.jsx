@@ -28,7 +28,7 @@ export const JOURS = [
 export const nomJour = (jour) => JOURS.find((j) => j.value === Number(jour))?.label ?? 'Jour inconnu'
 
 export {
-  DUREE_PERIODE_MINUTES,
+  dureePeriodeMinutes,
   finApresPeriodes,
   nombrePeriodesEntre,
   toHeureAffichee,
@@ -177,7 +177,6 @@ function CreneauModal({ creneau, periodes, options, onClose, onSaved }) {
             <input
               type="number"
               min="1"
-              max="12"
               required
               value={nbPeriodes}
               onChange={(e) => definirNbPeriodes(e.target.value)}

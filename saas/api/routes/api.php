@@ -121,6 +121,10 @@ Route::middleware('auth:sanctum')->group(function () {
     // authentifié (l'app mobile en a besoin pour ses formulaires), écriture
     // réservée au backoffice.
     Route::get('/periodes-cours', [PeriodeCoursController::class, 'index']);
+    // Les créneaux d'emploi du temps posés sur une période : ce sont eux qui
+    // empêchent de la supprimer, l'écran de configuration les montre.
+    Route::get('/periodes-cours/{periodeCour}/creneaux', [PeriodeCoursController::class, 'creneaux'])
+        ->middleware('backoffice');
     Route::apiResource('periodes-cours', PeriodeCoursController::class)
         ->except(['index'])
         ->parameters(['periodes-cours' => 'periodeCour'])
@@ -182,6 +186,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/assiduite/sans-presence', [AssiduiteController::class, 'sansPresence']);
     Route::get('/assiduite/sans-presence/pdf', [AssiduiteController::class, 'sansPresencePdf']);
     Route::get('/statistiques/export-zip', [StatistiquesController::class, 'exportZip']);
+
+    // Configuration (§4.2) — grille horaire : durée d'une période.
+    Route::get('/parametres/grille-horaire', [ParametreController::class, 'grilleHoraire']);
+    Route::put('/parametres/grille-horaire', [ParametreController::class, 'definirGrilleHoraire'])->middleware('backoffice');
 
     // Configuration (§4.2) — horaire fixe du personnel administratif.
     Route::get('/parametres/horaires-administratifs', [ParametreController::class, 'horairesAdministratifs']);

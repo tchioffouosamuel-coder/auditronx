@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Parametre;
 use App\Models\PeriodeCours;
 use Illuminate\Support\Facades\DB;
 
@@ -17,8 +18,59 @@ use Illuminate\Support\Facades\DB;
  */
 class GrilleHoraire
 {
-    /** Durée d'une période, en minutes — convention commune à toute l'application. */
+    /** Paramètre (table `parametres`) où l'établissement range la durée d'une période. */
+    public const CLE_DUREE_PERIODE = 'duree_periode_minutes';
+
+    /**
+     * Durée d'une période, en minutes, tant que l'établissement n'en a pas
+     * choisi une dans Configuration. Toutes les grilles ne découpent pas
+     * l'heure de la même façon : 40, 45, 50 ou 55 minutes selon les
+     * établissements — d'où le paramètre.
+     */
     public const DUREE_PERIODE_MINUTES = 40;
+
+    /** Bornes de saisie : au-delà, ce n'est plus une période de cours. */
+    public const DUREE_PERIODE_MIN = 5;
+
+    public const DUREE_PERIODE_MAX = 240;
+
+    /**
+     * Durée mémorisée par base de données, comme les pauses : un bilan
+     * d'assiduité la consulte pour chaque journée de chaque personne.
+     *
+     * @var array<string, int>
+     */
+    private static array $duree = [];
+
+    /** Durée d'une période de cours de cet établissement, en minutes. */
+    public static function dureePeriodeMinutes(): int
+    {
+        $cle = DB::connection()->getDatabaseName();
+
+        return self::$duree[$cle] ??= self::borner(
+            (int) Parametre::get(self::CLE_DUREE_PERIODE, (string) self::DUREE_PERIODE_MINUTES)
+        );
+    }
+
+    /** Enregistre la durée d'une période et vide les valeurs mémorisées. */
+    public static function definirDureePeriode(int $minutes): int
+    {
+        $minutes = self::borner($minutes);
+        Parametre::set(self::CLE_DUREE_PERIODE, (string) $minutes);
+        self::oublierPauses();
+
+        return $minutes;
+    }
+
+    /**
+     * Une durée hors bornes (0 écrit à la main en base, valeur abîmée)
+     * ferait boucler les calculs ou diviser par zéro : on la ramène dans la
+     * plage plutôt que de laisser passer.
+     */
+    private static function borner(int $minutes): int
+    {
+        return max(self::DUREE_PERIODE_MIN, min(self::DUREE_PERIODE_MAX, $minutes));
+    }
 
     /**
      * Pauses mémorisées par base de données : la grille ne change pas en
@@ -41,10 +93,15 @@ class GrilleHoraire
             ->all();
     }
 
-    /** À appeler après toute écriture sur la grille (tests, CRUD des périodes). */
+    /**
+     * À appeler après toute écriture sur la grille (tests, CRUD des
+     * périodes, changement de la durée d'une période) : pauses et durée sont
+     * mémorisées ensemble, elles s'oublient ensemble.
+     */
     public static function oublierPauses(): void
     {
         self::$pauses = [];
+        self::$duree = [];
     }
 
     /** « 08:10 » / « 08:10:00 » -> 490. */
@@ -82,13 +139,13 @@ class GrilleHoraire
     /** Nombre de périodes couvertes par une plage, pauses déduites. */
     public static function periodesEntre(?string $heureDebut, ?string $heureFin): int
     {
-        return max(1, (int) ceil(self::minutesHorsPause($heureDebut, $heureFin) / self::DUREE_PERIODE_MINUTES));
+        return max(1, (int) ceil(self::minutesHorsPause($heureDebut, $heureFin) / self::dureePeriodeMinutes()));
     }
 
     /** Idem pour un total de minutes déjà calculé hors pause. */
     public static function periodesPourMinutes(int $minutes): int
     {
-        return max(1, (int) ceil($minutes / self::DUREE_PERIODE_MINUTES));
+        return max(1, (int) ceil($minutes / self::dureePeriodeMinutes()));
     }
 
     /**
@@ -105,7 +162,7 @@ class GrilleHoraire
             return self::heure($courant);
         }
 
-        $restant = $nombrePeriodes * self::DUREE_PERIODE_MINUTES;
+        $restant = $nombrePeriodes * self::dureePeriodeMinutes();
         $pauses = self::pauses();
         usort($pauses, fn ($a, $b) => $a[0] <=> $b[0]);
 

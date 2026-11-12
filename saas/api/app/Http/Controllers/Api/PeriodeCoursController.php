@@ -16,6 +16,19 @@ use Illuminate\Validation\ValidationException;
  */
 class PeriodeCoursController extends Controller
 {
+    private const NOMS_JOURS = [
+        1 => 'lundi',
+        2 => 'mardi',
+        3 => 'mercredi',
+        4 => 'jeudi',
+        5 => 'vendredi',
+        6 => 'samedi',
+        7 => 'dimanche',
+    ];
+
+    /** Créneaux nommés dans le refus de suppression ; les suivants sont comptés. */
+    private const CRENEAUX_CITES = 5;
+
     /**
      * GET /api/periodes-cours
      *
@@ -71,21 +84,18 @@ class PeriodeCoursController extends Controller
      * supprimée, ces créneaux ne correspondraient plus à rien dans les listes
      * déroulantes et ne pourraient plus être réenregistrés sans être
      * entièrement ressaisis.
+     *
+     * Le refus nomme les créneaux en cause (jour, classe, matière,
+     * enseignant) : « 1 créneau(x) » laissait l'administration les chercher
+     * un à un dans l'emploi du temps avant de pouvoir les déplacer.
      */
     public function destroy(PeriodeCours $periodeCour)
     {
-        // `getRawOriginal` : l'accesseur rend « 07:30 » alors que la colonne
-        // porte « 07:30:00 ».
-        $utilisations = EmploiDuTemps::where('heure_debut', $periodeCour->getRawOriginal('heure_debut'))
-            ->where('heure_fin', $periodeCour->getRawOriginal('heure_fin'))
-            ->count();
+        $creneaux = $this->creneauxDeLaPeriode($periodeCour);
 
-        if ($utilisations > 0) {
+        if ($creneaux->isNotEmpty()) {
             throw ValidationException::withMessages([
-                'heure_debut' => [
-                    "Cette période est utilisée par {$utilisations} créneau(x) d'emploi du temps. "
-                    .'Déplacez-les avant de la supprimer.',
-                ],
+                'heure_debut' => [$this->messageUtilisation($creneaux)],
             ]);
         }
 
@@ -93,6 +103,78 @@ class PeriodeCoursController extends Controller
         GrilleHoraire::oublierPauses();
 
         return response()->json(status: 204);
+    }
+
+    /**
+     * GET /api/periodes-cours/{id}/creneaux
+     *
+     * Les créneaux d'emploi du temps posés sur cette période, décrits : ce
+     * sont eux qu'il faut déplacer avant de pouvoir la supprimer.
+     */
+    public function creneaux(PeriodeCours $periodeCour)
+    {
+        return response()->json([
+            'data' => $this->creneauxDeLaPeriode($periodeCour)->map(fn ($creneau) => [
+                'id' => $creneau->id,
+                'jour' => (int) $creneau->jour,
+                'jour_libelle' => self::NOMS_JOURS[(int) $creneau->jour] ?? 'jour inconnu',
+                'heure_debut' => substr((string) $creneau->getRawOriginal('heure_debut'), 0, 5),
+                'heure_fin' => substr((string) $creneau->getRawOriginal('heure_fin'), 0, 5),
+                'classe' => $creneau->classe?->nom,
+                'discipline' => $creneau->discipline?->nom,
+                'enseignant' => $creneau->enseignant?->nom,
+                'salle' => $creneau->salle,
+            ])->values(),
+        ]);
+    }
+
+    /**
+     * Créneaux posés sur le couple début/fin de cette période.
+     *
+     * `getRawOriginal` : l'accesseur rend « 07:30 » alors que la colonne
+     * porte « 07:30:00 ».
+     *
+     * @return \Illuminate\Database\Eloquent\Collection<int, EmploiDuTemps>
+     */
+    private function creneauxDeLaPeriode(PeriodeCours $periode)
+    {
+        return EmploiDuTemps::with(['classe:id,nom', 'discipline:id,nom', 'enseignant:id,nom'])
+            ->where('heure_debut', $periode->getRawOriginal('heure_debut'))
+            ->where('heure_fin', $periode->getRawOriginal('heure_fin'))
+            ->orderBy('jour')
+            ->get();
+    }
+
+    /**
+     * Le refus de suppression, créneaux nommés. Au-delà de quelques-uns la
+     * liste cesse d'être lisible dans une alerte : on en cite cinq et on dit
+     * combien restent.
+     */
+    private function messageUtilisation($creneaux): string
+    {
+        $cites = $creneaux->take(self::CRENEAUX_CITES)
+            ->map(fn ($creneau) => sprintf(
+                '%s %s–%s : %s — %s (%s)',
+                self::NOMS_JOURS[(int) $creneau->jour] ?? 'jour inconnu',
+                substr((string) $creneau->getRawOriginal('heure_debut'), 0, 5),
+                substr((string) $creneau->getRawOriginal('heure_fin'), 0, 5),
+                $creneau->classe?->nom ?? 'classe #'.$creneau->classe_id,
+                $creneau->discipline?->nom ?? 'matière #'.$creneau->discipline_id,
+                $creneau->enseignant?->nom ?? 'enseignant #'.$creneau->enseignant_id,
+            ))
+            ->all();
+
+        $reste = $creneaux->count() - count($cites);
+        if ($reste > 0) {
+            $cites[] = "… et {$reste} autre(s).";
+        }
+
+        $nombre = $creneaux->count();
+        $accord = $nombre > 1 ? 'créneaux' : 'créneau';
+
+        return "Cette période est utilisée par {$nombre} {$accord} d'emploi du temps : "
+            .implode(' ; ', $cites)
+            .'. Déplacez-les avant de la supprimer.';
     }
 
     private function validated(Request $request, ?int $ignoreId = null): array
