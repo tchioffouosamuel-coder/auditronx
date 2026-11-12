@@ -125,8 +125,12 @@ class AdminApiClient {
     final response = await _guarded(() async {
       final request = http.MultipartRequest(method, uri);
       final t = await token;
+      final e = await ApiClient.instance.etablissement;
       request.headers['Accept'] = 'application/json';
       if (t != null) request.headers['Authorization'] = 'Bearer $t';
+      // Sans l'en-tête d'établissement, l'envoi atterrit sur la base
+      // centrale : les requêtes JSON le portent déjà (voir _headers).
+      if (e != null) request.headers[ApiClient.enteteEtablissement] = e;
       request.fields.addAll(fields ?? {});
       request.files.add(
         http.MultipartFile.fromBytes(fileField, fileBytes, filename: filename),

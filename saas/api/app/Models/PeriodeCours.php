@@ -19,9 +19,11 @@ class PeriodeCours extends Model
 
     protected $table = 'periodes_cours';
 
-    protected $fillable = ['ordre', 'libelle', 'heure_debut', 'heure_fin'];
+    protected $fillable = ['ordre', 'libelle', 'est_pause', 'heure_debut', 'heure_fin'];
 
     protected $appends = ['libelle_complet'];
+
+    protected $casts = ['est_pause' => 'boolean'];
 
     /**
      * Périodes de l'établissement, ordonnées. La grille historique du code
@@ -32,7 +34,18 @@ class PeriodeCours extends Model
      */
     public static function grille(): Collection
     {
-        return static::orderBy('ordre')->orderBy('heure_debut')->get();
+        return static::where('est_pause', false)->orderBy('ordre')->orderBy('heure_debut')->get();
+    }
+
+    /**
+     * Pauses de la journée (récréation, pause de midi). Elles ne se proposent
+     * pas à la saisie d'un créneau et ne comptent pas comme des périodes :
+     * voir GrilleHoraire, qui les enjambe pour calculer une heure de fin et
+     * pour compter les périodes d'une plage.
+     */
+    public static function pauses(): Collection
+    {
+        return static::where('est_pause', true)->orderBy('heure_debut')->get();
     }
 
     /** « 08:10:00 » stocké en colonne `time` -> « 08:10 » attendu par l'API. */

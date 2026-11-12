@@ -24,8 +24,19 @@ class WordWriter
 {
     private const NS_W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
+    private const NS_R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+
+    private const NS_WP = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing';
+
+    private const NS_A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+
+    private const NS_PIC = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
+
     /** Fragments WordprocessingML du corps, dans l'ordre d'insertion. */
     private array $corps = [];
+
+    /** Logo embarqué dans le document, le cas échéant : extension et octets. */
+    private ?array $media = null;
 
     public function __construct(private readonly string $orientation = 'portrait') {}
 
@@ -45,11 +56,15 @@ class WordWriter
      */
     public function enteteEtablissement(array $colonnes): self
     {
-        if ($colonnes['gauche'] === [] && $colonnes['droite'] === []) {
+        $logo = $colonnes['logo'] ?? null;
+
+        if ($colonnes['gauche'] === [] && $colonnes['droite'] === [] && $logo === null) {
             return $this;
         }
 
-        $cellule = fn (array $lignes) => '<w:tc><w:tcPr><w:tcW w:w="2500" w:type="pct"/></w:tcPr>'
+        $celluleLogo = $logo !== null ? $this->celluleLogo($logo) : '';
+
+        $cellule = fn (array $lignes, int $largeur) => '<w:tc><w:tcPr><w:tcW w:w="'.$largeur.'" w:type="pct"/></w:tcPr>'
             .($lignes === []
                 ? '<w:p/>'
                 : implode('', array_map(
@@ -62,10 +77,18 @@ class WordWriter
                 )))
             .'</w:tc>';
 
+        // Avec logo, trois colonnes : tutelle française, logo, tutelle
+        // anglaise — la disposition d'un en-tête administratif camerounais,
+        // identique à celle des PDF (`pdf.partials.entete`).
+        $grille = $celluleLogo !== ''
+            ? '<w:gridCol w:w="3600"/><w:gridCol w:w="1800"/><w:gridCol w:w="3600"/>'
+            : '<w:gridCol w:w="4500"/><w:gridCol w:w="4500"/>';
+        $largeur = $celluleLogo !== '' ? 2000 : 2500;
+
         $this->corps[] = '<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/>'
             .'<w:tblLayout w:type="fixed"/></w:tblPr>'
-            .'<w:tblGrid><w:gridCol w:w="4500"/><w:gridCol w:w="4500"/></w:tblGrid>'
-            .'<w:tr>'.$cellule($colonnes['gauche']).$cellule($colonnes['droite']).'</w:tr>'
+            .'<w:tblGrid>'.$grille.'</w:tblGrid>'
+            .'<w:tr>'.$cellule($colonnes['gauche'], $largeur).$celluleLogo.$cellule($colonnes['droite'], $largeur).'</w:tr>'
             .'</w:tbl>';
 
         if ($colonnes['contact'] !== '') {
@@ -80,6 +103,46 @@ class WordWriter
         }
 
         return $this;
+    }
+
+    /**
+     * Logo de l'établissement, centré dans la colonne du milieu de l'en-tête.
+     *
+     * L'image est embarquée dans le .docx (partie `word/media`) : un document
+     * envoyé par courriel doit rester lisible hors du serveur.
+     */
+    private function celluleLogo(string $fichier): string
+    {
+        $binaire = @file_get_contents($fichier);
+
+        if ($binaire === false) {
+            return '';
+        }
+
+        $extension = mb_strtolower(pathinfo($fichier, PATHINFO_EXTENSION)) ?: 'png';
+        $this->media = ['extension' => $extension, 'contenu' => $binaire];
+
+        // Hauteur fixée à 1,2 cm, largeur déduite du rapport de l'image, en
+        // EMU (914400 par pouce) : un logo étiré trahirait l'établissement.
+        $hauteur = (int) round(1.2 / 2.54 * 914400);
+        $dimensions = @getimagesizefromstring($binaire);
+        $ratio = $dimensions && $dimensions[1] > 0 ? $dimensions[0] / $dimensions[1] : 1.0;
+        $largeur = (int) round($hauteur * $ratio);
+
+        $dessin = '<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">'
+            .'<wp:extent cx="'.$largeur.'" cy="'.$hauteur.'"/>'
+            .'<wp:docPr id="1" name="Logo"/>'
+            .'<a:graphic xmlns:a="'.self::NS_A.'"><a:graphicData uri="'.self::NS_PIC.'">'
+            .'<pic:pic xmlns:pic="'.self::NS_PIC.'">'
+            .'<pic:nvPicPr><pic:cNvPr id="1" name="Logo"/><pic:cNvPicPr/></pic:nvPicPr>'
+            .'<pic:blipFill><a:blip r:embed="rId2"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
+            .'<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="'.$largeur.'" cy="'.$hauteur.'"/></a:xfrm>'
+            .'<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>'
+            .'</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>';
+
+        return '<w:tc><w:tcPr><w:tcW w:w="1000" w:type="pct"/><w:vAlign w:val="center"/></w:tcPr>'
+            .'<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="0"/></w:pPr><w:r>'.$dessin.'</w:r></w:p>'
+            .'</w:tc>';
     }
 
     public function titre(string $texte): self
@@ -188,6 +251,18 @@ class WordWriter
     {
         $entete = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'."\n";
 
+        // Une image dans un .docx, c'est trois ajouts : son type MIME, sa
+        // relation depuis le document, et la partie binaire elle-même.
+        $extension = $this->media['extension'] ?? null;
+        $typeMedia = $extension === null
+            ? ''
+            : '<Default Extension="'.$extension.'" ContentType="image/'
+                .($extension === 'jpg' ? 'jpeg' : $extension).'"/>';
+        $relationMedia = $extension === null
+            ? ''
+            : '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"'
+                .' Target="media/logo.'.$extension.'"/>';
+
         return [
             '[Content_Types].xml' => $entete
                 .'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
@@ -195,6 +270,7 @@ class WordWriter
                 .'<Default Extension="xml" ContentType="application/xml"/>'
                 .'<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
                 .'<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'
+                .$typeMedia
                 .'</Types>',
 
             '_rels/.rels' => $entete
@@ -205,6 +281,7 @@ class WordWriter
             'word/_rels/document.xml.rels' => $entete
                 .'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
                 .'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+                .$relationMedia
                 .'</Relationships>',
 
             'word/styles.xml' => $entete
@@ -216,10 +293,15 @@ class WordWriter
                 .'</w:styles>',
 
             'word/document.xml' => $entete
-                .'<w:document xmlns:w="'.self::NS_W.'"><w:body>'
+                .'<w:document xmlns:w="'.self::NS_W.'" xmlns:r="'.self::NS_R.'"'
+                .' xmlns:wp="'.self::NS_WP.'" xmlns:a="'.self::NS_A.'" xmlns:pic="'.self::NS_PIC.'"><w:body>'
                 .implode('', $this->corps)
                 .$this->xmlSection()
                 .'</w:body></w:document>',
+
+            ...($this->media === null ? [] : [
+                'word/media/logo.'.$this->media['extension'] => $this->media['contenu'],
+            ]),
         ];
     }
 

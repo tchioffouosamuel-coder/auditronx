@@ -9,15 +9,19 @@
 --}}
 @php($entete = app(\App\Services\EnteteEtablissement::class)->colonnes())
 
-@if ($entete['gauche'] || $entete['droite'])
+@if ($entete['gauche'] || $entete['droite'] || $entete['logo'])
     <table style="border:none;margin-bottom:8px">
         <tr>
             <td style="border:none;width:40%;text-align:center;font-size:8px">
                 {!! implode('<br>', array_map('e', $entete['gauche'])) !!}
             </td>
             <td style="border:none;width:20%;text-align:center">
-                @if (file_exists(public_path('logo.png')))
-                    <img src="{{ public_path('logo.png') }}" alt="Logo" style="height:40px">
+                {{-- Logo propre à l'établissement, envoyé depuis la
+                     Configuration. Il était lu dans un `public/logo.png`
+                     unique : chaque établissement imprimait celui d'un
+                     autre. --}}
+                @if ($entete['logo'])
+                    <img src="{{ $entete['logo'] }}" alt="Logo" style="height:48px">
                 @endif
             </td>
             <td style="border:none;width:40%;text-align:center;font-size:8px">

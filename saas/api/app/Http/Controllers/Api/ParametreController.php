@@ -53,4 +53,38 @@ class ParametreController extends Controller
 
         return response()->json($entete->definir($request->validate($regles)));
     }
+
+    /**
+     * POST /api/parametres/entete-etablissement/logo
+     *
+     * Le logo coiffait les documents depuis un `public/logo.png` unique :
+     * l'application étant multi-établissements, chacun imprimait celui d'un
+     * autre. Il s'envoie donc comme un fichier, rangé dans le stockage propre
+     * à l'établissement.
+     */
+    public function definirLogoEtablissement(Request $request, EnteteEtablissement $entete)
+    {
+        $request->validate([
+            'logo' => [
+                'required',
+                'image',
+                'mimes:'.implode(',', EnteteEtablissement::LOGO_EXTENSIONS),
+                // Un logo d'en-tête s'imprime sur quelques centimètres : au
+                // delà, c'est le poids des PDF qu'on alourdit pour rien.
+                'max:2048',
+            ],
+        ]);
+
+        return response()->json([
+            'logo_url' => $entete->definirLogo($request->file('logo')),
+        ]);
+    }
+
+    /** DELETE /api/parametres/entete-etablissement/logo */
+    public function supprimerLogoEtablissement(EnteteEtablissement $entete)
+    {
+        $entete->supprimerLogo();
+
+        return response()->json(['logo_url' => null]);
+    }
 }

@@ -66,6 +66,12 @@
             color: #999;
         }
 
+        td.signale {
+            background: #e3efff;
+            color: #175ca4;
+            font-weight: bold;
+        }
+
         /* Jour férié : personne n'est attendu, la cellule ne doit pas se lire
            comme un oubli de pointage ni comme un jour sans cours. */
         td.ferie {
@@ -91,6 +97,7 @@
 </head>
 
 <body>
+    <?php echo $__env->make('pdf.partials.entete', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
     <h1>Journal hebdomadaire des présences</h1>
     <div class="periode">
         Semaine du <?php echo e($debut->locale('fr')->translatedFormat('d F Y')); ?>
@@ -129,7 +136,7 @@
                                     ? ($cellule['ferie'] ? 'ferie' : 'hors')
                                     : (! $cellule['attendu']
                                         ? 'hors'
-                                        : ($cellule['present'] ? '' : 'absent'));
+                                        : ($cellule['present'] ? '' : ($cellule['est_signale'] ? 'signale' : 'absent')));
                             ?>
                             <td class="<?php echo e($classe); ?>">
                                 <?php if($cellule['present']): ?>
@@ -140,6 +147,8 @@
                                     FÉRIÉ
                                 <?php elseif($cellule['a_venir']): ?>
                                     –
+                                <?php elseif($cellule['est_signale']): ?>
+                                    SIG
                                 <?php elseif($cellule['attendu']): ?>
                                     ABS
                                 <?php else: ?>
@@ -157,6 +166,7 @@
         <div class="legende">
             <span><strong>HH:MM / HH:MM</strong> arrivée et départ</span>
             <span><strong>ABS</strong> attendu, aucun pointage</span>
+            <span><strong>SIG</strong> jour signalé</span>
             <span><strong>FÉRIÉ</strong> jour férié, personne n'est attendue</span>
             <span><strong>·</strong> non attendu ce jour-là</span>
             <span><strong>–</strong> jour à venir, pas encore évalué</span>

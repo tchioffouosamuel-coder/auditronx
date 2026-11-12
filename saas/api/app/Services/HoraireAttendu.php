@@ -189,7 +189,8 @@ class HoraireAttendu
     /**
      * Plage attendue ce jour-là, ou null si la personne n'est pas attendue.
      * `minutes` = durée de présence prévue (journée de travail pour un
-     * administratif, somme des cours pour un enseignant).
+     * administratif, somme des cours pour un enseignant), pauses de la
+     * journée déduites.
      *
      * @param  Collection|null  $emplois  emploi du temps déjà chargé de l'enseignant (évite une requête)
      * @return array{heure_debut: string, heure_fin: string, minutes: int}|null
@@ -216,7 +217,7 @@ class HoraireAttendu
             return [
                 'heure_debut' => $plage->heure_debut,
                 'heure_fin' => $plage->heure_fin,
-                'minutes' => (int) Carbon::parse($plage->heure_debut)->diffInMinutes(Carbon::parse($plage->heure_fin)),
+                'minutes' => GrilleHoraire::minutesHorsPause($plage->heure_debut, $plage->heure_fin),
             ];
         }
 
@@ -230,7 +231,7 @@ class HoraireAttendu
             return [
                 'heure_debut' => $parametres['heure_debut'],
                 'heure_fin' => $parametres['heure_fin'],
-                'minutes' => (int) Carbon::parse($parametres['heure_debut'])->diffInMinutes(Carbon::parse($parametres['heure_fin'])),
+                'minutes' => GrilleHoraire::minutesHorsPause($parametres['heure_debut'], $parametres['heure_fin']),
             ];
         }
 
@@ -243,7 +244,10 @@ class HoraireAttendu
         return [
             'heure_debut' => $cours->min('heure_debut'),
             'heure_fin' => $cours->max('heure_fin'),
-            'minutes' => (int) $cours->sum(fn ($item) => Carbon::parse($item->heure_debut)->diffInMinutes(Carbon::parse($item->heure_fin))),
+            // Pauses déduites : une récréation enjambée par un créneau
+            // n'est pas du temps de cours, et ne doit donc pas se compter en
+            // périodes (voir GrilleHoraire).
+            'minutes' => (int) $cours->sum(fn ($item) => GrilleHoraire::minutesHorsPause($item->heure_debut, $item->heure_fin)),
         ];
     }
 

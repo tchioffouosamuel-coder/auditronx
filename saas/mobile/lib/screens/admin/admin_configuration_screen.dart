@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/admin_api_client.dart';
@@ -11,7 +12,12 @@ import '../../widgets/admin/admin_crud_screen.dart';
 import '../../widgets/admin/admin_field_spec.dart';
 import '../../widgets/admin/admin_select_field.dart';
 import 'admin_emplois_screen.dart'
-    show finApresPeriodes, heureAffichee, nombrePeriodesEntre, plageAffichee;
+    show
+        GrillePauses,
+        finApresPeriodes,
+        heureAffichee,
+        nombrePeriodesEntre,
+        plageAffichee;
 
 const List<AdminFieldOption> _jours = [
   AdminFieldOption(1, 'Lundi'),
@@ -34,8 +40,10 @@ String _nomJour(dynamic jour) =>
 /// `ConfigurationPage.jsx`. Deux réglages qui décident de ce que l'application
 /// propose à la saisie et de ce qu'elle attend d'une personne :
 ///
-/// - les **périodes de cours**, seule source des listes déroulantes d'horaire
-///   de l'emploi du temps ;
+/// - les **périodes de cours**, qui donnent la grille horaire ;
+/// - les **pauses** de la journée (récréation, pause de midi) : elles ne sont
+///   pas des périodes — elles ne se comptent pas comme des périodes à
+///   rattraper et un créneau les enjambe sans les facturer ;
 /// - les **emplois du temps spéciaux**, pour un personnel dont l'activité est
 ///   générale et ne se découpe pas en cours ;
 /// - l'**en-tête officiel** repris en haut des documents exportés.
@@ -54,13 +62,17 @@ class _AdminConfigurationScreenState extends State<AdminConfigurationScreen> {
     // purge, l'écran des emplois du temps proposerait encore l'ancienne
     // grille horaire jusqu'au prochain démarrage de l'application.
     AdminSelectField.invalidateCache('/periodes-cours');
+    // Les pauses décident de l'heure de fin déduite d'un nombre de périodes :
+    // la grille rechargée ici est celle qu'utiliseront les formulaires
+    // d'emploi du temps.
+    GrillePauses.rafraichir();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Column(
         children: [
           TabBar(
@@ -74,6 +86,10 @@ class _AdminConfigurationScreenState extends State<AdminConfigurationScreen> {
                 text: 'Périodes de cours',
               ),
               Tab(
+                icon: Icon(Icons.free_breakfast_outlined, size: 20),
+                text: 'Pauses',
+              ),
+              Tab(
                 icon: Icon(Icons.work_outline, size: 20),
                 text: 'Emplois du temps spéciaux',
               ),
@@ -85,7 +101,12 @@ class _AdminConfigurationScreenState extends State<AdminConfigurationScreen> {
           ),
           const Expanded(
             child: TabBarView(
-              children: [_PeriodesTab(), _EmploisSpeciauxTab(), _EnteteTab()],
+              children: [
+                _PeriodesTab(),
+                _PausesTab(),
+                _EmploisSpeciauxTab(),
+                _EnteteTab(),
+              ],
             ),
           ),
         ],
@@ -111,7 +132,7 @@ class _PeriodesTab extends StatelessWidget {
     const AdminFieldSpec(
       key: 'libelle',
       label: 'Libellé',
-      helperText: 'Facultatif : P1, Récréation…',
+      helperText: 'Facultatif : P1, P2… (les pauses ont leur propre onglet).',
     ),
     const AdminFieldSpec(
       key: 'heure_debut',
@@ -153,6 +174,56 @@ class _PeriodesTab extends StatelessWidget {
       itemSubtitle: (item) => 'Période ${item['ordre']}',
       searchFields: const ['libelle'],
       searchHint: 'Rechercher une période…',
+    );
+  }
+}
+
+/// Pauses de la journée : récréation, pause de midi. Ce ne sont pas des
+/// périodes de cours — elles ne se proposent pas à la saisie d'un créneau, un
+/// créneau les enjambe sans qu'elles comptent pour une période, et une
+/// absence ne les fait pas rattraper.
+class _PausesTab extends StatelessWidget {
+  const _PausesTab();
+
+  static final List<AdminFieldSpec> _fields = [
+    const AdminFieldSpec(
+      key: 'libelle',
+      label: 'Libellé',
+      helperText: 'Récréation, Pause de midi…',
+    ),
+    const AdminFieldSpec(
+      key: 'heure_debut',
+      label: 'Début de la pause',
+      type: AdminFieldType.time,
+      required: true,
+    ),
+    const AdminFieldSpec(
+      key: 'heure_fin',
+      label: 'Fin de la pause',
+      type: AdminFieldType.time,
+      required: true,
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return AdminCrudScreen(
+      title: 'Pauses',
+      // Les écritures passent par `/periodes-cours` — seul chemin qui accepte
+      // un identifiant ; `est_pause` range la plage du bon côté de la grille.
+      resourcePath: '/periodes-cours',
+      listPath: '/periodes-cours?type=pause',
+      extraBody: const {'est_pause': true},
+      cacheKey: GrillePauses.cacheKey,
+      icon: Icons.free_breakfast_outlined,
+      fields: _fields,
+      itemTitle: (item) =>
+          item['libelle']?.toString() ??
+          plageAffichee(item['heure_debut'], item['heure_fin']),
+      itemSubtitle: (item) =>
+          'Pause · ${plageAffichee(item['heure_debut'], item['heure_fin'])}',
+      searchFields: const ['libelle'],
+      searchHint: 'Rechercher une pause…',
     );
   }
 }
@@ -267,6 +338,12 @@ class _EnteteTabState extends State<_EnteteTab> {
   late Future<void> _future;
   bool _saving = false;
 
+  /// Logo imprimé au centre du bandeau. Il ne se saisit pas comme une ligne :
+  /// il s'envoie seul (multipart) et prend effet sans attendre
+  /// l'enregistrement du reste de l'en-tête.
+  String? _logoUrl;
+  bool _logoEnCours = false;
+
   @override
   void initState() {
     super.initState();
@@ -293,6 +370,72 @@ class _EnteteTabState extends State<_EnteteTab> {
     if (data is! Map) return;
     for (final entry in _controllers.entries) {
       entry.value.text = '${data[entry.key] ?? ''}';
+    }
+    _logoUrl = data['logo_url'] as String?;
+  }
+
+  Future<void> _choisirLogo() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      withData: true,
+    );
+    final picked = result?.files.single;
+    if (picked?.bytes == null) return;
+
+    setState(() => _logoEnCours = true);
+    try {
+      final data = await AdminApiClient.instance.sendMultipart(
+        '$_path/logo',
+        fileField: 'logo',
+        fileBytes: picked!.bytes!,
+        filename: picked.name,
+      );
+      if (!mounted) return;
+      setState(() => _logoUrl = data is Map ? data['logo_url'] as String? : null);
+      _showMessage('Logo enregistré.');
+      // Le cache de l'en-tête porte l'ancienne URL : sans cette relecture,
+      // rouvrir l'écran hors ligne réafficherait le logo précédent.
+      await _refresh();
+    } on ApiException catch (e) {
+      _showMessage(e.statusCode == 0
+          ? 'Le logo ne peut pas être envoyé hors ligne.'
+          : e.message);
+    } finally {
+      if (mounted) setState(() => _logoEnCours = false);
+    }
+  }
+
+  Future<void> _retirerLogo() async {
+    final confirme = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Retirer le logo des documents ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Retirer'),
+          ),
+        ],
+      ),
+    );
+    if (confirme != true) return;
+
+    setState(() => _logoEnCours = true);
+    try {
+      await AdminApiClient.instance.delete('$_path/logo');
+      if (!mounted) return;
+      setState(() => _logoUrl = null);
+      await _refresh();
+    } on ApiException catch (e) {
+      _showMessage(e.statusCode == 0
+          ? 'Le logo ne peut pas être retiré hors ligne.'
+          : e.message);
+    } finally {
+      if (mounted) setState(() => _logoEnCours = false);
     }
   }
 
@@ -390,7 +533,7 @@ class _EnteteTabState extends State<_EnteteTab> {
                 style: TextStyle(color: AuditronColors.ink500),
               ),
               const SizedBox(height: 16),
-              _Apercu(valeurs: _valeurs),
+              _Apercu(valeurs: _valeurs, logoUrl: _logoUrl),
               const SizedBox(height: 20),
               const _TitreBloc('Colonne française'),
               for (final (cle, libelle) in _champsFrancais)
@@ -399,6 +542,44 @@ class _EnteteTabState extends State<_EnteteTab> {
               const _TitreBloc('Colonne anglaise'),
               for (final (cle, libelle) in _champsAnglais) _champ(cle, libelle),
               const SizedBox(height: 12),
+              const _TitreBloc('Logo'),
+              const Text(
+                'Imprimé au centre de l’en-tête, entre les deux colonnes. '
+                'PNG, JPG ou WebP, 2 Mo au plus.',
+                style: TextStyle(color: AuditronColors.ink500),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  if (_logoUrl != null) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        _logoUrl!,
+                        height: 56,
+                        errorBuilder: (_, _, _) => const Icon(
+                          Icons.broken_image_outlined,
+                          color: AuditronColors.ink500,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  OutlinedButton.icon(
+                    onPressed: _logoEnCours ? null : _choisirLogo,
+                    icon: const Icon(Icons.image_outlined),
+                    label: Text(_logoUrl == null ? 'Choisir un logo' : 'Remplacer'),
+                  ),
+                  if (_logoUrl != null) ...[
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: _logoEnCours ? null : _retirerLogo,
+                      child: const Text('Retirer'),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 16),
               const _TitreBloc('Coordonnées'),
               _champ(
                 'contact',
@@ -466,9 +647,10 @@ class _TitreBloc extends StatelessWidget {
 /// vides retirées. Il évite d'avoir à exporter un document pour vérifier une
 /// saisie.
 class _Apercu extends StatelessWidget {
-  const _Apercu({required this.valeurs});
+  const _Apercu({required this.valeurs, this.logoUrl});
 
   final Map<String, dynamic> valeurs;
+  final String? logoUrl;
 
   List<String> _colonne(List<String> cles) => cles
       .map((cle) => '${valeurs[cle] ?? ''}'.trim())
@@ -493,7 +675,7 @@ class _Apercu extends StatelessWidget {
     ]);
     final contact = '${valeurs['contact'] ?? ''}'.trim();
 
-    if (gauche.isEmpty && droite.isEmpty) {
+    if (gauche.isEmpty && droite.isEmpty && logoUrl == null) {
       return const Card(
         child: Padding(
           padding: EdgeInsets.all(16),
@@ -532,6 +714,14 @@ class _Apercu extends StatelessWidget {
               children: [
                 colonne(gauche),
                 const SizedBox(width: 12),
+                if (logoUrl != null) ...[
+                  Image.network(
+                    logoUrl!,
+                    height: 44,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  ),
+                  const SizedBox(width: 12),
+                ],
                 colonne(droite),
               ],
             ),

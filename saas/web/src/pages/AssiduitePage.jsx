@@ -262,6 +262,16 @@ function JournalDuJour({ categorie }) {
 }
 
 /**
+ * Les trois bilans mensuels téléchargeables. Le global réunit assiduité et
+ * ponctualité ; les deux autres n'en gardent qu'un volet.
+ */
+const VOLETS_BILAN = [
+  ["global", "Bilan global"],
+  ["assiduite", "Assiduité"],
+  ["ponctualite", "Ponctualité"],
+];
+
+/**
  * Bilan mensuel regroupé par section (§4.2) — la vue que la direction
  * transmet en fin de mois. Les statistiques de l'onglet « Statistiques »
  * restent une liste plate sur une période libre ; ici le mois est l'unité et
@@ -308,18 +318,31 @@ function BilanMensuelTab() {
           onChange={(e) => setMois(e.target.value || moisCourant())}
           className="field py-2"
         />
-        <button
-          type="button"
-          onClick={() =>
-            downloadFile(
-              `/assiduite/bilan-mensuel/word?mois=${mois}&categorie=${categorie}`,
-              `bilan-mensuel-${categorie}-${mois}.docx`,
-            )
-          }
-          className="btn-primary ml-auto"
-        >
-          Bilan du mois en Word
-        </button>
+      </div>
+
+      {/* Trois bilans distincts : le global pour le conseil, les deux volets
+          séparés pour les réunions où l'autre n'a pas à circuler. */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {VOLETS_BILAN.map(([volet, libelle]) => (
+          <div key={volet} className="flex items-center gap-1 rounded-2xl border border-ink-100 px-2 py-1">
+            <span className="px-1 text-sm text-ink-700">{libelle}</span>
+            {["word", "pdf"].map((format) => (
+              <button
+                key={format}
+                type="button"
+                onClick={() =>
+                  downloadFile(
+                    `/assiduite/bilan-mensuel/${format}?mois=${mois}&categorie=${categorie}&volet=${volet}`,
+                    `bilan-mensuel-${volet}-${categorie}-${mois}.${format === "word" ? "docx" : "pdf"}`,
+                  )
+                }
+                className="btn-secondary px-2 py-1 text-xs"
+              >
+                {format === "word" ? "Word" : "PDF"}
+              </button>
+            ))}
+          </div>
+        ))}
       </div>
 
       {erreur && (
@@ -444,7 +467,7 @@ export default function AssiduitePage() {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h1 className="page-title">
-          Assiduité & rapports
+          Classement d’assiduité
         </h1>
         <button
           onClick={() =>

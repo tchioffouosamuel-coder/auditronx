@@ -142,12 +142,12 @@ class _AdminHomeScreenState extends State<_AdminHomeScreen> {
           screen: const AdminRetardsScreen(),
         ),
         _AdminMenuEntry(
-          title: 'Ponctualité',
+          title: 'Classement de ponctualité',
           icon: Icons.military_tech_outlined,
           screen: const AdminPonctualiteScreen(),
         ),
         _AdminMenuEntry(
-          title: 'Assiduité',
+          title: 'Classement d’assiduité',
           icon: Icons.insights,
           screen: const AdminAssiduiteScreen(),
         ),
@@ -319,7 +319,7 @@ class _AdminHomeScreenState extends State<_AdminHomeScreen> {
     _groups = _groupesPour(
       accesTotal: _aAccesTotal(context.watch<AdminSession>()),
       onSignalements: () => _selectByTitle('Signalements'),
-      onAssiduite: () => _selectByTitle('Assiduité'),
+      onAssiduite: () => _selectByTitle('Classement d’assiduité'),
     );
     _flatEntries = [for (final g in _groups) ...g.entries];
     if (_index >= _flatEntries.length) _index = 0;

@@ -214,4 +214,65 @@ class RapportsWordTest extends TestCase
         $this->assertStringNotContainsString('preserve">ABS<', $xml);
         $this->assertStringContainsString('preserve">OK<', $xml);
     }
+
+    /**
+     * Les trois bilans mensuels : le global porte les deux volets, les deux
+     * autres n'en gardent qu'un. Mélanger assiduité et ponctualité dans tous
+     * les documents, c'était faire circuler un classement nominatif dans des
+     * réunions où seule l'assiduité est à l'ordre du jour.
+     */
+    public function test_les_trois_bilans_mensuels_sexportent_en_word(): void
+    {
+        $enseignant = Enseignant::factory()->create(['nom' => 'MBALLA JEAN', 'section' => 'Industrielle']);
+        $this->coursLe($enseignant, $this->lundi);
+        Presence::create([
+            'enseignant_id' => $enseignant->id,
+            'date' => $this->lundi->toDateString(),
+            'heure_arrivee' => $this->lundi->copy()->setTime(8, 25),
+            'source' => 'app_mobile',
+        ]);
+        $this->actingAsBackoffice();
+
+        $mois = $this->lundi->format('Y-m');
+        $url = fn (string $volet) => "/api/assiduite/bilan-mensuel/word?categorie=enseignant&mois={$mois}&volet={$volet}";
+
+        $global = $this->documentXml($this->get($url('global'))->assertOk()->streamedContent());
+        $assiduite = $this->documentXml($this->get($url('assiduite'))->assertOk()->streamedContent());
+        $ponctualite = $this->documentXml($this->get($url('ponctualite'))->assertOk()->streamedContent());
+
+        $this->assertStringContainsString('Synthèse par section', $global);
+        $this->assertStringContainsString('Classement de ponctualité', $global);
+
+        $this->assertStringContainsString('Synthèse par section', $assiduite);
+        $this->assertStringNotContainsString('Classement de ponctualité', $assiduite);
+
+        $this->assertStringContainsString('Classement de ponctualité', $ponctualite);
+        $this->assertStringNotContainsString('Synthèse par section', $ponctualite);
+        $this->assertStringContainsString('MBALLA JEAN', $ponctualite);
+    }
+
+    public function test_les_trois_bilans_mensuels_sexportent_en_pdf(): void
+    {
+        $enseignant = Enseignant::factory()->create(['nom' => 'MBALLA JEAN', 'section' => 'Industrielle']);
+        $this->coursLe($enseignant, $this->lundi);
+        $this->actingAsBackoffice();
+
+        $mois = $this->lundi->format('Y-m');
+
+        foreach (['global', 'assiduite', 'ponctualite'] as $volet) {
+            $reponse = $this->get("/api/assiduite/bilan-mensuel/pdf?categorie=enseignant&mois={$mois}&volet={$volet}");
+
+            $reponse->assertOk();
+            $this->assertSame('application/pdf', $reponse->headers->get('content-type'));
+        }
+    }
+
+    public function test_un_volet_inconnu_est_refuse(): void
+    {
+        $this->actingAsBackoffice();
+
+        $this->getJson('/api/assiduite/bilan-mensuel/word?categorie=enseignant&volet=salaires')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('volet');
+    }
 }

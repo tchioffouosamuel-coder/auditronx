@@ -50,7 +50,7 @@ const NAV_SECTIONS = [
     links: [
       { to: "/retards", label: "Retards & bilans", icon: "running_with_errors" },
       { to: "/ponctualite", label: "Classement de ponctualité", icon: "military_tech" },
-      { to: "/assiduite", label: "Assiduité & rapports", icon: "fact_check" },
+      { to: "/assiduite", label: "Classement d’assiduité", icon: "fact_check" },
       {
         to: "/validation",
         label: "Validation des présences",

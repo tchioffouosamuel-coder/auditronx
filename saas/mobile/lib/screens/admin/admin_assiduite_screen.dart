@@ -11,9 +11,9 @@ import '../../theme.dart';
 import '../../utils/date_format_utils.dart';
 import 'admin_journal_hebdomadaire_tab.dart';
 
-/// Assiduité & rapports (§admin-mobile) — équivalent mobile d'AssiduitePage.jsx.
-/// Lecture seule, 3 onglets : Statistiques / Journal des présences /
-/// Personnel inactif. L'export ZIP global (bouton web) n'a pas d'équivalent
+/// Classement d'assiduité (§admin-mobile) — équivalent mobile d'AssiduitePage.jsx.
+/// Lecture seule, 4 onglets : Statistiques / Journal des présences / Bilans du
+/// mois / Personnel inactif. L'export ZIP global (bouton web) n'a pas d'équivalent
 /// mobile pour l'instant (pas de FS accessible équivalent) — chaque onglet
 /// reste consultable normalement.
 class AdminAssiduiteScreen extends StatelessWidget {
@@ -22,7 +22,7 @@ class AdminAssiduiteScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Column(
         children: [
           Material(
@@ -35,13 +35,19 @@ class AdminAssiduiteScreen extends StatelessWidget {
               tabs: const [
                 Tab(text: 'Statistiques'),
                 Tab(text: 'Journal'),
+                Tab(text: 'Bilans du mois'),
                 Tab(text: 'Personnel inactif'),
               ],
             ),
           ),
           const Expanded(
             child: TabBarView(
-              children: [_StatsTab(), _JournalTab(), _PersonnelInactifTab()],
+              children: [
+                _StatsTab(),
+                _JournalTab(),
+                _BilansDuMoisTab(),
+                _PersonnelInactifTab(),
+              ],
             ),
           ),
         ],
@@ -563,6 +569,151 @@ class _JournalTabState extends State<_JournalDuJourTab> {
             ),
           ),
         ),
+      ],
+    );
+  }
+}
+
+/// Les trois bilans mensuels, en Word et en PDF. Le bilan global réunit
+/// l'assiduité et la ponctualité — c'est celui que la direction présente en
+/// conseil ; les deux autres n'en gardent qu'un volet, pour les réunions où le
+/// second n'a pas à circuler.
+class _BilansDuMoisTab extends StatefulWidget {
+  const _BilansDuMoisTab();
+
+  @override
+  State<_BilansDuMoisTab> createState() => _BilansDuMoisTabState();
+}
+
+class _BilansDuMoisTabState extends State<_BilansDuMoisTab> {
+  static const _volets = [
+    ('global', 'Bilan global', 'Assiduité et ponctualité réunies'),
+    ('assiduite', 'Assiduité', 'Jours attendus, jours assurés, taux par section'),
+    ('ponctualite', 'Ponctualité', 'Classement par score de ponctualité'),
+  ];
+
+  DateTime _mois = _startOfMonth();
+  String _categorie = 'enseignant';
+  String? _enCours;
+
+  String get _moisIso => DateFormat('yyyy-MM').format(_mois);
+
+  Future<void> _choisirMois() async {
+    final choix = await showDatePicker(
+      context: context,
+      initialDate: _mois,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(DateTime.now().year + 1, 12, 31),
+      initialDatePickerMode: DatePickerMode.year,
+      helpText: 'Mois du bilan',
+    );
+    if (choix != null) {
+      setState(() => _mois = DateTime(choix.year, choix.month, 1));
+    }
+  }
+
+  Future<void> _telecharger(String volet, String format) async {
+    final cle = '$volet-$format';
+    setState(() => _enCours = cle);
+    try {
+      final bytes = await AdminApiClient.instance.getBytes(
+        '/assiduite/bilan-mensuel/$format',
+        query: {
+          'mois': _moisIso,
+          'categorie': _categorie,
+          'volet': volet,
+        },
+      );
+      final directory = await getTemporaryDirectory();
+      final extension = format == 'word' ? 'docx' : 'pdf';
+      final file = File(
+        '${directory.path}/bilan-mensuel-$volet-$_categorie-$_moisIso.$extension',
+      );
+      await file.writeAsBytes(bytes, flush: true);
+      await Share.shareXFiles([XFile(file.path)]);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    } finally {
+      if (mounted) setState(() => _enCours = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      children: [
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(value: 'enseignant', label: Text('Enseignant')),
+            ButtonSegment(value: 'administration', label: Text('Administration')),
+          ],
+          selected: {_categorie},
+          onSelectionChanged: (choix) =>
+              setState(() => _categorie = choix.first),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: _choisirMois,
+          icon: const Icon(Icons.calendar_today, size: 16),
+          label: Text(
+            'Mois : ${DateFormat('MMMM yyyy', 'fr').format(_mois)}',
+          ),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AuditronColors.ink700,
+            side: const BorderSide(color: AuditronColors.ink100),
+            alignment: Alignment.centerLeft,
+          ),
+        ),
+        const SizedBox(height: 16),
+        for (final (volet, titre, description) in _volets)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(titre, style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 2),
+                  Text(
+                    description,
+                    style: const TextStyle(
+                      color: AuditronColors.ink500,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      for (final (format, libelle, icone) in const [
+                        ('word', 'Word', Icons.description_outlined),
+                        ('pdf', 'PDF', Icons.picture_as_pdf_outlined),
+                      ]) ...[
+                        OutlinedButton.icon(
+                          onPressed: _enCours != null
+                              ? null
+                              : () => _telecharger(volet, format),
+                          icon: _enCours == '$volet-$format'
+                              ? const SizedBox(
+                                  height: 16,
+                                  width: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : Icon(icone, size: 16),
+                          label: Text(libelle),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }

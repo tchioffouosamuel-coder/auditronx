@@ -1194,7 +1194,7 @@ void main() {
     expect(
       find.descendant(
         of: find.byType(AppBar),
-        matching: find.text('Assiduité'),
+        matching: find.text('Classement d’assiduité'),
       ),
       findsOneWidget,
     );

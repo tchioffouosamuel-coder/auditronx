@@ -176,6 +176,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/assiduite/journal-hebdomadaire/word', [AssiduiteController::class, 'journalHebdomadaireWord']);
     Route::get('/assiduite/bilan-mensuel', [AssiduiteController::class, 'bilanMensuel']);
     Route::get('/assiduite/bilan-mensuel/word', [AssiduiteController::class, 'bilanMensuelWord']);
+    Route::get('/assiduite/bilan-mensuel/pdf', [AssiduiteController::class, 'bilanMensuelPdf']);
     Route::get('/assiduite/personnel-inactif', [AssiduiteController::class, 'personnelInactif']);
     Route::get('/assiduite/sans-presence', [AssiduiteController::class, 'sansPresence']);
     Route::get('/assiduite/sans-presence/pdf', [AssiduiteController::class, 'sansPresencePdf']);
@@ -188,6 +189,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // En-tête officiel imprimé en haut des documents (§4.2).
     Route::get('/parametres/entete-etablissement', [ParametreController::class, 'enteteEtablissement']);
     Route::put('/parametres/entete-etablissement', [ParametreController::class, 'definirEnteteEtablissement'])->middleware('backoffice');
+    Route::post('/parametres/entete-etablissement/logo', [ParametreController::class, 'definirLogoEtablissement'])->middleware('backoffice');
+    Route::delete('/parametres/entete-etablissement/logo', [ParametreController::class, 'supprimerLogoEtablissement'])->middleware('backoffice');
 
     // Validation des présences (§4.2)
     Route::get('/presences/validation', [PresenceValidationController::class, 'index']);

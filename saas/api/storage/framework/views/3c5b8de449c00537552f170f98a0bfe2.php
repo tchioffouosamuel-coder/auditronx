@@ -46,6 +46,7 @@
 </head>
 
 <body>
+    <?php echo $__env->make('pdf.partials.entete', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
     <h1>Journal des présences</h1>
     <div class="date"><?php echo e($date->locale('fr')->translatedFormat('l d F Y')); ?></div>
     <?php if($presences->isEmpty()): ?>

@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Traits\AccessibleEnseignants;
 use App\Models\Enseignant;
+use App\Services\BilanCumule;
 use App\Services\BilanIndividuel;
+use App\Services\GrilleHoraire;
 use App\Services\HoraireAttendu;
 use App\Services\PonctualiteCalculator;
 use App\Services\RetardCalculator;
@@ -45,12 +47,11 @@ class RetardsController extends Controller
     }
 
     /** GET /api/retards?debut=&fin=&section= — liste des retards sur une période. */
-    public function index(Request $request, RetardCalculator $retards, HoraireAttendu $horaires, PonctualiteCalculator $ponctualite)
+    public function index(Request $request, BilanCumule $bilans)
     {
         [$debut, $fin, $enseignants] = $this->periodeEtEnseignants($request);
 
-        $lignes = $enseignants
-            ->map(fn (Enseignant $enseignant) => $this->ligneBilanCumule($enseignant, $debut, $fin, $retards, $horaires, $ponctualite))
+        $lignes = collect($bilans->classement($enseignants, $debut, $fin))
             ->sortBy(fn (array $ligne) => mb_strtolower($ligne['nom']), SORT_NATURAL)
             ->values();
 
@@ -58,7 +59,7 @@ class RetardsController extends Controller
     }
 
     /** GET /api/retards/classement-ponctualite?debut=&fin=&section= — classement des enseignants par ponctualité. */
-    public function classementPonctualite(Request $request, RetardCalculator $retards, HoraireAttendu $horaires, PonctualiteCalculator $ponctualite)
+    public function classementPonctualite(Request $request, HoraireAttendu $horaires, BilanCumule $bilans)
     {
         [$debut, $fin, $enseignants] = $this->periodeEtEnseignants($request);
 
@@ -66,16 +67,11 @@ class RetardsController extends Controller
             $enseignants = $enseignants->reject(fn (Enseignant $enseignant) => $horaires->estAdministratif($enseignant));
         }
 
-        $classement = $enseignants
-            ->map(fn (Enseignant $enseignant) => $this->ligneBilanCumule($enseignant, $debut, $fin, $retards, $horaires, $ponctualite))
-            ->sortBy(fn (array $ligne) => [-$ligne['score_ponctualite'], mb_strtolower($ligne['nom'])])
-            ->values();
-
-        return response()->json($classement);
+        return response()->json($bilans->classement($enseignants, $debut, $fin));
     }
 
     /** GET /api/retards/bilan-cumule?debut=&fin=&section=&tri= — bilan PDF de tous les enseignants du périmètre. */
-    public function bilanCumule(Request $request, RetardCalculator $retards, HoraireAttendu $horaires, PonctualiteCalculator $ponctualite)
+    public function bilanCumule(Request $request, HoraireAttendu $horaires, BilanCumule $bilans)
     {
         [$debut, $fin, $enseignants] = $this->periodeEtEnseignants($request);
 
@@ -85,7 +81,7 @@ class RetardsController extends Controller
             $enseignants = $enseignants->reject(fn(Enseignant $enseignant) => $horaires->estAdministratif($enseignant));
         }
 
-        $lignes = $enseignants->map(fn(Enseignant $enseignant) => $this->ligneBilanCumule($enseignant, $debut, $fin, $retards, $horaires, $ponctualite));
+        $lignes = collect($bilans->classement($enseignants, $debut, $fin));
 
         // Tri par score de ponctualité (classement) si demandé, sinon par nom.
         $data = $request->query('tri') === 'ponctualite'
@@ -119,49 +115,6 @@ class RetardsController extends Controller
         ]);
 
         return $pdf->download("bilan-retards-{$enseignant->matricule}.pdf");
-    }
-
-    private function ligneBilanCumule(Enseignant $enseignant, Carbon $debut, Carbon $fin, RetardCalculator $retards, HoraireAttendu $horaires, PonctualiteCalculator $ponctualite): array
-    {
-        $emplois = $enseignant->emploiDuTemps()->get();
-        $presences = $enseignant->presences()->whereBetween('date', [$debut->toDateString(), $fin->toDateString()])->get()->keyBy(fn($presence) => $presence->date->toDateString());
-        $signalements = $enseignant->signalements()->whereDate('date', '<=', $fin->toDateString())->get();
-        $result = ['enseignant_id' => $enseignant->id, 'nom' => $enseignant->nom, 'tel' => $enseignant->tel, 'matricule' => $enseignant->matricule, 'specialite' => $enseignant->section, 'section' => $enseignant->section, 'nb_jours_retard' => 0, 'total_retard_minutes' => 0, 'nb_jours_anticipation' => 0, 'total_anticipation_minutes' => 0, 'nb_jours_absence' => 0, 'periodes_absence' => 0, 'periodes_presence' => 0, 'periodes_totales' => 0];
-        $joursAttendus = $joursValides = $joursPonctuels = 0;
-        for ($date = $debut->copy()->startOfDay(); $date->lte($fin) && !$horaires->estAVenir($date); $date->addDay()) {
-            // Enseignant : jours avec cours ; personnel administratif : journée
-            // de travail fixe, sans emploi du temps (voir HoraireAttendu).
-            $plage = $horaires->plage($enseignant, $date, $emplois);
-            if (! $plage) continue;
-            $presence = $presences->get($date->toDateString());
-            $signale = $signalements->contains(fn($item) => $item->couvre($date));
-            $joursAttendus++;
-            if ($signale || $presence?->heure_arrivee || $presence?->heure_depart) $joursValides++;
-            $periodes = max(1, (int) ceil($plage['minutes'] / 40));
-            $finPrevue = Carbon::parse($date->toDateString() . ' ' . $plage['heure_fin']);
-            $retard = $presence?->heure_arrivee ? ($retards->minutesDeRetard($enseignant, $presence) ?? 0) : 0;
-            $anticipation = $presence?->heure_depart ? max(0, (int) floor(($finPrevue->timestamp - $presence->heure_depart->timestamp) / 60)) : 0;
-            $absent = !$signale && (!$presence || (!$presence->heure_arrivee && !$presence->heure_depart));
-            if (!$absent && $retard === 0) $joursPonctuels++;
-            if ($retard > 0) {
-                $result['nb_jours_retard']++;
-                $result['total_retard_minutes'] += $retard;
-            }
-            if ($anticipation > 0) {
-                $result['nb_jours_anticipation']++;
-                $result['total_anticipation_minutes'] += $anticipation;
-            }
-            if ($absent) {
-                $result['nb_jours_absence']++;
-                $result['periodes_absence'] += $periodes;
-            } else {
-                $result['periodes_presence'] += (int) ceil($anticipation / 40);
-            }
-        }
-        $result['periodes_totales'] = $result['periodes_presence'] + $result['periodes_absence'];
-        $result['taux_assiduite'] = $joursAttendus > 0 ? round($joursValides / $joursAttendus * 100, 1) : 0;
-
-        return [...$result, ...$ponctualite->calculer($joursAttendus, $joursPonctuels, $result['total_retard_minutes'])];
     }
 
     private function periodeEtEnseignants(Request $request): array

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\EmploiDuTemps;
 use App\Models\PeriodeCours;
+use App\Services\GrilleHoraire;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
@@ -22,9 +23,20 @@ class PeriodeCoursController extends Controller
      * déroulantes d'un établissement déjà en service ne se vident pas à la
      * mise à jour.
      */
-    public function index()
+    public function index(Request $request)
     {
-        return response()->json(['data' => PeriodeCours::grille()->values()]);
+        $type = $request->query('type', 'cours');
+
+        $periodes = match ($type) {
+            // Les pauses (récréation, midi) sont des plages de la journée,
+            // pas des périodes : elles ne se proposent pas à la saisie d'un
+            // créneau et ne se comptent pas comme des périodes à rattraper.
+            'pause' => PeriodeCours::pauses(),
+            'tout' => PeriodeCours::orderBy('heure_debut')->get(),
+            default => PeriodeCours::grille(),
+        };
+
+        return response()->json(['data' => $periodes->values()]);
     }
 
     public function store(Request $request)
@@ -32,7 +44,10 @@ class PeriodeCoursController extends Controller
         $data = $this->validated($request);
         $this->assertPlageLibre($data);
 
-        return response()->json(PeriodeCours::create($data), 201);
+        $periode = PeriodeCours::create($data);
+        GrilleHoraire::oublierPauses();
+
+        return response()->json($periode, 201);
     }
 
     public function show(PeriodeCours $periodeCour)
@@ -46,6 +61,7 @@ class PeriodeCoursController extends Controller
         $this->assertPlageLibre($data, $periodeCour->id);
 
         $periodeCour->update($data);
+        GrilleHoraire::oublierPauses();
 
         return response()->json($periodeCour);
     }
@@ -74,6 +90,7 @@ class PeriodeCoursController extends Controller
         }
 
         $periodeCour->delete();
+        GrilleHoraire::oublierPauses();
 
         return response()->json(status: 204);
     }
@@ -82,12 +99,25 @@ class PeriodeCoursController extends Controller
     {
         $rule = $ignoreId ? 'sometimes' : 'required';
 
-        return $request->validate([
-            'ordre' => [$rule, 'integer', 'between:1,99'],
+        $data = $request->validate([
+            'ordre' => ['nullable', 'integer', 'between:1,99'],
             'libelle' => ['nullable', 'string', 'max:60'],
+            'est_pause' => ['nullable', 'boolean'],
             'heure_debut' => [$rule, 'date_format:H:i'],
             'heure_fin' => [$rule, 'date_format:H:i', 'after:heure_debut'],
         ]);
+
+        // L'ordre d'une pause n'a pas de sens pour qui la saisit : elle se
+        // range à l'heure. On le renseigne donc plutôt que de l'exiger.
+        if (! $ignoreId && ($data['ordre'] ?? null) === null) {
+            $data['ordre'] = min(99, (int) PeriodeCours::max('ordre') + 1);
+        }
+
+        if (array_key_exists('ordre', $data) && $data['ordre'] === null) {
+            unset($data['ordre']);
+        }
+
+        return $data;
     }
 
     /**

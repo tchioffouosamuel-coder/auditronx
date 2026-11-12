@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/admin_api_client.dart';
+import '../../services/offline/offline_cache.dart';
 import '../../widgets/admin/admin_crud_screen.dart';
 import '../../widgets/admin/admin_field_spec.dart';
 import '../../widgets/admin/spreadsheet_actions.dart';
@@ -20,40 +21,151 @@ String plageAffichee(dynamic debut, dynamic fin) =>
     '${heureAffichee(debut)}–${heureAffichee(fin)}';
 
 /// Durée d'une période, en minutes — même convention que le calcul des
-/// périodes à rattraper côté API (BilanIndividuel, RetardsController) et que
+/// périodes à rattraper côté API (GrilleHoraire, BilanIndividuel) et que
 /// `ConfigurationPage.jsx` côté web.
 const int dureePeriodeMinutes = 40;
 
-/// Heure de fin à partir d'une heure de début (« HH:MM ») et d'un nombre de
-/// périodes : évite de saisir une fin incohérente avec le début.
-String finApresPeriodes(String? heureDebut, String? nombrePeriodes) {
-  final parts = heureDebut?.split(':');
-  final nb = int.tryParse(nombrePeriodes ?? '');
-  if (parts == null || parts.length < 2 || nb == null || nb < 1) return '';
+/// « 08:10 » -> 490 minutes depuis minuit ; `null` si l'heure n'en est pas
+/// une (champ vide, valeur abîmée) — une heure illisible prise pour minuit
+/// transformerait une pause en plage géante.
+int? _enMinutesOuNull(dynamic heure) {
+  final parts = heureMinute(heure).split(':');
+  if (parts.length < 2) return null;
   final h = int.tryParse(parts[0]);
   final m = int.tryParse(parts[1]);
-  if (h == null || m == null) return '';
-
-  final total = h * 60 + m + nb * dureePeriodeMinutes;
-  final heure = (total ~/ 60) % 24;
-  final minute = total % 60;
-  return '${heure.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+  if (h == null || m == null || h > 23 || m > 59) return null;
+  return h * 60 + m;
 }
 
-/// Nombre de périodes entre deux heures (arrondi, minimum 1) — pour
+int _enMinutes(dynamic heure) => _enMinutesOuNull(heure) ?? 0;
+
+/// 490 -> « 08:10 ».
+String _enHeure(int minutes) {
+  final h = (minutes ~/ 60) % 24;
+  final m = minutes % 60;
+  return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+}
+
+/// Pauses de la journée (récréation, pause de midi), telles que
+/// l'établissement les a saisies dans Configuration. Une pause n'est pas une
+/// période : elle allonge un créneau sans le faire compter davantage, et
+/// c'est le serveur qui applique la même règle aux périodes à rattraper
+/// (`App\Services\GrilleHoraire`).
+///
+/// La grille est chargée une fois par session (et relue du cache hors ligne)
+/// : les calculs de formulaire sont synchrones, ils ne peuvent pas attendre
+/// une requête à chaque frappe.
+class GrillePauses {
+  GrillePauses._();
+
+  /// Couples [début, fin] en minutes depuis minuit, triés.
+  static List<List<int>> _plages = const [];
+
+  static List<List<int>> get plages => _plages;
+
+  static void definir(List<dynamic> items) {
+    final plages = <List<int>>[];
+    for (final raw in items) {
+      if (raw is! Map) continue;
+      final debut = _enMinutesOuNull(raw['heure_debut']);
+      final fin = _enMinutesOuNull(raw['heure_fin']);
+      if (debut != null && fin != null && fin > debut) plages.add([debut, fin]);
+    }
+    plages.sort((a, b) => a.first.compareTo(b.first));
+    _plages = plages;
+  }
+
+  /// Relit la grille des pauses : au cache hors ligne d'abord, au serveur
+  /// ensuite. Un échec laisse la liste en l'état — un formulaire sans pause
+  /// connue reste utilisable, il calcule seulement sans les enjamber.
+  static Future<void> charger() async {
+    try {
+      final data = await OfflineCache.instance.readThrough(
+        cacheKey,
+        () => AdminApiClient.instance.getAllPages(endpoint),
+      );
+      if (data is Map && data['data'] is List) {
+        definir(data['data'] as List);
+      } else if (data is List) {
+        definir(data);
+      }
+    } catch (_) {
+      // Hors ligne et sans cache : on garde la dernière grille connue.
+    }
+  }
+
+  static const String endpoint = '/periodes-cours?type=pause';
+  static const String cacheKey = 'admin_pauses';
+
+  /// Après une modification des pauses (Configuration) : [charger] passe par
+  /// le réseau en premier et réécrit le cache.
+  static Future<void> rafraichir() => charger();
+}
+
+/// Minutes d'une plage, pauses déduites.
+int minutesHorsPause(dynamic heureDebut, dynamic heureFin) {
+  final debut = _enMinutes(heureDebut);
+  final fin = _enMinutes(heureFin);
+  if (fin <= debut) return 0;
+
+  var pause = 0;
+  for (final plage in GrillePauses.plages) {
+    final chevauchement =
+        (fin < plage[1] ? fin : plage[1]) -
+        (debut > plage[0] ? debut : plage[0]);
+    if (chevauchement > 0) pause += chevauchement;
+  }
+  final reste = fin - debut - pause;
+  return reste < 0 ? 0 : reste;
+}
+
+/// Heure de fin à partir d'une heure de début (« HH:MM ») et d'un nombre de
+/// périodes : évite de saisir une fin incohérente avec le début. Les pauses
+/// rencontrées en chemin sont enjambées — elles repoussent la fin sans
+/// compter pour une période.
+String finApresPeriodes(String? heureDebut, String? nombrePeriodes) {
+  final parts = heureMinute(heureDebut).split(':');
+  final nb = int.tryParse(nombrePeriodes ?? '');
+  if (parts.length < 2 || nb == null || nb < 1) return '';
+  if (int.tryParse(parts[0]) == null || int.tryParse(parts[1]) == null) {
+    return '';
+  }
+
+  var courant = _enMinutes(heureDebut);
+  var restant = nb * dureePeriodeMinutes;
+  final pauses = GrillePauses.plages;
+
+  // Une pause par tour au plus : la boucle ne peut pas s'emballer sur une
+  // grille mal saisie.
+  for (var tour = 0; tour <= pauses.length; tour++) {
+    List<int>? prochaine;
+    for (final plage in pauses) {
+      if (plage[1] > courant &&
+          plage[0] >= courant &&
+          plage[0] < courant + restant) {
+        prochaine = plage;
+        break;
+      }
+      // Plage commencée pendant une pause : elle reprend à la fin de celle-ci.
+      if (plage[0] <= courant && plage[1] > courant) {
+        prochaine = [courant, plage[1]];
+        break;
+      }
+    }
+    if (prochaine == null) break;
+    restant -= prochaine[0] - courant;
+    courant = prochaine[1];
+  }
+
+  return _enHeure(courant + (restant < 0 ? 0 : restant));
+}
+
+/// Nombre de périodes d'une plage (minimum 1), pauses déduites — pour
 /// pré-remplir le formulaire en édition.
 String nombrePeriodesEntre(dynamic heureDebut, dynamic heureFin) {
-  final debut = heureMinute(heureDebut).split(':');
-  final fin = heureMinute(heureFin).split(':');
-  if (debut.length < 2 || fin.length < 2) return '1';
-  final h1 = int.tryParse(debut[0]);
-  final m1 = int.tryParse(debut[1]);
-  final h2 = int.tryParse(fin[0]);
-  final m2 = int.tryParse(fin[1]);
-  if (h1 == null || m1 == null || h2 == null || m2 == null) return '1';
-
-  final diff = (h2 * 60 + m2) - (h1 * 60 + m1);
-  final nb = (diff / dureePeriodeMinutes).round();
+  final minutes = minutesHorsPause(heureDebut, heureFin);
+  if (minutes <= 0) return '1';
+  final nb = (minutes / dureePeriodeMinutes).ceil();
   return (nb < 1 ? 1 : nb).toString();
 }
 
@@ -66,8 +178,22 @@ String nombrePeriodesEntre(dynamic heureDebut, dynamic heureFin) {
 /// séance en cause, affiché par [AdminCrudScreen] via un SnackBar). L'onglet
 /// « Chevauchements » montre ceux qui sont déjà en base — un import Excel ou
 /// des données antérieures à ce contrôle en laissent passer.
-class AdminEmploisScreen extends StatelessWidget {
+class AdminEmploisScreen extends StatefulWidget {
   const AdminEmploisScreen({super.key});
+
+  @override
+  State<AdminEmploisScreen> createState() => _AdminEmploisScreenState();
+}
+
+class _AdminEmploisScreenState extends State<AdminEmploisScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // La grille des pauses décide de l'heure de fin déduite d'un nombre de
+    // périodes : on la relit à l'ouverture de l'écran, pour que le
+    // formulaire suive une reconfiguration faite entre-temps.
+    GrillePauses.charger();
+  }
 
   static const List<AdminFieldOption> _jours = [
     AdminFieldOption(1, 'Lundi'),
@@ -108,29 +234,36 @@ class AdminEmploisScreen extends StatelessWidget {
       required: true,
       options: _jours,
     ),
-    // Une période est un couple début/fin, configuré par l'établissement
-    // (menu Configuration). `expandValue` renseigne les deux clés attendues
-    // par l'API à partir du seul choix de l'utilisateur.
-    AdminFieldSpec(
-      key: 'periode',
-      label: 'Période de cours',
-      type: AdminFieldType.select,
+    // Un créneau se saisit comme il se pense : à quelle heure il commence
+    // et combien de périodes il dure. L'heure de fin s'en déduit — la
+    // choisir à part laissait composer des créneaux impossibles (début
+    // 15h30, fin 08h10) — et les pauses de la journée sont enjambées : une
+    // récréation repousse la fin sans compter pour une période.
+    const AdminFieldSpec(
+      key: 'heure_debut',
+      label: 'Heure de début',
+      type: AdminFieldType.time,
       required: true,
-      optionsEndpoint: '/periodes-cours',
-      optionValue: (item) =>
-          '${heureMinute(item['heure_debut'])}|${heureMinute(item['heure_fin'])}',
-      optionLabel: (item) =>
-          item['libelle_complet']?.toString() ??
-          plageAffichee(item['heure_debut'], item['heure_fin']),
+      helperText: 'Début de la première période du créneau.',
+    ),
+    AdminFieldSpec(
+      key: 'nombre_periodes',
+      label: 'Nombre de périodes',
+      type: AdminFieldType.number,
+      required: true,
+      defaultValue: 1,
+      helperText: 'Une période dure $dureePeriodeMinutes minutes, pauses non comprises.',
       valueFrom: (item) =>
-          '${heureMinute(item['heure_debut'])}|${heureMinute(item['heure_fin'])}',
-      expandValue: (value) {
-        final parts = value.toString().split('|');
-        return {
-          'heure_debut': parts.first,
-          'heure_fin': parts.length > 1 ? parts[1] : parts.first,
-        };
-      },
+          nombrePeriodesEntre(item['heure_debut'], item['heure_fin']),
+    ),
+    AdminFieldSpec(
+      key: 'heure_fin',
+      label: 'Heure de fin',
+      type: AdminFieldType.time,
+      required: true,
+      recomputeFrom: const ['heure_debut', 'nombre_periodes'],
+      compute: (valeurs) =>
+          finApresPeriodes(valeurs['heure_debut'], valeurs['nombre_periodes']),
     ),
     const AdminFieldSpec(key: 'salle', label: 'Salle'),
     const AdminFieldSpec(key: 'type_cours', label: 'Type de cours'),

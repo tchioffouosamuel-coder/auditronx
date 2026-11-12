@@ -4,6 +4,7 @@ import SearchSelect from '../components/SearchSelect'
 import api from '../lib/api'
 import fetchAllPages from '../lib/fetchAllPages'
 import { confirmAction, notify } from '../lib/swal'
+import { definirPauses } from '../lib/grilleHoraire'
 import { JOURS, finApresPeriodes, nomJour, nombrePeriodesEntre, toHeureAffichee, toHeureMinute } from './EmploisPage'
 
 /** Messages de validation Laravel aplatis en une phrase. */
@@ -207,7 +208,8 @@ function PeriodesCours() {
       <h2 className="text-sm font-medium text-ink-900">Périodes de cours</h2>
       <p className="mt-1 mb-4 text-sm text-ink-500">
         La grille horaire de l’établissement. Chaque période est un couple début/fin : c’est cette liste qui est
-        proposée à la saisie d’un emploi du temps.
+        proposée à la saisie d’un emploi du temps. Les pauses (récréation, midi) se saisissent dans l’onglet voisin :
+        ce ne sont pas des périodes.
       </p>
 
       {loading ? (
@@ -270,7 +272,7 @@ function PeriodesCours() {
         <label className="text-sm">
           <span className="mb-1 block text-ink-700">Libellé</span>
           <input
-            placeholder="P1, Récréation…"
+            placeholder="P1, P2…"
             value={form.libelle}
             onChange={(e) => setForm((f) => ({ ...f, libelle: e.target.value }))}
             className="field w-40 py-2"
@@ -307,6 +309,180 @@ function PeriodesCours() {
           disabled={saving || !form.heure_debut}
           className="btn-primary"
         >
+          {edition ? 'Modifier' : 'Ajouter'}
+        </button>
+        {edition && (
+          <button type="button" onClick={reinitialiser} className="btn-ghost">
+            Annuler
+          </button>
+        )}
+      </form>
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Pauses                                                                      */
+/* -------------------------------------------------------------------------- */
+
+const PAUSE_VIDE = { libelle: '', heure_debut: '', heure_fin: '' }
+
+/**
+ * Pauses de la journée : récréation, pause de midi. Ce ne sont pas des
+ * périodes — elles ne se proposent pas à la saisie d'un créneau, un créneau
+ * les enjambe sans qu'elles comptent pour une période, et une absence ne les
+ * fait pas rattraper (voir `App\Services\GrilleHoraire` côté serveur).
+ */
+function Pauses() {
+  const [pauses, setPauses] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [form, setForm] = useState(PAUSE_VIDE)
+  const [edition, setEdition] = useState(null)
+  const [saving, setSaving] = useState(false)
+
+  const charger = useCallback(async () => {
+    setLoading(true)
+    try {
+      const { data } = await api.get('/periodes-cours', { params: { type: 'pause' } })
+      const liste = data.data ?? []
+      setPauses(liste)
+      // Les calculs d'heure de fin lisent cette grille : elle suit la saisie
+      // sans attendre un rechargement de la page.
+      definirPauses(liste)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    charger()
+  }, [charger])
+
+  function reinitialiser() {
+    setForm(PAUSE_VIDE)
+    setEdition(null)
+  }
+
+  function modifier(pause) {
+    setEdition(pause.id)
+    setForm({
+      libelle: pause.libelle ?? '',
+      heure_debut: toHeureMinute(pause.heure_debut),
+      heure_fin: toHeureMinute(pause.heure_fin),
+    })
+  }
+
+  async function enregistrer(e) {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      const corps = { ...form, est_pause: true }
+      if (edition) {
+        await api.put(`/periodes-cours/${edition}`, corps)
+      } else {
+        await api.post('/periodes-cours', corps)
+      }
+      reinitialiser()
+      await charger()
+    } catch (error) {
+      notify(messageErreur(error, "L'enregistrement a échoué."), { icon: 'error' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function supprimer(pause) {
+    const libelle = pause.libelle || toHeureAffichee(pause.heure_debut)
+    if (!(await confirmAction(`Supprimer la pause ${libelle} ?`, { confirmText: 'Supprimer' }))) return
+    try {
+      await api.delete(`/periodes-cours/${pause.id}`)
+      await charger()
+    } catch (error) {
+      notify(messageErreur(error, 'La suppression a échoué.'), { icon: 'error' })
+    }
+  }
+
+  return (
+    <div className={CARTE}>
+      <h2 className="text-sm font-medium text-ink-900">Pauses</h2>
+      <p className="mt-1 mb-4 text-sm text-ink-500">
+        Récréation, pause de midi… Une pause n’est pas une période : un créneau qui l’enjambe dure plus longtemps sans
+        compter une période de plus, et elle ne se rattrape pas.
+      </p>
+
+      {loading ? (
+        <LoadingState />
+      ) : (
+        <div className="mb-4 overflow-x-auto">
+          <table className="w-full min-w-[28rem] text-sm">
+            <thead>
+              <tr className="border-b border-ink-100 text-left text-xs tracking-wide text-ink-500 uppercase">
+                <th className="py-2 pr-3">Libellé</th>
+                <th className="py-2 pr-3">Début</th>
+                <th className="py-2 pr-3">Fin</th>
+                <th className="py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {pauses.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="py-3 text-sm text-ink-500">
+                    Aucune pause configurée. Ajoutez-en ci-dessous.
+                  </td>
+                </tr>
+              ) : (
+                pauses.map((pause) => (
+                  <tr key={pause.id} className="border-b border-ink-50">
+                    <td className="py-2 pr-3 text-ink-900">{pause.libelle || '—'}</td>
+                    <td className="py-2 pr-3 text-ink-700">{toHeureAffichee(pause.heure_debut)}</td>
+                    <td className="py-2 pr-3 text-ink-700">{toHeureAffichee(pause.heure_fin)}</td>
+                    <td className="py-2 text-right whitespace-nowrap">
+                      <button onClick={() => modifier(pause)} className="mr-3 text-ink-500 hover:text-ink-900">
+                        Éditer
+                      </button>
+                      <button onClick={() => supprimer(pause)} className="text-red-500 hover:text-red-700">
+                        Suppr.
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <form onSubmit={enregistrer} className="flex flex-wrap items-end gap-3 border-t border-ink-100 pt-4">
+        <label className="text-sm">
+          <span className="mb-1 block text-ink-700">Libellé</span>
+          <input
+            placeholder="Récréation, Pause de midi…"
+            value={form.libelle}
+            onChange={(e) => setForm((f) => ({ ...f, libelle: e.target.value }))}
+            className="field w-48 py-2"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-ink-700">Début</span>
+          <input
+            type="time"
+            required
+            value={form.heure_debut}
+            onChange={(e) => setForm((f) => ({ ...f, heure_debut: e.target.value }))}
+            className="field py-2"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-ink-700">Fin</span>
+          <input
+            type="time"
+            required
+            value={form.heure_fin}
+            onChange={(e) => setForm((f) => ({ ...f, heure_fin: e.target.value }))}
+            className="field py-2"
+          />
+        </label>
+        <button type="submit" disabled={saving || !form.heure_debut || !form.heure_fin} className="btn-primary">
           {edition ? 'Modifier' : 'Ajouter'}
         </button>
         {edition && (
@@ -570,13 +746,47 @@ function EnteteEtablissement() {
   const [valeurs, setValeurs] = useState(ENTETE_VIDE)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  // Le logo ne se saisit pas comme une ligne de texte : il s'envoie seul, et
+  // prend effet sans attendre l'enregistrement du reste de l'en-tête.
+  const [logoUrl, setLogoUrl] = useState(null)
+  const [logoEnCours, setLogoEnCours] = useState(false)
 
   useEffect(() => {
     api.get('/parametres/entete-etablissement').then(({ data }) => {
       setValeurs({ ...ENTETE_VIDE, ...data })
+      setLogoUrl(data.logo_url ?? null)
       setLoading(false)
     })
   }, [])
+
+  async function envoyerLogo(fichier) {
+    if (!fichier) return
+    setLogoEnCours(true)
+    try {
+      const corps = new FormData()
+      corps.append('logo', fichier)
+      const { data } = await api.post('/parametres/entete-etablissement/logo', corps)
+      setLogoUrl(data.logo_url ?? null)
+      notify('Logo enregistré.', { icon: 'success' })
+    } catch (error) {
+      notify(messageErreur(error, "L'envoi du logo a échoué."), { icon: 'error' })
+    } finally {
+      setLogoEnCours(false)
+    }
+  }
+
+  async function retirerLogo() {
+    if (!(await confirmAction('Retirer le logo des documents ?', { confirmText: 'Retirer' }))) return
+    setLogoEnCours(true)
+    try {
+      await api.delete('/parametres/entete-etablissement/logo')
+      setLogoUrl(null)
+    } catch (error) {
+      notify(messageErreur(error, 'La suppression a échoué.'), { icon: 'error' })
+    } finally {
+      setLogoEnCours(false)
+    }
+  }
 
   function definir(cle, valeur) {
     setValeurs((actuelles) => ({ ...actuelles, [cle]: valeur }))
@@ -615,17 +825,20 @@ function EnteteEtablissement() {
 
       {/* Aperçu : évite d'exporter un document pour vérifier une saisie. */}
       <div className="mb-6 rounded-lg bg-ink-50 p-4 text-center text-[11px] leading-snug text-ink-900">
-        {gauche.length === 0 && droite.length === 0 ? (
+        {gauche.length === 0 && droite.length === 0 && !logoUrl ? (
           <p className="text-ink-500">
             Aucun en-tête : les documents commenceront directement par leur titre.
           </p>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
               <div>
                 {gauche.map((ligne) => (
                   <div key={ligne}>{ligne}</div>
                 ))}
+              </div>
+              <div>
+                {logoUrl && <img src={logoUrl} alt="Logo de l’établissement" className="mx-auto h-12 w-auto" />}
               </div>
               <div>
                 {droite.map((ligne) => (
@@ -663,6 +876,42 @@ function EnteteEtablissement() {
         ))}
       </div>
 
+      <fieldset className="mt-2 mb-4">
+        <legend className="mb-2 text-xs font-semibold tracking-wide text-brand-700 uppercase">Logo</legend>
+        <p className="mb-2 text-sm text-ink-500">
+          Imprimé au centre de l’en-tête, entre les deux colonnes. PNG, JPG ou WebP, 2 Mo au plus.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          {logoUrl && (
+            <img
+              src={logoUrl}
+              alt="Logo de l’établissement"
+              className="h-16 w-auto rounded border border-ink-100 bg-white p-1"
+            />
+          )}
+          <label className="btn-secondary cursor-pointer">
+            {logoUrl ? 'Remplacer le logo' : 'Choisir un logo'}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              disabled={logoEnCours}
+              className="hidden"
+              onChange={(e) => {
+                envoyerLogo(e.target.files?.[0])
+                // Le même fichier rechoisi doit relancer l'envoi.
+                e.target.value = ''
+              }}
+            />
+          </label>
+          {logoUrl && (
+            <button type="button" onClick={retirerLogo} disabled={logoEnCours} className="btn-ghost text-red-600">
+              Retirer
+            </button>
+          )}
+          {logoEnCours && <span className="text-sm text-ink-500">Envoi…</span>}
+        </div>
+      </fieldset>
+
       <label className="mt-2 block max-w-xl text-sm">
         <span className="mb-1 block text-ink-700">Ligne de contact</span>
         <input
@@ -689,6 +938,7 @@ export default function ConfigurationPage() {
 
   const onglets = [
     ['periodes', 'Périodes de cours'],
+    ['pauses', 'Pauses'],
     ['speciaux', 'Emplois du temps spéciaux'],
     ['administratif', 'Horaires administratifs'],
     ['entete', 'En-tête de l’établissement'],
@@ -713,6 +963,7 @@ export default function ConfigurationPage() {
       </div>
 
       {tab === 'periodes' && <PeriodesCours />}
+      {tab === 'pauses' && <Pauses />}
       {tab === 'speciaux' && <EmploisSpeciaux />}
       {tab === 'administratif' && <HorairesAdministratifs />}
       {tab === 'entete' && <EnteteEtablissement />}

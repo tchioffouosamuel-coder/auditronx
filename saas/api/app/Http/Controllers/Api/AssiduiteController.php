@@ -7,6 +7,7 @@ use App\Http\Controllers\Traits\AccessibleEnseignants;
 use App\Models\Enseignant;
 use App\Models\Presence;
 use App\Services\AssiduiteCalculator;
+use App\Services\BilanCumule;
 use App\Services\EnteteEtablissement;
 use App\Services\HoraireAttendu;
 use App\Services\WordWriter;
@@ -205,68 +206,168 @@ class AssiduiteController extends Controller
         return response()->json($this->moisParSection($request, $assiduite, $horaires));
     }
 
-    /** GET /api/assiduite/bilan-mensuel/word?mois=&categorie=&section= */
-    public function bilanMensuelWord(Request $request, AssiduiteCalculator $assiduite, HoraireAttendu $horaires)
+    /**
+     * Les trois bilans mensuels. Le bilan global réunit l'assiduité et la
+     * ponctualité en un seul document — c'est celui que la direction présente
+     * en conseil ; les deux autres n'en gardent qu'un volet, pour les
+     * réunions où le second n'a pas à circuler.
+     */
+    private const VOLETS = [
+        'global' => 'Bilan mensuel d’assiduité et de ponctualité',
+        'assiduite' => 'Bilan mensuel d’assiduité',
+        'ponctualite' => 'Bilan mensuel de ponctualité',
+    ];
+
+    /** GET /api/assiduite/bilan-mensuel/word?mois=&categorie=&section=&volet=global|assiduite|ponctualite */
+    public function bilanMensuelWord(Request $request, AssiduiteCalculator $assiduite, HoraireAttendu $horaires, BilanCumule $bilans)
     {
         $categorie = $this->categorieObligatoire($request);
-        $bilan = $this->moisParSection($request, $assiduite, $horaires);
+        $volet = $this->voletDemande($request);
+        $bilan = $this->bilanDuMois($request, $assiduite, $horaires, $bilans, $volet);
 
         $document = (new WordWriter)
             ->enteteEtablissement(app(EnteteEtablissement::class)->colonnes())
-            ->titre('Bilan mensuel d’assiduité')
+            ->titre(self::VOLETS[$volet])
             ->sousTitre(self::LIBELLES_CATEGORIE[$categorie].' — '.$bilan['libelle']);
 
-        foreach ($bilan['sections'] as $section) {
+        if ($volet !== 'ponctualite') {
+            foreach ($bilan['sections'] as $section) {
+                $document
+                    ->intertitre($section['section'].' — '.$section['effectif'].' personne'
+                        .($section['effectif'] > 1 ? 's' : '').' · taux moyen '.$section['taux_assiduite'].' %')
+                    ->tableau(
+                        ['Personnel', 'Matricule', 'Fonction', 'Jours attendus', 'Jours assurés', 'Signalements', 'Taux'],
+                        array_map(fn (array $ligne) => [
+                            $ligne['nom'],
+                            $ligne['matricule'] ?? '—',
+                            $ligne['fonction'] ?? '—',
+                            $ligne['jours_attendus'],
+                            $ligne['jours_presents'],
+                            $ligne['jours_signales'],
+                            $ligne['taux_assiduite'].' %',
+                        ], $section['lignes']),
+                        [26, 14, 20, 11, 11, 10, 8],
+                    );
+            }
+
             $document
-                ->intertitre($section['section'].' — '.$section['effectif'].' personne'
-                    .($section['effectif'] > 1 ? 's' : '').' · taux moyen '.$section['taux_assiduite'].' %')
+                ->intertitre('Synthèse par section')
                 ->tableau(
-                    ['Personnel', 'Matricule', 'Fonction', 'Jours attendus', 'Jours assurés', 'Signalements', 'Taux'],
-                    array_map(fn (array $ligne) => [
-                        $ligne['nom'],
-                        $ligne['matricule'] ?? '—',
-                        $ligne['fonction'] ?? '—',
-                        $ligne['jours_attendus'],
-                        $ligne['jours_presents'],
-                        $ligne['jours_signales'],
-                        $ligne['taux_assiduite'].' %',
-                    ], $section['lignes']),
-                    [26, 14, 20, 11, 11, 10, 8],
+                    ['Section', 'Effectif', 'Jours attendus', 'Jours assurés', 'Taux'],
+                    array_merge(
+                        array_map(fn (array $section) => [
+                            $section['section'],
+                            $section['effectif'],
+                            $section['jours_attendus'],
+                            $section['jours_presents'],
+                            $section['taux_assiduite'].' %',
+                        ], $bilan['sections']),
+                        [[
+                            'TOTAL',
+                            $bilan['total']['effectif'],
+                            $bilan['total']['jours_attendus'],
+                            $bilan['total']['jours_presents'],
+                            $bilan['total']['taux_assiduite'].' %',
+                        ]],
+                    ),
+                    [34, 14, 18, 18, 16],
                 );
         }
 
-        $document
-            ->intertitre('Synthèse par section')
-            ->tableau(
-                ['Section', 'Effectif', 'Jours attendus', 'Jours assurés', 'Taux'],
-                array_merge(
-                    array_map(fn (array $section) => [
-                        $section['section'],
-                        $section['effectif'],
-                        $section['jours_attendus'],
-                        $section['jours_presents'],
-                        $section['taux_assiduite'].' %',
-                    ], $bilan['sections']),
-                    [[
-                        'TOTAL',
-                        $bilan['total']['effectif'],
-                        $bilan['total']['jours_attendus'],
-                        $bilan['total']['jours_presents'],
-                        $bilan['total']['taux_assiduite'].' %',
-                    ]],
-                ),
-                [34, 14, 18, 18, 16],
-            );
+        if ($volet !== 'assiduite') {
+            $document
+                ->intertitre('Classement de ponctualité')
+                ->tableau(
+                    ['Rang', 'Personnel', 'Matricule', 'Section', 'Jours prévus', 'Jours ponctuels', 'Retards', 'Minutes', 'Taux', 'Score'],
+                    array_map(fn (int $rang, array $ligne) => [
+                        $rang + 1,
+                        $ligne['nom'],
+                        $ligne['matricule'] ?? '—',
+                        $ligne['section'] ?? '—',
+                        $ligne['jours_prevus'],
+                        $ligne['jours_ponctuels'],
+                        $ligne['nb_jours_retard'],
+                        $ligne['total_retard_minutes'],
+                        $ligne['taux_ponctualite'].' %',
+                        $ligne['score_ponctualite'],
+                    ], array_keys($bilan['ponctualite']), $bilan['ponctualite']),
+                    [6, 22, 12, 14, 9, 10, 8, 8, 8, 8],
+                )
+                ->paragraphe(
+                    'Le score pondère le taux de ponctualité par les minutes de retard cumulées : '
+                    .'à nombre de jours ponctuels égal, les retards les plus longs pèsent le plus.',
+                    ['couleur' => '555555'],
+                );
+        }
 
-        return $document->telecharger("bilan-mensuel-{$categorie}-{$bilan['mois']}.docx");
+        return $document->telecharger("bilan-mensuel-{$volet}-{$categorie}-{$bilan['mois']}.docx");
+    }
+
+    /** GET /api/assiduite/bilan-mensuel/pdf?mois=&categorie=&section=&volet=global|assiduite|ponctualite */
+    public function bilanMensuelPdf(Request $request, AssiduiteCalculator $assiduite, HoraireAttendu $horaires, BilanCumule $bilans)
+    {
+        $categorie = $this->categorieObligatoire($request);
+        $volet = $this->voletDemande($request);
+        $bilan = $this->bilanDuMois($request, $assiduite, $horaires, $bilans, $volet);
+
+        $pdf = Pdf::loadView('pdf.bilan-mensuel', [
+            'bilan' => $bilan,
+            'volet' => $volet,
+            'titre' => self::VOLETS[$volet],
+            'categorie' => self::LIBELLES_CATEGORIE[$categorie],
+        ])->setPaper('a4', $volet === 'assiduite' ? 'portrait' : 'landscape');
+
+        return $pdf->download("bilan-mensuel-{$volet}-{$categorie}-{$bilan['mois']}.pdf");
+    }
+
+    /** Volet demandé pour un bilan mensuel ; le bilan complet par défaut. */
+    private function voletDemande(Request $request): string
+    {
+        return $request->validate([
+            'volet' => ['nullable', 'in:'.implode(',', array_keys(self::VOLETS))],
+        ])['volet'] ?? 'global';
     }
 
     /**
-     * Bilan du mois demandé, regroupé par section.
+     * Données du bilan mensuel : l'assiduité par section, la ponctualité, ou
+     * les deux. Le volet non demandé n'est pas calculé — le classement de
+     * ponctualité relit chaque journée de chaque personne.
      *
-     * @return array{mois: string, libelle: string, categorie: string|null, sections: array, total: array}
+     * @return array{mois: string, libelle: string, categorie: string|null, sections: array, total: array, ponctualite: array}
      */
-    private function moisParSection(Request $request, AssiduiteCalculator $assiduite, HoraireAttendu $horaires): array
+    private function bilanDuMois(
+        Request $request,
+        AssiduiteCalculator $assiduite,
+        HoraireAttendu $horaires,
+        BilanCumule $bilans,
+        string $volet,
+    ): array {
+        $bilan = $volet === 'ponctualite'
+            ? ['mois' => '', 'libelle' => '', 'categorie' => null, 'sections' => [], 'total' => []]
+            : $this->moisParSection($request, $assiduite, $horaires);
+
+        if ($volet === 'assiduite') {
+            return [...$bilan, 'ponctualite' => []];
+        }
+
+        [$mois, $enseignants] = $this->moisEtPersonnel($request, $horaires);
+
+        return [
+            ...$bilan,
+            'mois' => $mois->format('Y-m'),
+            'libelle' => ucfirst($mois->locale('fr')->translatedFormat('F Y')),
+            'ponctualite' => $bilans->classement($enseignants, $mois->copy(), $mois->copy()->endOfMonth()),
+        ];
+    }
+
+    /**
+     * Mois demandé et personnel du périmètre, catégorie comprise — commun au
+     * bilan d'assiduité et au classement de ponctualité, pour que les deux
+     * volets d'un même document portent exactement sur les mêmes personnes.
+     *
+     * @return array{0: Carbon, 1: Collection<int, Enseignant>}
+     */
+    private function moisEtPersonnel(Request $request, HoraireAttendu $horaires): array
     {
         $mois = Carbon::parse($request->query('mois', now()->format('Y-m')).'-01')->startOfMonth();
         $debut = $mois->copy();
@@ -281,7 +382,20 @@ class AssiduiteController extends Controller
             ])
             ->orderBy('nom')
             ->get();
-        $enseignants = $this->filtrerParCategorie($enseignants, $request, $horaires);
+
+        return [$mois, $this->filtrerParCategorie($enseignants, $request, $horaires)];
+    }
+
+    /**
+     * Bilan du mois demandé, regroupé par section.
+     *
+     * @return array{mois: string, libelle: string, categorie: string|null, sections: array, total: array}
+     */
+    private function moisParSection(Request $request, AssiduiteCalculator $assiduite, HoraireAttendu $horaires): array
+    {
+        [$mois, $enseignants] = $this->moisEtPersonnel($request, $horaires);
+        $debut = $mois->copy();
+        $fin = $mois->copy()->endOfMonth();
 
         $sections = $enseignants
             ->map(fn (Enseignant $enseignant) => [

@@ -88,19 +88,7 @@
 </head>
 
 <body>
-    <table style="border:none;margin-bottom:8px">
-        <tr>
-            <td style="border:none;width:40%;text-align:center;font-size:8px">REPUBLIQUE DU CAMEROUN<br>Paix - Travail -
-                Patrie<br>LYCEE TECHNIQUE DE MEIGANGA</td>
-            <td style="border:none;width:20%;text-align:center">
-                <?php if(file_exists(public_path('logo.png'))): ?>
-                    <img src="<?php echo e(public_path('logo.png')); ?>" alt="Logo" style="height:40px">
-                <?php endif; ?>
-            </td>
-            <td style="border:none;width:40%;text-align:center;font-size:8px">REPUBLIC OF CAMEROON<br>Peace - Work -
-                Fatherland<br>G.T.H.S MEIGANGA</td>
-        </tr>
-    </table>
+    <?php echo $__env->make('pdf.partials.entete', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
     <h1>Bilan mensuel d'assiduité et de
         ponctualité<br><?php echo e(\Carbon\Carbon::createFromFormat('m', $mois)->locale('fr')->translatedFormat('F')); ?>
 
@@ -128,6 +116,10 @@
                     <th colspan="2" class="absence-col">ABSENCES</th>
                     <th rowspan="2" class="total-col" style="width:7%">TOTAL<br>Périodes</th>
                     <th rowspan="2" class="assiduite-col">Taux<br>d'assiduité</th>
+                    <th rowspan="2" class="assiduite-col">Taux<br>ponctualité</th>
+                    <?php if(!empty($classement)): ?>
+                        <th rowspan="2" class="assiduite-col">Rang</th>
+                    <?php endif; ?>
                 </tr>
                 <tr>
                     <th class="retard-col">Jours</th>
@@ -159,6 +151,10 @@
                         <td class="absence-col bold"><?php echo e($ens['periodes_absence']); ?></td>
                         <td class="total-col"><?php echo e($ens['periodes_totales']); ?></td>
                         <td class="assiduite-col"><?php echo e(number_format($ens['taux_assiduite'], 1)); ?>%</td>
+                        <td class="assiduite-col"><?php echo e(number_format($ens['taux_ponctualite'], 1)); ?>%</td>
+                        <?php if(!empty($classement)): ?>
+                            <td class="assiduite-col"><?php echo e($loop->iteration); ?></td>
+                        <?php endif; ?>
                     </tr>
                 <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
             </tbody>
@@ -181,6 +177,10 @@
 
                     </td>
                     <td class="assiduite-col"></td>
+                    <td class="assiduite-col"></td>
+                    <?php if(!empty($classement)): ?>
+                        <td class="assiduite-col"></td>
+                    <?php endif; ?>
                 </tr>
             </tfoot>
         </table>
@@ -189,8 +189,10 @@
             &nbsp; <span style="background:#cfe2ff;padding:2px 4px;border:1px solid #000">ANTICIPATIONS</span> = Départ
             anticipé &nbsp; <span style="background:#f8d7da;padding:2px 4px;border:1px solid #000">ABSENCES</span> =
             Absence complète &nbsp; <strong>Pér.</strong> = Périodes de 40 min à rattraper</div>
-        <p style="font-size:7px"><strong>NOTE:</strong> Classement par ordre alphabétique des noms. Les jours signalés
-            sont considérés comme valides pour le taux d'assiduité.</p>
+        <p style="font-size:7px"><strong>NOTE:</strong>
+            <?php echo e(!empty($classement) ? 'Classement par ordre décroissant du taux de ponctualité (départagé par un coefficient régressif sur les minutes de retard cumulées).' : 'Classement par ordre alphabétique des noms.'); ?>
+
+            Les jours signalés sont considérés comme valides pour le taux d'assiduité.</p>
     <?php endif; ?>
     <div style="margin-top:10px;text-align:right;font-size:8px">Fait à Meiganga, le
         <?php echo e(\Carbon\Carbon::now()->locale('fr')->translatedFormat('d F Y')); ?><br><br><br><br><strong>Le

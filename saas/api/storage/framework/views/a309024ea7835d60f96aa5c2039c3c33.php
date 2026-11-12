@@ -46,6 +46,7 @@
 </head>
 
 <body>
+    <?php echo $__env->make('pdf.partials.entete', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
     <h1>Enseignants sans aucune présence enregistrée</h1>
     <div class="date">Situation au <?php echo e($date->locale('fr')->translatedFormat('l d F Y')); ?></div>
     <?php if($enseignants->isEmpty()): ?>

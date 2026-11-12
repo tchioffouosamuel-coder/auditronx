@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\Parametre;
 use App\Tenancy\TenantManager;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * En-tête officiel de l'établissement (§4.2) — le bandeau bilingue qui coiffe
@@ -24,6 +26,18 @@ use App\Tenancy\TenantManager;
 class EnteteEtablissement
 {
     private const PREFIXE = 'entete.';
+
+    /**
+     * Disque et dossier du logo. `public_direct` écrit dans `public/` sans
+     * lien symbolique — `symlink()` est désactivé sur l'hébergement de
+     * production — et il est cloisonné par établissement (voir TenantManager).
+     */
+    public const LOGO_DISQUE = 'public_direct';
+
+    private const LOGO_DOSSIER = 'entete';
+
+    /** Formats acceptés pour le logo, et extension stockée pour chacun. */
+    public const LOGO_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp'];
 
     /**
      * Champs de l'en-tête et leur valeur par défaut, dans l'ordre d'affichage.
@@ -85,7 +99,78 @@ class EnteteEtablissement
             $valeurs['etablissement'] = (string) ($this->tenants->courant()?->nom ?? '');
         }
 
+        // Le logo n'est pas un champ texte : il s'envoie à part (multipart) et
+        // ne se lit ici que pour l'afficher dans les écrans de configuration.
+        $valeurs['logo_url'] = $this->logoUrl();
+
         return $valeurs;
+    }
+
+    /** Chemin relatif du logo sur le disque, ou null s'il n'y en a pas. */
+    public function logoChemin(): ?string
+    {
+        return Parametre::get(self::PREFIXE.'logo', '') ?: null;
+    }
+
+    /**
+     * Chemin absolu du logo, pour les documents générés (dompdf et Word
+     * lisent le fichier, pas une URL). Null si le fichier a disparu du disque.
+     */
+    public function logoFichier(): ?string
+    {
+        $chemin = $this->logoChemin();
+
+        if ($chemin === null || ! Storage::disk(self::LOGO_DISQUE)->exists($chemin)) {
+            return null;
+        }
+
+        return Storage::disk(self::LOGO_DISQUE)->path($chemin);
+    }
+
+    /** URL publique du logo, pour les écrans de configuration. */
+    public function logoUrl(): ?string
+    {
+        $chemin = $this->logoChemin();
+
+        if ($chemin === null || ! Storage::disk(self::LOGO_DISQUE)->exists($chemin)) {
+            return null;
+        }
+
+        // L'horodatage force le navigateur à relire le fichier après un
+        // remplacement : le nom, lui, ne change pas.
+        $version = Storage::disk(self::LOGO_DISQUE)->lastModified($chemin);
+
+        return Storage::disk(self::LOGO_DISQUE)->url($chemin).'?v='.$version;
+    }
+
+    /**
+     * Remplace le logo de l'établissement et renvoie son URL publique.
+     * L'ancien fichier est supprimé : un établissement n'a qu'un logo, et
+     * deux extensions différentes en laisseraient un orphelin.
+     */
+    public function definirLogo(UploadedFile $fichier): ?string
+    {
+        $this->supprimerLogo();
+
+        $extension = mb_strtolower($fichier->getClientOriginalExtension() ?: $fichier->extension());
+        $extension = in_array($extension, self::LOGO_EXTENSIONS, true) ? $extension : 'png';
+        $chemin = self::LOGO_DOSSIER.'/logo.'.$extension;
+
+        Storage::disk(self::LOGO_DISQUE)->put($chemin, (string) file_get_contents($fichier->getRealPath()));
+        Parametre::set(self::PREFIXE.'logo', $chemin);
+
+        return $this->logoUrl();
+    }
+
+    public function supprimerLogo(): void
+    {
+        $chemin = $this->logoChemin();
+
+        if ($chemin !== null) {
+            Storage::disk(self::LOGO_DISQUE)->delete($chemin);
+        }
+
+        Parametre::set(self::PREFIXE.'logo', '');
     }
 
     /**
@@ -110,7 +195,7 @@ class EnteteEtablissement
     /**
      * Les deux colonnes de l'en-tête, lignes vides retirées.
      *
-     * @return array{gauche: string[], droite: string[], contact: string}
+     * @return array{gauche: string[], droite: string[], contact: string, logo: string|null}
      */
     public function colonnes(): array
     {
@@ -124,6 +209,9 @@ class EnteteEtablissement
             'gauche' => $lignes(self::COLONNE_FRANCAISE),
             'droite' => $lignes(self::COLONNE_ANGLAISE),
             'contact' => $valeurs['contact'],
+            // Chemin sur disque : dompdf comme le générateur Word lisent le
+            // fichier, pas une URL.
+            'logo' => $this->logoFichier(),
         ];
     }
 
@@ -132,6 +220,6 @@ class EnteteEtablissement
     {
         $colonnes = $this->colonnes();
 
-        return $colonnes['gauche'] !== [] || $colonnes['droite'] !== [];
+        return $colonnes['gauche'] !== [] || $colonnes['droite'] !== [] || $colonnes['logo'] !== null;
     }
 }

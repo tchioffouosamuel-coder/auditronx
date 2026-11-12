@@ -83,19 +83,7 @@
 </head>
 
 <body>
-    <table style="border:none;margin-bottom:5px">
-        <tr>
-            <td style="border:none;width:40%;text-align:center;font-size:8px">REPUBLIQUE DU CAMEROUN<br>Paix - Travail -
-                Patrie<br>LYCEE TECHNIQUE DE MEIGANGA</td>
-            <td style="border:none;width:20%;text-align:center">
-                <?php if(file_exists(public_path('logo.png'))): ?>
-                    <img src="<?php echo e(public_path('logo.png')); ?>" alt="Logo" style="height:40px">
-                <?php endif; ?>
-            </td>
-            <td style="border:none;width:40%;text-align:center;font-size:8px">REPUBLIC OF CAMEROON<br>Peace - Work -
-                Fatherland<br>G.T.H.S MEIGANGA</td>
-        </tr>
-    </table>
+    <?php echo $__env->make('pdf.partials.entete', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
     <h1>Fiche de contrôle d'assiduité et
         ponctualité<br><?php echo e(\Carbon\Carbon::createFromFormat('m', $mois)->locale('fr')->translatedFormat('F')); ?>
 
@@ -111,7 +99,21 @@
             <td><?php echo e($enseignant->matricule ?? '-'); ?></td>
         </tr>
     </table>
-    <?php if(!empty($horaire_administratif)): ?>
+    <?php if(!empty($horaire_special)): ?>
+        <h2>EMPLOI DU TEMPS SPÉCIAL</h2>
+        <table>
+            <tr>
+                <th style="width:12%">Jour</th>
+                <th>Horaires</th>
+            </tr>
+            <?php $__currentLoopData = $emploi_special; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $plage): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                <tr>
+                    <td class="bold"><?php echo e([1 => 'Lundi', 2 => 'Mardi', 3 => 'Mercredi', 4 => 'Jeudi', 5 => 'Vendredi', 6 => 'Samedi', 7 => 'Dimanche'][$plage->jour] ?? '-'); ?></td>
+                    <td><?php echo e($plage->heure_debut); ?> - <?php echo e($plage->heure_fin); ?></td>
+                </tr>
+            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+        </table>
+    <?php elseif(!empty($horaire_administratif)): ?>
         <h2>HORAIRE DE TRAVAIL (PERSONNEL ADMINISTRATIF)</h2>
         <table>
             <tr>
@@ -161,8 +163,8 @@
             <th style="width:7%">Cours</th>
             <th>Prévu début</th>
             <th>Prévu fin</th>
-            <th>Arrivée</th>
-            <th>Départ</th>
+            <th>Scan 1</th>
+            <th>Scan 2</th>
             <th>Retard (min)</th>
             <th>Anticip. (min)</th>
             <th>Périodes à rattraper</th>
@@ -184,10 +186,10 @@
                     <td class="bold">0.00</td>
                     <td style="color:#0666cc">Signalé (<?php echo e(ucfirst($d['type_signalement'] ?? 'Excuse')); ?>)</td>
                 <?php elseif($d['absent']): ?>
-                    <td colspan="3" class="center bold">ABSENT</td>
+                    <td colspan="3" class="center bold">AUCUN POINTAGE</td>
                     <td>-</td>
                     <td class="bold"><?php echo e(number_format($d['periodes_a_rattraper'], 2, '.', '')); ?></td>
-                    <td>Absence</td>
+                    <td>Aucun pointage</td>
                 <?php elseif($d['heure_arrivee'] === null && $d['heure_depart'] !== null): ?>
                     <td>-</td>
                     <td><?php echo e($d['heure_depart']); ?></td>
@@ -227,7 +229,7 @@
         <tr>
             <td class="text-left bold">Total retard (min)</td>
             <td><?php echo e(round($total_retard_minutes)); ?></td>
-            <td class="text-left bold"><?php echo e(!empty($horaire_administratif) ? 'Jours de travail prévus' : 'Jours de cours prévus'); ?></td>
+            <td class="text-left bold"><?php echo e(!empty($horaire_administratif) || !empty($horaire_special) ? 'Jours de travail prévus' : 'Jours de cours prévus'); ?></td>
             <td><?php echo e($jours_attendus); ?></td>
         </tr>
         <tr>
@@ -236,17 +238,33 @@
             <td class="text-left bold">Présences validées</td>
             <td><?php echo e($presences_valides); ?></td>
         </tr>
+        <?php if(!empty($horaire_special)): ?>
+            
+            <tr>
+                <td class="text-left bold">Périodes à rattraper</td>
+                <td class="bold">Sans objet</td>
+                <td class="text-left bold">Taux d'assiduité</td>
+                <td class="bold"><?php echo e(number_format($taux_assiduite, 1, '.', '')); ?>%</td>
+            </tr>
+        <?php else: ?>
+            <tr>
+                <td class="text-left bold">Périodes à rattraper (présence)</td>
+                <td class="bold"><?php echo e(number_format($total_periodes_a_rattraper, 2, '.', '')); ?></td>
+                <td class="text-left bold">Taux d'assiduité</td>
+                <td class="bold"><?php echo e(number_format($taux_assiduite, 1, '.', '')); ?>%</td>
+            </tr>
+            <tr>
+                <td class="text-left bold">Périodes à rattraper (aucun pointage)</td>
+                <td class="bold"><?php echo e(number_format($total_periodes_absence, 2, '.', '')); ?></td>
+                <td class="text-left bold">TOTAL périodes à rattraper</td>
+                <td class="bold"><?php echo e(number_format($total_periodes_a_rattraper + $total_periodes_absence, 2, '.', '')); ?></td>
+            </tr>
+        <?php endif; ?>
         <tr>
-            <td class="text-left bold">Périodes à rattraper (présence)</td>
-            <td class="bold"><?php echo e(number_format($total_periodes_a_rattraper, 2, '.', '')); ?></td>
-            <td class="text-left bold">Taux d'assiduité</td>
-            <td class="bold"><?php echo e(number_format($taux_assiduite, 1, '.', '')); ?>%</td>
-        </tr>
-        <tr>
-            <td class="text-left bold">Périodes à rattraper (absence)</td>
-            <td class="bold"><?php echo e(number_format($total_periodes_absence, 2, '.', '')); ?></td>
-            <td class="text-left bold">TOTAL périodes à rattraper</td>
-            <td class="bold"><?php echo e(number_format($total_periodes_a_rattraper + $total_periodes_absence, 2, '.', '')); ?></td>
+            <td class="text-left bold">Jours ponctuels</td>
+            <td><?php echo e($jours_ponctuels); ?> / <?php echo e($jours_prevus); ?></td>
+            <td class="text-left bold">Taux de ponctualité</td>
+            <td class="bold"><?php echo e(number_format($taux_ponctualite, 1, '.', '')); ?>%</td>
         </tr>
     </table>
     <div style="margin-top:10px;text-align:right;font-size:9px">Fait à Meiganga, le

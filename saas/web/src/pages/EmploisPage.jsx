@@ -4,6 +4,14 @@ import Modal from '../components/Modal'
 import SearchSelect from '../components/SearchSelect'
 import SpreadsheetActions from '../components/SpreadsheetActions'
 import api from '../lib/api'
+import {
+  finApresPeriodes,
+  nombrePeriodesEntre,
+  plageAffichee,
+  toHeureAffichee,
+  toHeureMinute,
+  usePauses,
+} from '../lib/grilleHoraire'
 import fetchAllPages from '../lib/fetchAllPages'
 import { confirmAction, notify } from '../lib/swal'
 
@@ -19,34 +27,13 @@ export const JOURS = [
 
 export const nomJour = (jour) => JOURS.find((j) => j.value === Number(jour))?.label ?? 'Jour inconnu'
 
-/** Une colonne SQL `time` revient en « 08:10:00 » : on retombe sur « HH:MM ». */
-export const toHeureMinute = (valeur) => (valeur ? String(valeur).slice(0, 5) : '')
-
-export const toHeureAffichee = (valeur) => toHeureMinute(valeur).replace(':', 'h')
-
-const plageAffichee = (debut, fin) => `${toHeureAffichee(debut)}–${toHeureAffichee(fin)}`
-
-/** Durée d'une période, en minutes — même convention que le calcul des périodes à rattraper côté API (BilanIndividuel, RetardsController). */
-export const DUREE_PERIODE_MINUTES = 40
-
-/** Heure de fin à partir d'une heure de début et d'un nombre de périodes : évite de saisir une fin incohérente avec le début. */
-export function finApresPeriodes(heureDebut, nombrePeriodes) {
-  if (!heureDebut || !nombrePeriodes) return ''
-  const [h, m] = heureDebut.split(':').map(Number)
-  const total = h * 60 + m + Number(nombrePeriodes) * DUREE_PERIODE_MINUTES
-  const heure = Math.floor(total / 60) % 24
-  const minute = total % 60
-  return `${String(heure).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
-}
-
-/** Nombre de périodes entre deux heures (arrondi, minimum 1) — pour pré-remplir le formulaire en édition. */
-export function nombrePeriodesEntre(heureDebut, heureFin) {
-  if (!heureDebut || !heureFin) return 1
-  const [h1, m1] = heureDebut.split(':').map(Number)
-  const [h2, m2] = heureFin.split(':').map(Number)
-  const diff = h2 * 60 + m2 - (h1 * 60 + m1)
-  return Math.max(1, Math.round(diff / DUREE_PERIODE_MINUTES))
-}
+export {
+  DUREE_PERIODE_MINUTES,
+  finApresPeriodes,
+  nombrePeriodesEntre,
+  toHeureAffichee,
+  toHeureMinute,
+} from '../lib/grilleHoraire'
 
 const nomClasse = (creneau) => creneau.classe?.nom ?? `Classe #${creneau.classe_id}`
 const nomDiscipline = (creneau) => creneau.discipline?.nom ?? `Matière #${creneau.discipline_id}`
@@ -64,6 +51,10 @@ const designation = (creneau) =>
  */
 function usePeriodes() {
   const [periodes, setPeriodes] = useState([])
+
+  // Les pauses décident de l'heure de fin déduite d'un nombre de périodes :
+  // elles sont chargées avec la grille, pour tout formulaire de cette page.
+  usePauses()
 
   useEffect(() => {
     api
@@ -92,18 +83,32 @@ function CreneauModal({ creneau, periodes, options, onClose, onSaved }) {
   }))
   const [erreurs, setErreurs] = useState({})
   const [enregistrement, setEnregistrement] = useState(false)
+  const [nbPeriodes, setNbPeriodes] = useState(() =>
+    creneau?.heure_debut ? nombrePeriodesEntre(toHeureMinute(creneau.heure_debut), toHeureMinute(creneau.heure_fin)) : 1,
+  )
 
-  const optionsPeriodes = periodes.map((p) => ({
-    value: `${p.heure_debut}|${p.heure_fin}`,
+  // Un créneau se saisit comme il se pense : à quelle heure il commence et
+  // combien de périodes il dure. La fin s'en déduit — la choisir à part
+  // laissait composer des créneaux impossibles — et les pauses sont
+  // enjambées : une récréation repousse la fin sans compter pour une période.
+  const debuts = periodes.map((p) => ({
+    value: toHeureMinute(p.heure_debut),
     label: p.libelle_complet ?? plageAffichee(p.heure_debut, p.heure_fin),
   }))
 
-  const periodeCourante = valeurs.heure_debut ? `${valeurs.heure_debut}|${valeurs.heure_fin}` : ''
+  // Un créneau saisi avant une reconfiguration de la grille peut ne commencer
+  // sur aucune période : on le montre tel quel plutôt que de laisser croire
+  // que l'horaire est perdu.
+  const horsPeriode = valeurs.heure_debut && !debuts.some((o) => o.value === valeurs.heure_debut)
 
-  // Un créneau saisi avant une reconfiguration de la grille peut ne tomber sur
-  // aucune période : on le montre tel quel plutôt que de vider la liste et de
-  // laisser croire que l'horaire est perdu.
-  const horsPeriode = periodeCourante && !optionsPeriodes.some((o) => o.value === periodeCourante)
+  function definirDebut(heureDebut) {
+    setValeurs((v) => ({ ...v, heure_debut: heureDebut, heure_fin: finApresPeriodes(heureDebut, nbPeriodes) }))
+  }
+
+  function definirNbPeriodes(valeur) {
+    setNbPeriodes(valeur)
+    setValeurs((v) => ({ ...v, heure_fin: finApresPeriodes(v.heure_debut, valeur) }))
+  }
 
   async function soumettre(e) {
     e.preventDefault()
@@ -146,38 +151,45 @@ function CreneauModal({ creneau, periodes, options, onClose, onSaved }) {
         {champSelect('jour', 'Jour', JOURS)}
 
         <label className="mb-3 block text-sm">
-          <span className="mb-1 block text-ink-700">Période de cours</span>
+          <span className="mb-1 block text-ink-700">Heure de début</span>
           <SearchSelect
-            id="creneau-periode"
+            id="creneau-debut"
             required
             options={
               horsPeriode
-                ? [
-                    ...optionsPeriodes,
-                    {
-                      value: periodeCourante,
-                      label: `${plageAffichee(valeurs.heure_debut, valeurs.heure_fin)} (hors période)`,
-                    },
-                  ]
-                : optionsPeriodes
+                ? [...debuts, { value: valeurs.heure_debut, label: `${toHeureAffichee(valeurs.heure_debut)} (hors grille)` }]
+                : debuts
             }
-            value={periodeCourante}
-            onChange={(value) => {
-              const [debut = '', fin = ''] = String(value ?? '').split('|')
-              setValeurs((v) => ({ ...v, heure_debut: debut, heure_fin: fin }))
-            }}
+            value={valeurs.heure_debut}
+            onChange={(value) => definirDebut(String(value ?? ''))}
           />
-          {(erreurs.heure_debut || erreurs.heure_fin) && (
-            <span className="mt-1 block text-xs text-red-600">
-              {(erreurs.heure_debut ?? erreurs.heure_fin)[0]}
-            </span>
-          )}
+          {erreurs.heure_debut && <span className="mt-1 block text-xs text-red-600">{erreurs.heure_debut[0]}</span>}
           {periodes.length === 0 && (
             <span className="mt-1 block text-xs text-ink-500">
               Aucune période configurée. Définissez la grille horaire dans Configuration.
             </span>
           )}
         </label>
+
+        <div className="mb-3 grid grid-cols-2 gap-3">
+          <label className="block text-sm">
+            <span className="mb-1 block text-ink-700">Nombre de périodes</span>
+            <input
+              type="number"
+              min="1"
+              max="12"
+              required
+              value={nbPeriodes}
+              onChange={(e) => definirNbPeriodes(e.target.value)}
+              className="field w-full"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block text-ink-700">Heure de fin</span>
+            <input type="time" readOnly disabled value={valeurs.heure_fin} className="field w-full opacity-70" />
+            {erreurs.heure_fin && <span className="mt-1 block text-xs text-red-600">{erreurs.heure_fin[0]}</span>}
+          </label>
+        </div>
 
         {['salle', 'type_cours'].map((cle) => (
           <label key={cle} className="mb-3 block text-sm">

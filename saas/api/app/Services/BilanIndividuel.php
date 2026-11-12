@@ -49,7 +49,7 @@ class BilanIndividuel
             $plage = $this->horaires->plage($enseignant, $date, $emplois);
             if (! $plage) continue;
             $coursDuJour = $emplois->where('jour', $date->isoWeekday())->values();
-            $periodesPrevues = max(1, (int) ceil($plage['minutes'] / 40));
+            $periodesPrevues = GrilleHoraire::periodesPourMinutes($plage['minutes']);
             $presence = $presences->get($date->toDateString());
             $signalement = $signalements->first(fn($item) => $item->couvre($date));
             $futur = $this->horaires->estAVenir($date);
@@ -58,7 +58,7 @@ class BilanIndividuel
             $anticipation = $presence?->heure_depart ? max(0, (int) floor(($heureFin->timestamp - $presence->heure_depart->timestamp) / 60)) : 0;
             $signale = $signalement !== null;
             $absent = !$futur && !$signale && (!$presence || (!$presence->heure_arrivee && !$presence->heure_depart));
-            $periodesRattraper = $sansRattrapage ? 0 : ($absent ? $periodesPrevues : (int) ceil($anticipation / 40));
+            $periodesRattraper = $sansRattrapage ? 0 : ($absent ? $periodesPrevues : (int) ceil($anticipation / GrilleHoraire::DUREE_PERIODE_MINUTES));
             $valide = $signale || (bool) ($presence?->heure_arrivee || $presence?->heure_depart);
             if (!$futur) $joursAttendus++;
             if ($valide && !$futur) $presencesValides++;

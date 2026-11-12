@@ -41,6 +41,7 @@
 </head>
 
 <body>
+    <?php echo $__env->make('pdf.partials.entete', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?>
     <h1>Liste du personnel</h1>
     <?php if($personnel->isEmpty()): ?>
         <p class="empty">Aucun personnel enregistré.</p>

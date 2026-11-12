@@ -11,6 +11,7 @@ use App\Models\PeriodeCours;
 use App\Models\Presence;
 use App\Models\User;
 use App\Services\BilanIndividuel;
+use App\Services\GrilleHoraire;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -58,6 +59,42 @@ class PeriodesEtEmploiSpecialTest extends TestCase
 
         $this->assertCount(1, $periodes);
         $this->assertSame('P1 · 08h00–08h55', $periodes[0]['libelle_complet']);
+    }
+
+    public function test_une_pause_ne_figure_pas_parmi_les_periodes_de_cours(): void
+    {
+        $this->actingAsBackoffice();
+
+        $this->postJson('/api/periodes-cours', [
+            'libelle' => 'Récréation', 'est_pause' => true, 'heure_debut' => '09:30', 'heure_fin' => '09:50',
+        ])->assertCreated();
+
+        $cours = $this->getJson('/api/periodes-cours')->assertOk()->json('data');
+        $pauses = $this->getJson('/api/periodes-cours?type=pause')->assertOk()->json('data');
+
+        $this->assertSame([], array_values(array_filter($cours, fn ($periode) => $periode['est_pause'])));
+        $this->assertCount(1, $pauses);
+        $this->assertSame('09:30', $pauses[0]['heure_debut']);
+    }
+
+    public function test_une_pause_enjambee_ne_compte_pas_comme_une_periode(): void
+    {
+        GrilleHoraire::oublierPauses();
+        PeriodeCours::create([
+            'ordre' => 50, 'libelle' => 'Récréation', 'est_pause' => true,
+            'heure_debut' => '09:30', 'heure_fin' => '09:50',
+        ]);
+        GrilleHoraire::oublierPauses();
+
+        // 07h30 -> 10h30 = 180 minutes, dont 20 de récréation : 4 périodes.
+        $this->assertSame(160, GrilleHoraire::minutesHorsPause('07:30', '10:30'));
+        $this->assertSame(4, GrilleHoraire::periodesEntre('07:30', '10:30'));
+
+        // Et inversement : 4 périodes à partir de 07h30 finissent à 10h30,
+        // la récréation étant enjambée. Trois périodes s'arrêtent net à son
+        // début, sans la déborder.
+        $this->assertSame('10:30', GrilleHoraire::finApresPeriodes('07:30', 4));
+        $this->assertSame('09:30', GrilleHoraire::finApresPeriodes('07:30', 3));
     }
 
     public function test_une_periode_ne_peut_pas_doubler_une_plage_existante(): void

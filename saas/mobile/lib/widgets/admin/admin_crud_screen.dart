@@ -20,6 +20,16 @@ import 'admin_select_field.dart';
 class AdminCrudScreen extends StatefulWidget {
   final String title;
   final String resourcePath;
+
+  /// Chemin de lecture, quand la liste ne se lit pas sur [resourcePath] tel
+  /// quel (ex. `/periodes-cours?type=pause` : les écritures restent sur
+  /// `/periodes-cours`, qui seul accepte un identifiant). Défaut :
+  /// [resourcePath].
+  final String? listPath;
+
+  /// Valeurs ajoutées au corps de chaque création/modification, en plus des
+  /// champs du formulaire (ex. `est_pause: true` pour l'onglet des pauses).
+  final Map<String, dynamic> extraBody;
   final String cacheKey;
   final List<AdminFieldSpec> fields;
   final String Function(Map<String, dynamic> item) itemTitle;
@@ -66,6 +76,8 @@ class AdminCrudScreen extends StatefulWidget {
     super.key,
     required this.title,
     required this.resourcePath,
+    this.listPath,
+    this.extraBody = const {},
     required this.cacheKey,
     required this.fields,
     required this.itemTitle,
@@ -133,7 +145,9 @@ class AdminCrudScreenState extends State<AdminCrudScreen> {
   Future<List<dynamic>> _load() async {
     final data = await OfflineCache.instance.readThrough(
       widget.cacheKey,
-      () => AdminApiClient.instance.getAllPages(widget.resourcePath),
+      () => AdminApiClient.instance.getAllPages(
+        widget.listPath ?? widget.resourcePath,
+      ),
     );
     if (data is Map && data['data'] is List)
       return data['data'] as List<dynamic>;
@@ -163,6 +177,8 @@ class AdminCrudScreenState extends State<AdminCrudScreen> {
       builder: (_) => _AdminCrudForm(fields: widget.fields, initial: item),
     );
     if (saved == null) return;
+
+    if (widget.extraBody.isNotEmpty) saved.addAll(widget.extraBody);
 
     final isEdit = item != null;
     final items = List<dynamic>.from(await _future);
