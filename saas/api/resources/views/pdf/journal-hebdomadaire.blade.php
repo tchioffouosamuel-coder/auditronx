@@ -7,20 +7,20 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            font-size: 8px;
+            font-size: 10px;
             margin: 18px;
         }
 
         h1 {
             text-align: center;
-            font-size: 15px;
+            font-size: 18px;
             margin-bottom: 4px;
         }
 
         .periode {
             text-align: center;
             margin-bottom: 14px;
-            font-size: 10px;
+            font-size: 12px;
         }
 
         table {
@@ -37,13 +37,13 @@
 
         th {
             background: #e8edf2;
-            font-size: 8px;
+            font-size: 10px;
         }
 
         th.jour span {
             display: block;
             font-weight: normal;
-            font-size: 7px;
+            font-size: 9px;
         }
 
         td.nom,
@@ -81,7 +81,7 @@
 
         .legende {
             margin-top: 10px;
-            font-size: 8px;
+            font-size: 10px;
             color: #444;
         }
 

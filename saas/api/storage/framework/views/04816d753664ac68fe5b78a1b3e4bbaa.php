@@ -7,19 +7,19 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            font-size: 9px;
+            font-size: 11px;
             margin: 10px
         }
 
         h1 {
             text-align: center;
-            font-size: 13px;
+            font-size: 16px;
             margin: 5px 0;
             text-transform: uppercase
         }
 
         h2 {
-            font-size: 10px;
+            font-size: 12px;
             margin: 8px 0 4px;
             border-bottom: 1px solid #000;
             padding-bottom: 2px
@@ -40,11 +40,11 @@
 
         th {
             background: #e0e0e0;
-            font-size: 10px
+            font-size: 12px
         }
 
         td {
-            font-size: 10px
+            font-size: 12px
         }
 
         .info-table th {
@@ -74,7 +74,7 @@
 
         .footer {
             margin-top: 10px;
-            font-size: 7px;
+            font-size: 9px;
             text-align: center;
             border-top: 1px solid #000;
             padding-top: 3px
@@ -267,7 +267,7 @@
             <td class="bold"><?php echo e(number_format($taux_ponctualite, 1, '.', '')); ?>%</td>
         </tr>
     </table>
-    <div style="margin-top:10px;text-align:right;font-size:9px">Fait à Meiganga, le
+    <div style="margin-top:10px;text-align:right;font-size:11px">Fait à Meiganga, le
         <?php echo e(\Carbon\Carbon::now()->locale('fr')->translatedFormat('d F Y')); ?><br><br><br><br><strong>Le
             Proviseur</strong></div>
     <div class="footer">Document généré le <?php echo e(\Carbon\Carbon::now()->format('d/m/Y à H:i')); ?> | Auditron-X | LTMG

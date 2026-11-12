@@ -8,25 +8,25 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            font-size: 9px;
+            font-size: 11px;
             margin: 10px
         }
 
         h1 {
             text-align: center;
-            font-size: 14px;
+            font-size: 17px;
             margin: 5px 0;
             text-transform: uppercase
         }
 
         h2 {
-            font-size: 10px;
+            font-size: 12px;
             margin: 12px 0 4px
         }
 
         .sous-titre {
             text-align: center;
-            font-size: 10px;
+            font-size: 12px;
             margin-bottom: 8px
         }
 
@@ -41,7 +41,7 @@
             border: 1px solid #000;
             padding: 3px 4px;
             text-align: center;
-            font-size: 8px
+            font-size: 10px
         }
 
         th {
@@ -59,13 +59,13 @@
 
         .note {
             margin-top: 8px;
-            font-size: 7px;
+            font-size: 9px;
             color: #555
         }
 
         .vide {
             text-align: center;
-            font-size: 8px;
+            font-size: 10px;
             color: #555;
             padding: 8px
         }
@@ -150,7 +150,10 @@
     <?php endif; ?>
 
     <?php if($volet !== 'assiduite'): ?>
-        <h2>Classement de ponctualité</h2>
+        
+        <?php if($volet !== 'ponctualite'): ?>
+            <h2>Classement de ponctualité</h2>
+        <?php endif; ?>
         <?php if($bilan['ponctualite']): ?>
             <table>
                 <thead>

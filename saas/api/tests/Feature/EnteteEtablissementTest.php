@@ -8,6 +8,7 @@ use App\Models\Presence;
 use App\Models\User;
 use App\Services\EnteteEtablissement;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -182,6 +183,36 @@ class EnteteEtablissementTest extends TestCase
 
         $this->assertSame([], $valeurs['lignes']['droite']);
         $this->assertSame(['LYCÉE BILINGUE DE NGAOUNDAL'], array_column($valeurs['lignes']['gauche'], 'texte'));
+    }
+
+    /**
+     * L'en-tête complet dépasse les 255 caractères d'un VARCHAR : la colonne
+     * `parametres.valeur` doit être un TEXT, sans quoi MySQL refuse
+     * l'enregistrement (1406, « Data too long ») — ce que SQLite, lui, ne
+     * signale pas. On vérifie donc le type de colonne, pas seulement l'écriture.
+     */
+    public function test_un_entete_complet_tient_dans_la_colonne(): void
+    {
+        $this->assertSame('text', Schema::getColumnType('parametres', 'valeur'));
+
+        $this->actingAsBackoffice();
+
+        $ligne = fn (int $i) => ['cle' => null, 'texte' => str_repeat("LIGNE {$i} ", 15)];
+
+        $this->putJson('/api/parametres/entete-etablissement', [
+            'lignes' => [
+                'gauche' => array_map($ligne, range(1, 10)),
+                'droite' => array_map($ligne, range(11, 20)),
+            ],
+        ])->assertOk();
+
+        $enregistre = Parametre::get('entete.lignes', '');
+
+        $this->assertGreaterThan(255, mb_strlen($enregistre));
+        $this->assertCount(
+            10,
+            $this->getJson('/api/parametres/entete-etablissement')->assertOk()->json('lignes.droite'),
+        );
     }
 
     public function test_une_ligne_sans_texte_est_refusee(): void

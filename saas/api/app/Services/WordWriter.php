@@ -22,6 +22,12 @@ use ZipArchive;
  */
 class WordWriter
 {
+    /**
+     * Tailles de police, en demi-points (22 = 11 pt). Les documents se lisent
+     * imprimés, souvent photocopiés : le 9 pt d'origine passait mal.
+     */
+    public const TAILLE_CORPS = 22;
+
     private const NS_W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
     private const NS_R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -69,7 +75,7 @@ class WordWriter
                 ? '<w:p/>'
                 : implode('', array_map(
                     fn (string $ligne) => $this->xmlParagraphe($ligne, [
-                        'taille' => 16,
+                        'taille' => 20,
                         'centre' => true,
                         'apres' => 0,
                     ]),
@@ -93,7 +99,7 @@ class WordWriter
 
         if ($colonnes['contact'] !== '') {
             $this->paragraphe($colonnes['contact'], [
-                'taille' => 14,
+                'taille' => 18,
                 'centre' => true,
                 'couleur' => '555555',
             ]);
@@ -147,17 +153,17 @@ class WordWriter
 
     public function titre(string $texte): self
     {
-        return $this->paragraphe($texte, ['taille' => 28, 'gras' => true, 'centre' => true, 'apres' => 60]);
+        return $this->paragraphe($texte, ['taille' => 34, 'gras' => true, 'centre' => true, 'apres' => 60]);
     }
 
     public function sousTitre(string $texte): self
     {
-        return $this->paragraphe($texte, ['taille' => 20, 'centre' => true, 'couleur' => '555555', 'apres' => 200]);
+        return $this->paragraphe($texte, ['taille' => 24, 'centre' => true, 'couleur' => '555555', 'apres' => 200]);
     }
 
     public function intertitre(string $texte): self
     {
-        return $this->paragraphe($texte, ['taille' => 22, 'gras' => true, 'avant' => 240, 'apres' => 80]);
+        return $this->paragraphe($texte, ['taille' => 26, 'gras' => true, 'avant' => 240, 'apres' => 80]);
     }
 
     /**
@@ -287,7 +293,7 @@ class WordWriter
             'word/styles.xml' => $entete
                 .'<w:styles xmlns:w="'.self::NS_W.'">'
                 .'<w:docDefaults><w:rPrDefault><w:rPr>'
-                .'<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:sz w:val="18"/>'
+                .'<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:sz w:val="22"/>'
                 .'</w:rPr></w:rPrDefault></w:docDefaults>'
                 .'<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>'
                 .'</w:styles>',

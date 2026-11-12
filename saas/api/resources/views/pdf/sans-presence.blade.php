@@ -7,13 +7,13 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            font-size: 10px;
+            font-size: 12px;
             margin: 24px;
         }
 
         h1 {
             text-align: center;
-            font-size: 16px;
+            font-size: 19px;
             margin-bottom: 4px;
         }
 

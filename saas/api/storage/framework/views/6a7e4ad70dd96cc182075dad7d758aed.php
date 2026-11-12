@@ -7,13 +7,13 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            font-size: 9px;
+            font-size: 11px;
             margin: 10px
         }
 
         h1 {
             text-align: center;
-            font-size: 14px;
+            font-size: 17px;
             margin: 5px 0;
             text-transform: uppercase
         }
@@ -33,11 +33,11 @@
 
         th {
             background: #e0e0e0;
-            font-size: 8px
+            font-size: 10px
         }
 
         td {
-            font-size: 8px
+            font-size: 10px
         }
 
         .text-left {
@@ -50,7 +50,7 @@
 
         .footer {
             margin-top: 15px;
-            font-size: 7px;
+            font-size: 9px;
             text-align: center;
             border-top: 1px solid #000;
             padding-top: 5px
@@ -60,7 +60,7 @@
             margin: 10px 0;
             padding: 6px;
             border: 1px solid #000;
-            font-size: 8px
+            font-size: 10px
         }
 
         .retard-col {
@@ -184,17 +184,17 @@
                 </tr>
             </tfoot>
         </table>
-        <div style="margin-top:8px;font-size:7px"><strong>LÉGENDE:</strong> <span
+        <div style="margin-top:8px;font-size:9px"><strong>LÉGENDE:</strong> <span
                 style="background:#fff3cd;padding:2px 4px;border:1px solid #000">RETARDS</span> = Arrivée en retard
             &nbsp; <span style="background:#cfe2ff;padding:2px 4px;border:1px solid #000">ANTICIPATIONS</span> = Départ
             anticipé &nbsp; <span style="background:#f8d7da;padding:2px 4px;border:1px solid #000">ABSENCES</span> =
             Absence complète &nbsp; <strong>Pér.</strong> = Périodes de 40 min à rattraper</div>
-        <p style="font-size:7px"><strong>NOTE:</strong>
+        <p style="font-size:9px"><strong>NOTE:</strong>
             <?php echo e(!empty($classement) ? 'Classement par ordre décroissant du taux de ponctualité (départagé par un coefficient régressif sur les minutes de retard cumulées).' : 'Classement par ordre alphabétique des noms.'); ?>
 
             Les jours signalés sont considérés comme valides pour le taux d'assiduité.</p>
     <?php endif; ?>
-    <div style="margin-top:10px;text-align:right;font-size:8px">Fait à Meiganga, le
+    <div style="margin-top:10px;text-align:right;font-size:10px">Fait à Meiganga, le
         <?php echo e(\Carbon\Carbon::now()->locale('fr')->translatedFormat('d F Y')); ?><br><br><br><br><strong>Le
             Proviseur</strong></div>
     <div class="footer">Document généré le <?php echo e(\Carbon\Carbon::now()->format('d/m/Y à H:i')); ?> | Auditron-X | LTMG
