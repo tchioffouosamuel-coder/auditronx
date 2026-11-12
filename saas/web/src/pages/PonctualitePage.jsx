@@ -37,7 +37,7 @@ export default function PonctualitePage() {
 
   function downloadClassement() {
     downloadFile(
-      `/retards/bilan-cumule?debut=${debut}&fin=${fin}&tri=ponctualite`,
+      `/retards/classement-ponctualite/pdf?debut=${debut}&fin=${fin}`,
       `classement-ponctualite-${debut}-${fin}.pdf`,
     )
   }

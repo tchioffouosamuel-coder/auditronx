@@ -164,6 +164,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/retards/bilan-cumule', [RetardsController::class, 'bilanCumule']);
     Route::get('/retards/bilan/{enseignant}', [RetardsController::class, 'bilanIndividuel']);
     Route::get('/retards/classement-ponctualite', [RetardsController::class, 'classementPonctualite']);
+    Route::get('/retards/classement-ponctualite/pdf', [RetardsController::class, 'classementPonctualitePdf']);
     Route::get('/retards', [RetardsController::class, 'index']);
 
     // Assiduité & rapports (§4.2)

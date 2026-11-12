@@ -22,6 +22,14 @@ use Illuminate\Support\Facades\Storage;
  * tutelle française à gauche, son équivalent anglais à droite. Un champ laissé
  * vide ne produit aucune ligne — un établissement qui ne dépend pas d'une
  * délégation régionale n'a pas à inventer la mention.
+ *
+ * Chaque colonne est une **liste de lignes libres** : les cinq intitulés
+ * d'origine (république, devise, ministère, délégation, établissement) n'en
+ * sont que le contenu par défaut. Une administration peut en ajouter — une
+ * seconde tutelle, un numéro d'arrêté de création — et les remettre dans
+ * l'ordre qu'elle veut. Les lignes venues des champs nommés gardent leur clé :
+ * les clients qui écrivent encore `ministere` ou `etablissement` continuent de
+ * modifier la bonne ligne.
  */
 class EnteteEtablissement
 {
@@ -103,7 +111,148 @@ class EnteteEtablissement
         // ne se lit ici que pour l'afficher dans les écrans de configuration.
         $valeurs['logo_url'] = $this->logoUrl();
 
+        // Les lignes sont la forme complète de l'en-tête : les champs nommés
+        // ci-dessus n'en montrent que les cinq premières de chaque colonne,
+        // pour les clients écrits avant qu'on puisse en ajouter.
+        $valeurs['lignes'] = $this->lignes();
+
         return $valeurs;
+    }
+
+    /**
+     * Lignes des deux colonnes, dans l'ordre d'impression. Chaque ligne porte
+     * son texte et, pour celles issues des champs nommés, la clé qui permet de
+     * continuer à les écrire par [definir].
+     *
+     * Tant qu'aucune liste n'a été enregistrée, elle est déduite des champs
+     * nommés : un établissement déjà configuré retrouve son en-tête tel quel.
+     *
+     * @return array{gauche: array<int, array{cle: string|null, texte: string}>, droite: array<int, array{cle: string|null, texte: string}>}
+     */
+    public function lignes(): array
+    {
+        $brut = Parametre::get(self::PREFIXE.'lignes', '');
+        $stockees = $brut === '' ? null : json_decode($brut, true);
+
+        if (! is_array($stockees)) {
+            return $this->lignesDesChampsNommes();
+        }
+
+        $lignes = [];
+        foreach (['gauche', 'droite'] as $colonne) {
+            $lignes[$colonne] = [];
+
+            foreach ((array) ($stockees[$colonne] ?? []) as $ligne) {
+                $texte = trim((string) (is_array($ligne) ? ($ligne['texte'] ?? '') : $ligne));
+                $cle = is_array($ligne) ? ($ligne['cle'] ?? null) : null;
+                $cle = is_string($cle) && array_key_exists($cle, self::CHAMPS) ? $cle : null;
+
+                // Une ligne nommée relit sa valeur courante : elle reste le
+                // même champ, qu'il ait été écrit par l'ancienne API ou ici.
+                if ($cle !== null) {
+                    $texte = $this->valeurChampNomme($cle);
+                }
+
+                if ($texte !== '') {
+                    $lignes[$colonne][] = ['cle' => $cle, 'texte' => $texte];
+                }
+            }
+        }
+
+        return $lignes;
+    }
+
+    /**
+     * Remplace les lignes des deux colonnes : c'est ainsi qu'on en ajoute,
+     * qu'on en retire et qu'on les réordonne, en un seul envoi.
+     *
+     * Une ligne qui porte une clé connue reste adossée à son champ nommé —
+     * son texte y est réécrit, pour que les clients qui lisent encore
+     * `etablissement` voient la même chose que le document.
+     *
+     * @param  array{gauche?: array, droite?: array}  $lignes
+     */
+    public function definirLignes(array $lignes): void
+    {
+        $normalisees = [];
+
+        foreach (['gauche', 'droite'] as $colonne) {
+            $normalisees[$colonne] = [];
+            $vues = [];
+
+            foreach ((array) ($lignes[$colonne] ?? []) as $ligne) {
+                $texte = trim((string) (is_array($ligne) ? ($ligne['texte'] ?? '') : $ligne));
+                $cle = is_array($ligne) ? ($ligne['cle'] ?? null) : null;
+                $cle = is_string($cle) && array_key_exists($cle, self::CHAMPS) ? $cle : null;
+
+                // Une même clé deux fois ferait diverger le champ nommé de la
+                // ligne : la seconde devient une ligne libre.
+                if ($cle !== null && isset($vues[$cle])) {
+                    $cle = null;
+                }
+
+                if ($texte === '') {
+                    continue;
+                }
+
+                if ($cle !== null) {
+                    $vues[$cle] = true;
+                    Parametre::set(self::PREFIXE.$cle, $texte);
+                }
+
+                $normalisees[$colonne][] = ['cle' => $cle, 'texte' => $texte];
+            }
+        }
+
+        // Un champ nommé qui ne porte plus de ligne a été supprimé de
+        // l'en-tête : le vider évite qu'il réapparaisse à la prochaine
+        // déduction, et dit la même chose aux anciens clients.
+        $conservees = array_merge(
+            array_column($normalisees['gauche'], 'cle'),
+            array_column($normalisees['droite'], 'cle'),
+        );
+
+        foreach ([...self::COLONNE_FRANCAISE, ...self::COLONNE_ANGLAISE] as $champ) {
+            if (! in_array($champ, $conservees, true)) {
+                Parametre::set(self::PREFIXE.$champ, '');
+            }
+        }
+
+        Parametre::set(self::PREFIXE.'lignes', json_encode($normalisees, JSON_UNESCAPED_UNICODE));
+    }
+
+    /** Valeur courante d'un champ nommé, défaut compris. */
+    private function valeurChampNomme(string $champ): string
+    {
+        $valeur = Parametre::get(self::PREFIXE.$champ, self::CHAMPS[$champ] ?? '');
+
+        if ($champ === 'etablissement' && $valeur === '') {
+            return (string) ($this->tenants->courant()?->nom ?? '');
+        }
+
+        return $valeur;
+    }
+
+    /**
+     * En-tête d'avant les lignes libres : les cinq champs de chaque colonne,
+     * dans leur ordre historique, les vides retirés.
+     *
+     * @return array{gauche: array<int, array{cle: string|null, texte: string}>, droite: array<int, array{cle: string|null, texte: string}>}
+     */
+    private function lignesDesChampsNommes(): array
+    {
+        $colonne = fn (array $champs) => array_values(array_filter(
+            array_map(
+                fn (string $champ) => ['cle' => $champ, 'texte' => $this->valeurChampNomme($champ)],
+                $champs,
+            ),
+            fn (array $ligne) => $ligne['texte'] !== '',
+        ));
+
+        return [
+            'gauche' => $colonne(self::COLONNE_FRANCAISE),
+            'droite' => $colonne(self::COLONNE_ANGLAISE),
+        ];
     }
 
     /** Chemin relatif du logo sur le disque, ou null s'il n'y en a pas. */
@@ -189,6 +338,13 @@ class EnteteEtablissement
             Parametre::set(self::PREFIXE.$champ, trim((string) ($valeurs[$champ] ?? '')));
         }
 
+        // Les lignes sont la forme complète de l'en-tête : les écrire en
+        // dernier, pour qu'un envoi qui mêle les deux formes fasse foi sur
+        // l'ordre voulu.
+        if (isset($valeurs['lignes']) && is_array($valeurs['lignes'])) {
+            $this->definirLignes($valeurs['lignes']);
+        }
+
         return $this->valeurs();
     }
 
@@ -199,16 +355,16 @@ class EnteteEtablissement
      */
     public function colonnes(): array
     {
-        $valeurs = $this->valeurs();
-        $lignes = fn (array $champs) => array_values(array_filter(
-            array_map(fn (string $champ) => $valeurs[$champ], $champs),
-            fn (string $ligne) => $ligne !== '',
+        $lignes = $this->lignes();
+        $textes = fn (array $colonne) => array_values(array_filter(
+            array_column($colonne, 'texte'),
+            fn (string $ligne) => trim($ligne) !== '',
         ));
 
         return [
-            'gauche' => $lignes(self::COLONNE_FRANCAISE),
-            'droite' => $lignes(self::COLONNE_ANGLAISE),
-            'contact' => $valeurs['contact'],
+            'gauche' => $textes($lignes['gauche']),
+            'droite' => $textes($lignes['droite']),
+            'contact' => $this->valeurChampNomme('contact'),
             // Chemin sur disque : dompdf comme le générateur Word lisent le
             // fichier, pas une URL.
             'logo' => $this->logoFichier(),

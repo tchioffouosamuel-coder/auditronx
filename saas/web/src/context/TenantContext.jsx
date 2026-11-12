@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import api from "../lib/api";
-import apiCentral from "../lib/apiCentral";
 import {
   brandingEnCache,
   codeEtablissement,
@@ -22,23 +21,11 @@ const TenantContext = createContext(null);
 export function TenantProvider({ children }) {
   const [code, setCode] = useState(() => codeEtablissement());
   const [branding, setBranding] = useState(() => brandingEnCache());
-  const [catalogue, setCatalogue] = useState([]);
-  const [listePublique, setListePublique] = useState(true);
   const [chargement, setChargement] = useState(Boolean(codeEtablissement()));
 
-  useEffect(() => {
-    apiCentral
-      .get("/catalogue")
-      .then(({ data }) => {
-        setCatalogue(data?.data ?? []);
-        setListePublique(data?.liste_publique !== false);
-      })
-      .catch(() => {
-        // Catalogue indisponible : la saisie manuelle du code reste possible,
-        // c'est précisément à ça qu'elle sert.
-        setCatalogue([]);
-      });
-  }, []);
+  // L'annuaire des établissements n'est plus lu : l'écran de connexion ne
+  // demande que le code, communiqué par l'administration. Le publier sur une
+  // page ouverte n'apportait rien à qui le connaît déjà.
 
   useEffect(() => {
     if (!code) {
@@ -128,8 +115,6 @@ export function TenantProvider({ children }) {
       value={{
         code,
         branding,
-        catalogue,
-        listePublique,
         chargement,
         choisir,
         changerEtablissement,

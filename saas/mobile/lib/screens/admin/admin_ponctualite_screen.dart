@@ -141,12 +141,10 @@ class _AdminPonctualiteScreenState extends State<AdminPonctualiteScreen> {
     setState(() => _downloadingPdf = true);
     try {
       final bytes = await AdminApiClient.instance.getBytes(
-        '/retards/bilan-cumule',
-        query: {
-          'debut': _isoDate(_debut),
-          'fin': _isoDate(_fin),
-          'tri': 'ponctualite',
-        },
+        // Le classement seul : le bilan cumulé y mêlait retards, absences
+        // et périodes à rattraper, où le classement se cherchait.
+        '/retards/classement-ponctualite/pdf',
+        query: {'debut': _isoDate(_debut), 'fin': _isoDate(_fin)},
       );
       final dir = await getTemporaryDirectory();
       final file = File(

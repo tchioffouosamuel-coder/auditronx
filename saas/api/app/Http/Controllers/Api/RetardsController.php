@@ -70,6 +70,38 @@ class RetardsController extends Controller
         return response()->json($bilans->classement($enseignants, $debut, $fin));
     }
 
+    /**
+     * GET /api/retards/classement-ponctualite/pdf?debut=&fin=&section=
+     *
+     * Le classement, et rien d'autre. L'écran téléchargeait jusqu'ici le
+     * bilan cumulé trié par ponctualité : un tableau de retards, d'absences
+     * et de périodes à rattraper, où le classement se cherchait. Le document
+     * porte désormais les seules colonnes du classement.
+     */
+    public function classementPonctualitePdf(Request $request, HoraireAttendu $horaires, BilanCumule $bilans)
+    {
+        [$debut, $fin, $enseignants] = $this->periodeEtEnseignants($request);
+        $section = trim((string) $request->query('section'));
+
+        if (mb_strtolower($section) !== HoraireAttendu::SECTION_ADMINISTRATIVE) {
+            $enseignants = $enseignants->reject(fn (Enseignant $enseignant) => $horaires->estAdministratif($enseignant));
+        }
+
+        $pdf = Pdf::loadView('pdf.bilan-mensuel', [
+            'bilan' => [
+                'libelle' => 'du '.$debut->format('d/m/Y').' au '.$fin->format('d/m/Y'),
+                'sections' => [],
+                'total' => [],
+                'ponctualite' => $bilans->classement($enseignants, $debut, $fin),
+            ],
+            'volet' => 'ponctualite',
+            'titre' => 'Classement de ponctualité',
+            'categorie' => $section !== '' ? $section : 'Personnel enseignant',
+        ])->setPaper('a4', 'landscape');
+
+        return $pdf->download("classement-ponctualite-{$debut->toDateString()}-{$fin->toDateString()}.pdf");
+    }
+
     /** GET /api/retards/bilan-cumule?debut=&fin=&section=&tri= — bilan PDF de tous les enseignants du périmètre. */
     public function bilanCumule(Request $request, HoraireAttendu $horaires, BilanCumule $bilans)
     {

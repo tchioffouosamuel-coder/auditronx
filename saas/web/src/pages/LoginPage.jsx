@@ -7,14 +7,7 @@ import { useTenant } from "../context/TenantContext";
 
 export default function LoginPage() {
   const { user, login } = useAuth();
-  const {
-    code,
-    branding,
-    catalogue,
-    listePublique,
-    choisir,
-    changerEtablissement,
-  } = useTenant();
+  const { code, branding, choisir, changerEtablissement } = useTenant();
   const navigate = useNavigate();
   const [parametres] = useSearchParams();
   const [identifier, setIdentifier] = useState("");
@@ -80,11 +73,7 @@ export default function LoginPage() {
           )}
 
           {!code ? (
-            <SelecteurEtablissement
-              catalogue={catalogue}
-              listePublique={listePublique}
-              onChoisir={choisir}
-            />
+            <SelecteurEtablissement onChoisir={choisir} />
           ) : (
             <form onSubmit={handleSubmit}>
               {/*

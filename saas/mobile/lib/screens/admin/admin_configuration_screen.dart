@@ -313,28 +313,48 @@ class _EnteteTab extends StatefulWidget {
   State<_EnteteTab> createState() => _EnteteTabState();
 }
 
-class _EnteteTabState extends State<_EnteteTab> {
-  /// Champs du formulaire, dans l'ordre de l'API et du document.
-  static const _champsFrancais = [
-    ('republique', 'République'),
-    ('devise', 'Devise'),
-    ('ministere', 'Ministère de tutelle'),
-    ('delegation', 'Délégation'),
-    ('etablissement', 'Établissement'),
-  ];
+/// Une ligne de l'en-tête : son texte, et la clé du champ nommé dont elle
+/// vient (République, Ministère…) quand c'en est un. Les lignes ajoutées par
+/// l'administration n'ont pas de clé — elles n'existent que dans la liste.
+class _LigneEntete {
+  _LigneEntete({required this.cle, required String texte})
+    : controller = TextEditingController(text: texte);
 
-  static const _champsAnglais = [
-    ('republique_en', 'Republic'),
-    ('devise_en', 'Motto'),
-    ('ministere_en', 'Ministry'),
-    ('delegation_en', 'Delegation'),
-    ('etablissement_en', 'School'),
+  final String? cle;
+  final TextEditingController controller;
+
+  Map<String, dynamic> get json => {'cle': cle, 'texte': controller.text.trim()};
+}
+
+class _EnteteTabState extends State<_EnteteTab> {
+  /// Intitulés des champs nommés, pour repérer une ligne dans la liste.
+  static const _libellesLigne = {
+    'republique': 'République',
+    'devise': 'Devise',
+    'ministere': 'Ministère de tutelle',
+    'delegation': 'Délégation',
+    'etablissement': 'Établissement',
+    'republique_en': 'Republic',
+    'devise_en': 'Motto',
+    'ministere_en': 'Ministry',
+    'delegation_en': 'Delegation',
+    'etablissement_en': 'School',
+  };
+
+  static const _colonnes = [
+    ('gauche', 'Colonne française'),
+    ('droite', 'Colonne anglaise'),
   ];
 
   static const _cacheKey = 'admin_entete_etablissement';
   static const _path = '/parametres/entete-etablissement';
 
   final _controllers = <String, TextEditingController>{};
+
+  /// Lignes des deux colonnes, dans l'ordre d'impression : c'est cette liste
+  /// qui décide de ce qui est imprimé, et dans quel ordre.
+  final _lignes = <String, List<_LigneEntete>>{'gauche': [], 'droite': []};
+
   late Future<void> _future;
   bool _saving = false;
 
@@ -347,9 +367,6 @@ class _EnteteTabState extends State<_EnteteTab> {
   @override
   void initState() {
     super.initState();
-    for (final (cle, _) in [..._champsFrancais, ..._champsAnglais]) {
-      _controllers[cle] = TextEditingController();
-    }
     _controllers['contact'] = TextEditingController();
     _future = _load();
   }
@@ -358,6 +375,11 @@ class _EnteteTabState extends State<_EnteteTab> {
   void dispose() {
     for (final controller in _controllers.values) {
       controller.dispose();
+    }
+    for (final colonne in _lignes.values) {
+      for (final ligne in colonne) {
+        ligne.controller.dispose();
+      }
     }
     super.dispose();
   }
@@ -372,6 +394,37 @@ class _EnteteTabState extends State<_EnteteTab> {
       entry.value.text = '${data[entry.key] ?? ''}';
     }
     _logoUrl = data['logo_url'] as String?;
+
+    final lignes = data['lignes'];
+    for (final (colonne, _) in _colonnes) {
+      for (final ligne in _lignes[colonne]!) {
+        ligne.controller.dispose();
+      }
+      _lignes[colonne] = [
+        for (final brut in (lignes is Map ? lignes[colonne] : null) as List? ?? const [])
+          if (brut is Map)
+            _LigneEntete(
+              cle: brut['cle'] as String?,
+              texte: '${brut['texte'] ?? ''}',
+            ),
+      ];
+    }
+  }
+
+  void _ajouterLigne(String colonne) {
+    setState(() => _lignes[colonne]!.add(_LigneEntete(cle: null, texte: '')));
+  }
+
+  void _retirerLigne(String colonne, int index) {
+    setState(() => _lignes[colonne]!.removeAt(index).controller.dispose());
+  }
+
+  /// Déplace une ligne d'un cran : c'est l'ordre de la liste qui est imprimé.
+  void _deplacerLigne(String colonne, int index, int pas) {
+    final cible = index + pas;
+    final liste = _lignes[colonne]!;
+    if (cible < 0 || cible >= liste.length) return;
+    setState(() => liste.insert(cible, liste.removeAt(index)));
   }
 
   Future<void> _choisirLogo() async {
@@ -447,7 +500,20 @@ class _EnteteTabState extends State<_EnteteTab> {
 
   Map<String, dynamic> get _valeurs => {
     for (final entry in _controllers.entries) entry.key: entry.value.text.trim(),
+    'lignes': {
+      for (final (colonne, _) in _colonnes)
+        colonne: [
+          for (final ligne in _lignes[colonne]!)
+            if (ligne.controller.text.trim().isNotEmpty) ligne.json,
+        ],
+    },
   };
+
+  /// Textes d'une colonne, pour l'aperçu.
+  List<String> _textes(String colonne) => [
+    for (final ligne in _lignes[colonne]!)
+      if (ligne.controller.text.trim().isNotEmpty) ligne.controller.text.trim(),
+  ];
 
   void _showMessage(String message) {
     if (!mounted) return;
@@ -458,11 +524,8 @@ class _EnteteTabState extends State<_EnteteTab> {
 
   Future<void> _save() async {
     final body = _valeurs;
-    if ((body['etablissement'] as String).isEmpty &&
-        (body['etablissement_en'] as String).isEmpty) {
-      _showMessage(
-        'Renseignez au moins le nom de l’établissement, en français ou en anglais.',
-      );
+    if (_textes('gauche').isEmpty && _textes('droite').isEmpty) {
+      _showMessage('Renseignez au moins une ligne d’en-tête.');
       return;
     }
 
@@ -529,19 +592,40 @@ class _EnteteTabState extends State<_EnteteTab> {
               const SizedBox(height: 4),
               const Text(
                 'Ces lignes coiffent les journaux, bilans et fiches exportés en '
-                'PDF ou en Word. Une ligne laissée vide n’est pas imprimée.',
+                'PDF ou en Word. Ajoutez-en autant que nécessaire et rangez-les '
+                'dans l’ordre d’impression ; une ligne vide n’est pas imprimée.',
                 style: TextStyle(color: AuditronColors.ink500),
               ),
               const SizedBox(height: 16),
-              _Apercu(valeurs: _valeurs, logoUrl: _logoUrl),
+              _Apercu(
+                gauche: _textes('gauche'),
+                droite: _textes('droite'),
+                contact: _controllers['contact']!.text.trim(),
+                logoUrl: _logoUrl,
+              ),
               const SizedBox(height: 20),
-              const _TitreBloc('Colonne française'),
-              for (final (cle, libelle) in _champsFrancais)
-                _champ(cle, libelle),
-              const SizedBox(height: 12),
-              const _TitreBloc('Colonne anglaise'),
-              for (final (cle, libelle) in _champsAnglais) _champ(cle, libelle),
-              const SizedBox(height: 12),
+              for (final (colonne, titre) in _colonnes) ...[
+                _TitreBloc(titre),
+                if (_lignes[colonne]!.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      'Aucune ligne : cette colonne restera vide.',
+                      style: TextStyle(color: AuditronColors.ink500),
+                    ),
+                  ),
+                for (var index = 0; index < _lignes[colonne]!.length; index++)
+                  _ligneEditable(colonne, index),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _ajouterLigne(colonne),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Ajouter une ligne'),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
               const _TitreBloc('Logo'),
               const Text(
                 'Imprimé au centre de l’en-tête, entre les deux colonnes. '
@@ -605,6 +689,53 @@ class _EnteteTabState extends State<_EnteteTab> {
     );
   }
 
+  /// Une ligne : son texte, et les boutons qui la déplacent ou la retirent.
+  Widget _ligneEditable(String colonne, int index) {
+    final ligne = _lignes[colonne]![index];
+    final libelle = ligne.cle == null ? null : _libellesLigne[ligne.cle];
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: TextField(
+              controller: ligne.controller,
+              textCapitalization: TextCapitalization.characters,
+              maxLength: 150,
+              // L'aperçu se redessine à la frappe : l'administration voit la
+              // ligne disparaître quand elle la vide.
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                labelText: libelle ?? 'Ligne ${index + 1}',
+                counterText: '',
+                isDense: true,
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Monter',
+            onPressed: index == 0 ? null : () => _deplacerLigne(colonne, index, -1),
+            icon: const Icon(Icons.arrow_upward, size: 20),
+          ),
+          IconButton(
+            tooltip: 'Descendre',
+            onPressed: index == _lignes[colonne]!.length - 1
+                ? null
+                : () => _deplacerLigne(colonne, index, 1),
+            icon: const Icon(Icons.arrow_downward, size: 20),
+          ),
+          IconButton(
+            tooltip: 'Retirer la ligne',
+            onPressed: () => _retirerLigne(colonne, index),
+            icon: const Icon(Icons.close, size: 20, color: Colors.redAccent),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _champ(String cle, String libelle, {String? helperText}) => Padding(
     padding: const EdgeInsets.only(bottom: 12),
     child: TextField(
@@ -647,34 +778,20 @@ class _TitreBloc extends StatelessWidget {
 /// vides retirées. Il évite d'avoir à exporter un document pour vérifier une
 /// saisie.
 class _Apercu extends StatelessWidget {
-  const _Apercu({required this.valeurs, this.logoUrl});
+  const _Apercu({
+    required this.gauche,
+    required this.droite,
+    required this.contact,
+    this.logoUrl,
+  });
 
-  final Map<String, dynamic> valeurs;
+  final List<String> gauche;
+  final List<String> droite;
+  final String contact;
   final String? logoUrl;
-
-  List<String> _colonne(List<String> cles) => cles
-      .map((cle) => '${valeurs[cle] ?? ''}'.trim())
-      .where((ligne) => ligne.isNotEmpty)
-      .toList();
 
   @override
   Widget build(BuildContext context) {
-    final gauche = _colonne(const [
-      'republique',
-      'devise',
-      'ministere',
-      'delegation',
-      'etablissement',
-    ]);
-    final droite = _colonne(const [
-      'republique_en',
-      'devise_en',
-      'ministere_en',
-      'delegation_en',
-      'etablissement_en',
-    ]);
-    final contact = '${valeurs['contact'] ?? ''}'.trim();
-
     if (gauche.isEmpty && droite.isEmpty && logoUrl == null) {
       return const Card(
         child: Padding(

@@ -734,6 +734,14 @@ const ENTETE_VIDE = Object.fromEntries(
   [...ENTETE_FRANCAIS, ...ENTETE_ANGLAIS, ['contact', '']].map(([cle]) => [cle, '']),
 )
 
+/** Intitulé d'une ligne venue des champs nommés, pour la repérer dans la liste. */
+const LIBELLES_LIGNE = Object.fromEntries([...ENTETE_FRANCAIS, ...ENTETE_ANGLAIS])
+
+const COLONNES_ENTETE = [
+  ['gauche', 'Colonne française'],
+  ['droite', 'Colonne anglaise'],
+]
+
 /**
  * Bandeau officiel repris en haut des documents exportés (journaux, bilans,
  * fiches). Il était écrit en dur dans les vues PDF du serveur : le nom d'un
@@ -750,14 +758,49 @@ function EnteteEtablissement() {
   // prend effet sans attendre l'enregistrement du reste de l'en-tête.
   const [logoUrl, setLogoUrl] = useState(null)
   const [logoEnCours, setLogoEnCours] = useState(false)
+  // Chaque colonne est une liste ordonnée : c'est elle qui décide de ce qui
+  // s'imprime et dans quel ordre. Une ligne garde sa `cle` quand elle vient
+  // d'un champ nommé (République, Ministère…), pour rester écrivable par les
+  // clients plus anciens.
+  const [lignes, setLignes] = useState({ gauche: [], droite: [] })
 
   useEffect(() => {
     api.get('/parametres/entete-etablissement').then(({ data }) => {
       setValeurs({ ...ENTETE_VIDE, ...data })
+      setLignes({ gauche: data.lignes?.gauche ?? [], droite: data.lignes?.droite ?? [] })
       setLogoUrl(data.logo_url ?? null)
       setLoading(false)
     })
   }, [])
+
+  function modifierLigne(colonne, index, texte) {
+    setLignes((actuelles) => ({
+      ...actuelles,
+      [colonne]: actuelles[colonne].map((ligne, i) => (i === index ? { ...ligne, texte } : ligne)),
+    }))
+  }
+
+  function ajouterLigne(colonne) {
+    setLignes((actuelles) => ({ ...actuelles, [colonne]: [...actuelles[colonne], { cle: null, texte: '' }] }))
+  }
+
+  function retirerLigne(colonne, index) {
+    setLignes((actuelles) => ({
+      ...actuelles,
+      [colonne]: actuelles[colonne].filter((_, i) => i !== index),
+    }))
+  }
+
+  /** Déplace une ligne d'un cran : c'est l'ordre de la liste qui est imprimé. */
+  function deplacerLigne(colonne, index, pas) {
+    const cible = index + pas
+    setLignes((actuelles) => {
+      const liste = [...actuelles[colonne]]
+      if (cible < 0 || cible >= liste.length) return actuelles
+      ;[liste[index], liste[cible]] = [liste[cible], liste[index]]
+      return { ...actuelles, [colonne]: liste }
+    })
+  }
 
   async function envoyerLogo(fichier) {
     if (!fichier) return
@@ -796,8 +839,16 @@ function EnteteEtablissement() {
     e.preventDefault()
     setSaving(true)
     try {
-      const { data } = await api.put('/parametres/entete-etablissement', valeurs)
+      const corps = {
+        contact: valeurs.contact ?? '',
+        lignes: {
+          gauche: lignes.gauche.filter((l) => l.texte.trim() !== ''),
+          droite: lignes.droite.filter((l) => l.texte.trim() !== ''),
+        },
+      }
+      const { data } = await api.put('/parametres/entete-etablissement', corps)
       setValeurs({ ...ENTETE_VIDE, ...data })
+      setLignes({ gauche: data.lignes?.gauche ?? [], droite: data.lignes?.droite ?? [] })
       notify('En-tête de l’établissement enregistré.', { icon: 'success' })
     } catch (error) {
       notify(messageErreur(error, "L'enregistrement a échoué."), { icon: 'error' })
@@ -806,21 +857,20 @@ function EnteteEtablissement() {
     }
   }
 
-  const colonne = (champs) =>
-    champs.map(([cle]) => (valeurs[cle] || '').trim()).filter((ligne) => ligne !== '')
+  const colonne = (cle) => lignes[cle].map((ligne) => ligne.texte.trim()).filter((ligne) => ligne !== '')
 
-  const gauche = colonne(ENTETE_FRANCAIS)
-  const droite = colonne(ENTETE_ANGLAIS)
+  const gauche = colonne('gauche')
+  const droite = colonne('droite')
   const contact = (valeurs.contact || '').trim()
 
   if (loading) return <LoadingState />
 
   return (
-    <form onSubmit={save} className={`max-w-4xl ${CARTE}`}>
+    <form onSubmit={save} className={`max-w-5xl ${CARTE}`}>
       <h2 className="text-sm font-medium text-ink-900">En-tête des documents</h2>
       <p className="mt-1 mb-4 text-sm text-ink-500">
-        Ces lignes coiffent les journaux, bilans et fiches exportés en PDF ou en Word. Une ligne
-        laissée vide n’est pas imprimée.
+        Ces lignes coiffent les journaux, bilans et fiches exportés en PDF ou en Word. Ajoutez-en autant
+        que nécessaire et rangez-les dans l’ordre d’impression ; une ligne laissée vide n’est pas imprimée.
       </p>
 
       {/* Aperçu : évite d'exporter un document pour vérifier une saisie. */}
@@ -852,26 +902,62 @@ function EnteteEtablissement() {
       </div>
 
       <div className="grid gap-6 sm:grid-cols-2">
-        {[
-          ['Colonne française', ENTETE_FRANCAIS],
-          ['Colonne anglaise', ENTETE_ANGLAIS],
-        ].map(([titre, champs]) => (
-          <fieldset key={titre}>
+        {COLONNES_ENTETE.map(([colonne, titre]) => (
+          <fieldset key={colonne}>
             <legend className="mb-2 text-xs font-semibold tracking-wide text-brand-700 uppercase">
               {titre}
             </legend>
-            {champs.map(([cle, label]) => (
-              <label key={cle} className="mb-3 block text-sm">
-                <span className="mb-1 block text-ink-700">{label}</span>
-                <input
-                  type="text"
-                  maxLength={150}
-                  value={valeurs[cle] || ''}
-                  onChange={(e) => definir(cle, e.target.value)}
-                  className="field py-2"
-                />
-              </label>
+
+            {lignes[colonne].length === 0 && (
+              <p className="mb-2 text-sm text-ink-500">Aucune ligne : cette colonne restera vide.</p>
+            )}
+
+            {lignes[colonne].map((ligne, index) => (
+              <div key={`${colonne}-${index}`} className="mb-2">
+                {ligne.cle && LIBELLES_LIGNE[ligne.cle] && (
+                  <span className="mb-1 block text-sm text-ink-500">{LIBELLES_LIGNE[ligne.cle]}</span>
+                )}
+                <div className="flex items-center gap-1">
+                  <input
+                    type="text"
+                    maxLength={150}
+                    value={ligne.texte}
+                    onChange={(e) => modifierLigne(colonne, index, e.target.value)}
+                    className="field w-full py-3 text-base"
+                  />
+                  <button
+                    type="button"
+                    title="Monter"
+                    disabled={index === 0}
+                    onClick={() => deplacerLigne(colonne, index, -1)}
+                    className="btn-ghost px-2 disabled:opacity-30"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    title="Descendre"
+                    disabled={index === lignes[colonne].length - 1}
+                    onClick={() => deplacerLigne(colonne, index, 1)}
+                    className="btn-ghost px-2 disabled:opacity-30"
+                  >
+                    ↓
+                  </button>
+                  <button
+                    type="button"
+                    title="Retirer la ligne"
+                    onClick={() => retirerLigne(colonne, index)}
+                    className="btn-ghost px-2 text-red-600"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
             ))}
+
+            <button type="button" onClick={() => ajouterLigne(colonne)} className="btn-secondary mt-1 text-sm">
+              Ajouter une ligne
+            </button>
           </fieldset>
         ))}
       </div>
@@ -912,7 +998,7 @@ function EnteteEtablissement() {
         </div>
       </fieldset>
 
-      <label className="mt-2 block max-w-xl text-sm">
+      <label className="mt-2 block text-sm">
         <span className="mb-1 block text-ink-700">Ligne de contact</span>
         <input
           type="text"
@@ -920,7 +1006,7 @@ function EnteteEtablissement() {
           placeholder="BP 42 Ngaoundal — Tél. 699 00 00 00"
           value={valeurs.contact || ''}
           onChange={(e) => definir('contact', e.target.value)}
-          className="field py-2"
+          className="field w-full py-3 text-base"
         />
       </label>
 

@@ -192,4 +192,24 @@ class RetardsAndDashboardTest extends TestCase
         $this->assertGreaterThan($ligneB['score_ponctualite'], $ligneA['score_ponctualite']);
         $this->assertSame($peuEnRetard->id, $classement->first()['enseignant_id']);
     }
+
+    /**
+     * Le document du classement ne porte que le classement : l'écran
+     * téléchargeait jusqu'ici le bilan cumulé trié par ponctualité, où retards,
+     * absences et périodes à rattraper noyaient le palmarès.
+     */
+    public function test_le_classement_de_ponctualite_a_son_propre_pdf(): void
+    {
+        $this->actingAsBackoffice();
+
+        $reponse = $this->get('/api/retards/classement-ponctualite/pdf?debut='
+            .now()->startOfMonth()->toDateString().'&fin='.now()->endOfMonth()->toDateString());
+
+        $reponse->assertOk();
+        $this->assertSame('application/pdf', $reponse->headers->get('content-type'));
+        $this->assertStringContainsString(
+            'classement-ponctualite',
+            (string) $reponse->headers->get('content-disposition'),
+        );
+    }
 }

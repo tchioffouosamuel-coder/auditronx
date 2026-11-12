@@ -51,6 +51,21 @@ class ParametreController extends Controller
             $regles[$champ] = ['sometimes', 'nullable', 'string', 'max:150'];
         }
 
+        // Les lignes libres : chaque colonne est une liste ordonnée, envoyée
+        // en entier. C'est ce qui permet d'en ajouter, d'en retirer et de les
+        // réordonner en une seule requête — un ordre ne se décrit pas champ
+        // par champ.
+        $regles['lignes'] = ['sometimes', 'array'];
+        foreach (['gauche', 'droite'] as $colonne) {
+            $regles["lignes.{$colonne}"] = ['sometimes', 'array', 'max:20'];
+            $regles["lignes.{$colonne}.*.texte"] = ['required', 'string', 'max:150'];
+            $regles["lignes.{$colonne}.*.cle"] = [
+                'nullable',
+                'string',
+                'in:'.implode(',', array_keys(EnteteEtablissement::CHAMPS)),
+            ];
+        }
+
         return response()->json($entete->definir($request->validate($regles)));
     }
 

@@ -109,6 +109,132 @@ class EnteteEtablissementTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_les_lignes_reprennent_les_champs_nommes(): void
+    {
+        $this->actingAsBackoffice();
+
+        $this->putJson('/api/parametres/entete-etablissement', [
+            'ministere' => 'MINESEC',
+            'etablissement' => 'LYCÉE BILINGUE DE NGAOUNDAL',
+        ])->assertOk();
+
+        $gauche = $this->getJson('/api/parametres/entete-etablissement')
+            ->assertOk()
+            ->json('lignes.gauche');
+
+        // Un établissement déjà configuré retrouve son en-tête tel quel, les
+        // lignes vides retirées, chacune adossée à son champ nommé.
+        $this->assertSame(
+            ['RÉPUBLIQUE DU CAMEROUN', 'Paix — Travail — Patrie', 'MINESEC', 'LYCÉE BILINGUE DE NGAOUNDAL'],
+            array_column($gauche, 'texte'),
+        );
+        $this->assertSame(['republique', 'devise', 'ministere', 'etablissement'], array_column($gauche, 'cle'));
+    }
+
+    public function test_une_ligne_sajoute_et_lordre_se_change(): void
+    {
+        $this->actingAsBackoffice();
+
+        $reponse = $this->putJson('/api/parametres/entete-etablissement', [
+            'lignes' => [
+                'gauche' => [
+                    ['cle' => 'etablissement', 'texte' => 'LYCÉE BILINGUE DE NGAOUNDAL'],
+                    ['cle' => 'republique', 'texte' => 'RÉPUBLIQUE DU CAMEROUN'],
+                    ['cle' => null, 'texte' => 'ARRÊTÉ DE CRÉATION N° 142/2019'],
+                ],
+                'droite' => [
+                    ['cle' => 'republique_en', 'texte' => 'REPUBLIC OF CAMEROON'],
+                ],
+            ],
+        ])->assertOk();
+
+        $this->assertSame(
+            ['LYCÉE BILINGUE DE NGAOUNDAL', 'RÉPUBLIQUE DU CAMEROUN', 'ARRÊTÉ DE CRÉATION N° 142/2019'],
+            array_column($reponse->json('lignes.gauche'), 'texte'),
+        );
+
+        // La ligne nommée reste écrivable par l'ancienne API…
+        $this->putJson('/api/parametres/entete-etablissement', ['etablissement' => 'LYCÉE DE MEIGANGA'])->assertOk();
+
+        $gauche = $this->getJson('/api/parametres/entete-etablissement')->assertOk()->json('lignes.gauche');
+
+        // … sans perdre ni l'ordre choisi ni la ligne ajoutée.
+        $this->assertSame(
+            ['LYCÉE DE MEIGANGA', 'RÉPUBLIQUE DU CAMEROUN', 'ARRÊTÉ DE CRÉATION N° 142/2019'],
+            array_column($gauche, 'texte'),
+        );
+    }
+
+    public function test_une_ligne_retiree_disparait_aussi_des_champs_nommes(): void
+    {
+        $this->actingAsBackoffice();
+
+        $this->putJson('/api/parametres/entete-etablissement', ['devise' => 'Paix — Travail — Patrie'])->assertOk();
+
+        $this->putJson('/api/parametres/entete-etablissement', [
+            'lignes' => [
+                'gauche' => [['cle' => 'etablissement', 'texte' => 'LYCÉE BILINGUE DE NGAOUNDAL']],
+                'droite' => [],
+            ],
+        ])->assertOk()->assertJson(['devise' => '']);
+
+        $valeurs = $this->getJson('/api/parametres/entete-etablissement')->assertOk()->json();
+
+        $this->assertSame([], $valeurs['lignes']['droite']);
+        $this->assertSame(['LYCÉE BILINGUE DE NGAOUNDAL'], array_column($valeurs['lignes']['gauche'], 'texte'));
+    }
+
+    public function test_une_ligne_sans_texte_est_refusee(): void
+    {
+        $this->actingAsBackoffice();
+
+        $this->putJson('/api/parametres/entete-etablissement', [
+            'lignes' => ['gauche' => [['cle' => null]]],
+        ])->assertStatus(422)->assertJsonValidationErrors('lignes.gauche.0.texte');
+    }
+
+    public function test_les_lignes_ordonnees_coiffent_le_document_word(): void
+    {
+        $this->actingAsBackoffice();
+        $enseignant = Enseignant::factory()->create(['nom' => 'MBALLA JEAN', 'section' => 'Industrielle']);
+        Presence::create([
+            'enseignant_id' => $enseignant->id,
+            'date' => $this->jour->toDateString(),
+            'heure_arrivee' => $this->jour->copy()->setTime(7, 42),
+            'source' => 'app_mobile',
+        ]);
+
+        $this->putJson('/api/parametres/entete-etablissement', [
+            'lignes' => [
+                'gauche' => [
+                    ['cle' => null, 'texte' => 'ARRÊTÉ DE CRÉATION N° 142/2019'],
+                    ['cle' => 'etablissement', 'texte' => 'LYCÉE BILINGUE DE NGAOUNDAL'],
+                ],
+                'droite' => [['cle' => 'etablissement_en', 'texte' => 'GBHS NGAOUNDAL']],
+            ],
+        ])->assertOk();
+
+        $contenu = $this->get(
+            '/api/assiduite/journal/word?categorie=enseignant&date='.$this->jour->toDateString()
+        )->assertOk()->streamedContent();
+
+        $chemin = tempnam(sys_get_temp_dir(), 'test').'.docx';
+        file_put_contents($chemin, $contenu);
+        $zip = new ZipArchive;
+        $this->assertTrue($zip->open($chemin) === true);
+        $xml = (string) $zip->getFromName('word/document.xml');
+        $zip->close();
+        @unlink($chemin);
+
+        // La ligne ajoutée est imprimée, et avant celle de l'établissement :
+        // c'est l'ordre saisi qui fait foi, plus celui du code.
+        $this->assertStringContainsString('ARRÊTÉ DE CRÉATION N° 142/2019', $xml);
+        $this->assertLessThan(
+            mb_strpos($xml, 'LYCÉE BILINGUE DE NGAOUNDAL'),
+            mb_strpos($xml, 'ARRÊTÉ DE CRÉATION N° 142/2019'),
+        );
+    }
+
     /** Un PNG minimal valide, à envoyer comme logo. */
     private function logoPng(): UploadedFile
     {
