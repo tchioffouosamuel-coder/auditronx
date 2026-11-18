@@ -33,6 +33,13 @@ class AdminFieldSpec {
   /// Extrait le libellé affiché d'un élément renvoyé par [optionsEndpoint].
   final String Function(Map<String, dynamic> item)? optionLabel;
 
+  /// Libellé d'une valeur courante absente de [optionsEndpoint] (ex. un
+  /// créneau saisi avant une reconfiguration de la grille horaire, dont
+  /// l'heure de début ne commence plus sur aucune période). Sans lui, la
+  /// valeur serait silencieusement désélectionnée au lieu de rester visible.
+  /// Défaut : la valeur telle quelle.
+  final String Function(dynamic value)? unknownOptionLabel;
+
   /// Aide affichée sous le champ (ex: "laisser vide pour ne pas changer").
   final String? helperText;
 
@@ -71,6 +78,7 @@ class AdminFieldSpec {
     this.optionsEndpoint,
     this.optionValue,
     this.optionLabel,
+    this.unknownOptionLabel,
     this.helperText,
     this.expandValue,
     this.valueFrom,

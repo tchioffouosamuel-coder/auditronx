@@ -296,6 +296,13 @@ class EnteteEtablissement
      * Remplace le logo de l'établissement et renvoie son URL publique.
      * L'ancien fichier est supprimé : un établissement n'a qu'un logo, et
      * deux extensions différentes en laisseraient un orphelin.
+     *
+     * Le fichier est renommé d'après le code de l'établissement avant d'être
+     * écrit. Les dossiers sont déjà cloisonnés par locataire, mais garder le
+     * nom d'origine — c'est toujours « logo.png » — donnait autant de
+     * `logo.png` que d'abonnés : impossible d'en ouvrir deux côte à côte, de
+     * dire à qui appartient celui qu'on regarde dans une sauvegarde, ou de
+     * les servir depuis un même cache sans qu'ils se recouvrent.
      */
     public function definirLogo(UploadedFile $fichier): ?string
     {
@@ -303,12 +310,27 @@ class EnteteEtablissement
 
         $extension = mb_strtolower($fichier->getClientOriginalExtension() ?: $fichier->extension());
         $extension = in_array($extension, self::LOGO_EXTENSIONS, true) ? $extension : 'png';
-        $chemin = self::LOGO_DOSSIER.'/logo.'.$extension;
+        $chemin = self::LOGO_DOSSIER.'/'.$this->nomDuLogo().'.'.$extension;
 
         Storage::disk(self::LOGO_DISQUE)->put($chemin, (string) file_get_contents($fichier->getRealPath()));
         Parametre::set(self::PREFIXE.'logo', $chemin);
 
         return $this->logoUrl();
+    }
+
+    /**
+     * Nom de fichier du logo : `logo-<code>`, ou `logo` hors contexte
+     * locataire (console, test sans établissement initialisé). Déterministe
+     * à dessein — un nom aléatoire à chaque envoi accumulerait les orphelins
+     * si une suppression échouait, et l'anti-cache est déjà assuré par
+     * l'horodatage ajouté dans [logoUrl].
+     */
+    private function nomDuLogo(): string
+    {
+        $code = mb_strtolower((string) ($this->tenants->courant()?->code ?? ''));
+        $code = (string) preg_replace('/[^a-z0-9_-]/', '', $code);
+
+        return $code === '' ? 'logo' : 'logo-'.$code;
     }
 
     public function supprimerLogo(): void

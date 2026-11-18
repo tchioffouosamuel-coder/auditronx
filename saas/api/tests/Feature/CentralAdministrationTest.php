@@ -44,6 +44,47 @@ class CentralAdministrationTest extends TestCase
         $this->assertArrayNotHasKey('password', $response->json('data'));
     }
 
+    public function test_le_formulaire_douverture_recoit_les_conventions_de_lhebergeur(): void
+    {
+        $this->admin();
+
+        config([
+            'auditron.tenant.prefixe_base' => 'u133979320_',
+            'auditron.tenant.prefixe_utilisateur' => 'u133979320_',
+            'auditron.provisioning.cree_la_base' => false,
+        ]);
+
+        $this->getJson('/api/central/etablissements/hebergement')
+            ->assertOk()
+            ->assertJson([
+                'prefixe_base' => 'u133979320_',
+                'prefixe_utilisateur' => 'u133979320_',
+                'cree_la_base' => false,
+            ]);
+    }
+
+    public function test_louverture_enregistre_la_base_et_le_compte_mysql_saisis(): void
+    {
+        $this->admin();
+
+        $this->postJson('/api/central/etablissements', [
+            'code' => 'LTN',
+            'nom' => 'Lycée Technique de Ngaoundal',
+            'db_name' => 'u133979320_ltn',
+            'db_username' => 'u133979320_ltn',
+            'db_password' => 'mot-de-passe-hebergeur',
+            'provisionner' => false,
+        ])->assertCreated();
+
+        $etablissement = Etablissement::where('code', 'LTN')->firstOrFail();
+
+        $this->assertSame('u133979320_ltn', $etablissement->db_name);
+        $this->assertSame([
+            'username' => 'u133979320_ltn',
+            'password' => 'mot-de-passe-hebergeur',
+        ], $etablissement->surchargesConnexion());
+    }
+
     public function test_le_support_ne_peut_pas_administrer_les_comptes_auditron(): void
     {
         Sanctum::actingAs(PlatformUser::create([

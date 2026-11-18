@@ -508,6 +508,12 @@ class _AdminCrudFormState extends State<_AdminCrudForm> {
   final Map<String, TextEditingController> _controllers = {};
   final Map<String, bool> _obscure = {};
 
+  /// Champs à recalculer quand la clé change — construit à partir de
+  /// [AdminFieldSpec.recomputeFrom] de tous les champs, pour que la source
+  /// puisse être aussi bien un champ texte (contrôleur) qu'un `select` (ex.
+  /// l'heure de début d'un créneau, limitée aux périodes configurées).
+  final Map<String, List<AdminFieldSpec>> _dependents = {};
+
   @override
   void initState() {
     super.initState();
@@ -533,25 +539,45 @@ class _AdminCrudFormState extends State<_AdminCrudForm> {
       if (f.type == AdminFieldType.password) _obscure[f.key] = true;
     }
 
+    for (final f in widget.fields) {
+      for (final cle in f.recomputeFrom ?? const <String>[]) {
+        _dependents.putIfAbsent(cle, () => []).add(f);
+      }
+    }
+
     // Deuxième passe : les champs calculés (ex. l'heure de fin, déduite du
     // début et d'un nombre de périodes) ont besoin que TOUS les contrôleurs
     // existent déjà, y compris ceux des champs déclarés après eux.
     for (final f in widget.fields) {
-      if (f.compute == null) continue;
-      _recompute(f);
-      for (final cle in f.recomputeFrom ?? const <String>[]) {
-        _controllers[cle]?.addListener(() => _recompute(f));
-      }
+      if (f.compute != null) _recompute(f);
+    }
+    for (final cle in _dependents.keys) {
+      _controllers[cle]?.addListener(() => _onFieldChanged(cle));
     }
   }
+
+  /// Un champ source a changé — contrôleur texte ou `select` (voir
+  /// [_buildField]) : recalcule tout champ qui le déclare dans
+  /// [AdminFieldSpec.recomputeFrom].
+  void _onFieldChanged(String key) {
+    for (final f in _dependents[key] ?? const <AdminFieldSpec>[]) {
+      _recompute(f);
+    }
+  }
+
+  /// Valeurs texte courantes de tous les champs, contrôleur ou `select`
+  /// confondus — c'est sur cette vue unifiée que [AdminFieldSpec.compute] lit
+  /// ses entrées.
+  Map<String, String> _texteValeurs() => {
+    for (final entry in _controllers.entries) entry.key: entry.value.text,
+    for (final f in widget.fields)
+      if (f.type == AdminFieldType.select) f.key: _values[f.key]?.toString() ?? '',
+  };
 
   /// Relit les valeurs texte courantes des autres champs et met à jour le
   /// contrôleur de [f] — voir [AdminFieldSpec.compute].
   void _recompute(AdminFieldSpec f) {
-    final valeurs = <String, String>{
-      for (final entry in _controllers.entries) entry.key: entry.value.text,
-    };
-    final calcule = f.compute!(valeurs);
+    final calcule = f.compute!(_texteValeurs());
     if (_controllers[f.key]!.text != calcule) {
       _controllers[f.key]!.text = calcule;
     }
@@ -689,7 +715,10 @@ class _AdminCrudFormState extends State<_AdminCrudForm> {
         return AdminSelectField(
           field: f,
           value: _values[f.key],
-          onChanged: (v) => setState(() => _values[f.key] = v),
+          onChanged: (v) {
+            setState(() => _values[f.key] = v);
+            _onFieldChanged(f.key);
+          },
         );
       case AdminFieldType.checkbox:
         return CheckboxListTile(

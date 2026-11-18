@@ -86,23 +86,33 @@ class AdminSelectField extends StatelessWidget {
           );
         }
         final items = snapshot.data!;
-        final currentValid = items.any(
-          (i) => (field.optionValue?.call(i) ?? i['id']) == value,
-        );
+        final options = items
+            .map(
+              (item) => AdminFieldOption(
+                field.optionValue?.call(item) ?? item['id'],
+                field.optionLabel?.call(item) ??
+                    (item['nom']?.toString() ??
+                        item['label']?.toString() ??
+                        '—'),
+              ),
+            )
+            .toList();
+        // Une valeur saisie avant une reconfiguration de la grille (ex. un
+        // créneau dont l'heure de début ne commence plus sur aucune période
+        // configurée) reste affichée plutôt que désélectionnée en silence.
+        final currentValid = options.any((o) => o.value == value);
+        if (!currentValid && value != null && value.toString().isNotEmpty) {
+          options.add(
+            AdminFieldOption(
+              value,
+              field.unknownOptionLabel?.call(value) ?? value.toString(),
+            ),
+          );
+        }
         return _FormSearchableSelect(
-          initialValue: currentValid ? value : null,
+          initialValue: value,
           label: field.label + (field.required ? ' *' : ''),
-          options: items
-              .map(
-                (item) => AdminFieldOption(
-                  field.optionValue?.call(item) ?? item['id'],
-                  field.optionLabel?.call(item) ??
-                      (item['nom']?.toString() ??
-                          item['label']?.toString() ??
-                          '—'),
-                ),
-              )
-              .toList(),
+          options: options,
           onChanged: onChanged,
           validator: field.required
               ? (selected) => selected == null ? 'Champ requis' : null

@@ -44,6 +44,17 @@ return [
 
         /* Préfixe des bases locataires : `auditron_ltm`, `auditron_lcm`, ... */
         'prefixe_base' => env('AUDITRON_TENANT_DB_PREFIX', 'auditron_'),
+
+        /*
+         * Préfixe des comptes MySQL des locataires. Sur un hébergement
+         * mutualisé, l'hébergeur impose le même préfixe qu'aux bases
+         * (`u133979320_`) : par défaut on reprend donc celui des bases, et on
+         * ne le dissocie que si l'hébergeur le demande.
+         */
+        'prefixe_utilisateur' => env(
+            'AUDITRON_TENANT_DB_USER_PREFIX',
+            env('AUDITRON_TENANT_DB_PREFIX', 'auditron_'),
+        ),
     ],
 
     /*

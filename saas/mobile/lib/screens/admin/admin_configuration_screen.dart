@@ -72,7 +72,7 @@ class _AdminConfigurationScreenState extends State<AdminConfigurationScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Column(
         children: [
           TabBar(
@@ -94,6 +94,10 @@ class _AdminConfigurationScreenState extends State<AdminConfigurationScreen> {
                 text: 'Emplois du temps spéciaux',
               ),
               Tab(
+                icon: Icon(Icons.badge_outlined, size: 20),
+                text: 'Horaires administratifs',
+              ),
+              Tab(
                 icon: Icon(Icons.description_outlined, size: 20),
                 text: 'En-tête de l’établissement',
               ),
@@ -105,6 +109,7 @@ class _AdminConfigurationScreenState extends State<AdminConfigurationScreen> {
                 _PeriodesTab(),
                 _PausesTab(),
                 _EmploisSpeciauxTab(),
+                _HorairesAdministratifsTab(),
                 _EnteteTab(),
               ],
             ),
@@ -162,18 +167,181 @@ class _PeriodesTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AdminCrudScreen(
-      title: 'Périodes de cours',
-      resourcePath: '/periodes-cours',
-      cacheKey: 'admin_periodes_cours',
-      icon: Icons.schedule_outlined,
-      fields: _fields,
-      itemTitle: (item) =>
-          item['libelle_complet']?.toString() ??
-          plageAffichee(item['heure_debut'], item['heure_fin']),
-      itemSubtitle: (item) => 'Période ${item['ordre']}',
-      searchFields: const ['libelle'],
-      searchHint: 'Rechercher une période…',
+    return Column(
+      children: [
+        const _DureePeriodeCard(),
+        const SizedBox(height: 4),
+        Expanded(
+          child: AdminCrudScreen(
+            title: 'Périodes de cours',
+            resourcePath: '/periodes-cours',
+            cacheKey: 'admin_periodes_cours',
+            icon: Icons.schedule_outlined,
+            fields: _fields,
+            itemTitle: (item) =>
+                item['libelle_complet']?.toString() ??
+                plageAffichee(item['heure_debut'], item['heure_fin']),
+            itemSubtitle: (item) => 'Période ${item['ordre']}',
+            searchFields: const ['libelle'],
+            searchHint: 'Rechercher une période…',
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Durée d'une période, en minutes (§4.2 — Configuration) — équivalent
+/// mobile de `DureePeriode` (`ConfigurationPage.jsx`). Elle décide de l'heure
+/// de fin déduite d'un nombre de périodes à la saisie d'un créneau (web comme
+/// mobile), et du nombre de périodes d'une plage dans les bilans d'assiduité.
+/// La changer ne retouche pas les créneaux déjà saisis : c'est leur décompte
+/// en périodes qui suit la nouvelle valeur.
+class _DureePeriodeCard extends StatefulWidget {
+  const _DureePeriodeCard();
+
+  @override
+  State<_DureePeriodeCard> createState() => _DureePeriodeCardState();
+}
+
+class _DureePeriodeCardState extends State<_DureePeriodeCard> {
+  final _controller = TextEditingController();
+  int _min = 5;
+  int _max = 240;
+  bool _saving = false;
+  late Future<void> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final data = await OfflineCache.instance.readThrough(
+      GrillePauses.cacheKeyDuree,
+      () => AdminApiClient.instance.get(GrillePauses.endpointDuree),
+    );
+    if (data is Map) {
+      _controller.text =
+          '${data['duree_periode_minutes'] ?? GrillePauses.dureePeriode}';
+      _min = (data['duree_periode_min'] as num?)?.toInt() ?? _min;
+      _max = (data['duree_periode_max'] as num?)?.toInt() ?? _max;
+    }
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _enregistrer() async {
+    final minutes = int.tryParse(_controller.text.trim());
+    if (minutes == null || minutes < _min || minutes > _max) {
+      _showMessage('Entrez une durée entre $_min et $_max minutes.');
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+    setState(() => _saving = true);
+    try {
+      final data = await AdminApiClient.instance.put(GrillePauses.endpointDuree, {
+        'duree_periode_minutes': minutes,
+      });
+      // Les formulaires d'emploi du temps déjà ouverts suivent la nouvelle
+      // valeur sans attendre un redémarrage de l'application.
+      GrillePauses.definirDureePeriode(minutes);
+      await OfflineCache.instance.overwrite(GrillePauses.cacheKeyDuree, data);
+      _showMessage('Durée d’une période enregistrée.');
+    } on ApiException catch (e) {
+      if (e.statusCode == 0) {
+        GrillePauses.definirDureePeriode(minutes);
+        await OfflineCache.instance.overwrite(GrillePauses.cacheKeyDuree, {
+          'duree_periode_minutes': minutes,
+          'duree_periode_min': _min,
+          'duree_periode_max': _max,
+        });
+        await PendingActionsQueue.instance.enqueue(
+          authMode: AuthMode.admin,
+          method: 'PUT',
+          path: GrillePauses.endpointDuree,
+          body: {'duree_periode_minutes': minutes},
+          label: 'Mettre à jour la durée d’une période',
+        );
+        await SyncEngine.instance.notifyEnqueued();
+        _showMessage('Durée enregistrée hors ligne.');
+      } else {
+        _showMessage(e.message);
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return Card(
+          margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Durée d’une période',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'En minutes. Elle décide de l’heure de fin déduite d’un créneau de '
+                  'son heure de début et de son nombre de périodes, et du décompte des '
+                  'périodes dans les bilans d’assiduité. La changer ne modifie aucun '
+                  'créneau déjà saisi.',
+                  style: TextStyle(color: AuditronColors.ink500, fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 90,
+                      child: TextField(
+                        controller: _controller,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Minutes',
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    FilledButton(
+                      onPressed: _saving ? null : _enregistrer,
+                      child: Text(_saving ? 'Enregistrement…' : 'Enregistrer'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -293,6 +461,224 @@ class _EmploisSpeciauxTab extends StatelessWidget {
           '${heureAffichee(item['heure_debut'])}–'
           '${heureAffichee(item['heure_fin'])}',
       searchHint: 'Rechercher un membre du personnel…',
+    );
+  }
+}
+
+/// Horaires du personnel administratif (§4.2 — Configuration) — équivalent
+/// mobile de `HorairesAdministratifs` (`ConfigurationPage.jsx`). Le personnel
+/// de la section « Administration » n'est pas évalué selon un emploi du
+/// temps : il est attendu chaque jour coché, sur la plage horaire indiquée.
+/// Un emploi du temps spécial, s'il existe, prime sur ces horaires.
+class _HorairesAdministratifsTab extends StatefulWidget {
+  const _HorairesAdministratifsTab();
+
+  @override
+  State<_HorairesAdministratifsTab> createState() =>
+      _HorairesAdministratifsTabState();
+}
+
+class _HorairesAdministratifsTabState
+    extends State<_HorairesAdministratifsTab> {
+  static const _cacheKey = 'admin_horaires_administratifs';
+  static const _path = '/parametres/horaires-administratifs';
+
+  Set<int> _joursSelectionnes = {1, 2, 3, 4, 5};
+  final _debutController = TextEditingController(text: '07:30');
+  final _finController = TextEditingController(text: '15:30');
+  bool _saving = false;
+  late Future<void> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  @override
+  void dispose() {
+    _debutController.dispose();
+    _finController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final data = await OfflineCache.instance.readThrough(
+      _cacheKey,
+      () => AdminApiClient.instance.get(_path),
+    );
+    if (data is! Map) return;
+    final jours = data['jours'];
+    if (jours is List) {
+      _joursSelectionnes = jours.map((j) => (j as num).toInt()).toSet();
+    }
+    _debutController.text = '${data['heure_debut'] ?? _debutController.text}';
+    _finController.text = '${data['heure_fin'] ?? _finController.text}';
+  }
+
+  Future<void> _refresh() async {
+    if (!mounted) return;
+    setState(() => _future = _load());
+    await _future;
+  }
+
+  Future<void> _pickTime(TextEditingController controller) async {
+    final parts = controller.text.split(':');
+    final courant = parts.length >= 2
+        ? TimeOfDay(
+            hour: int.tryParse(parts[0]) ?? 8,
+            minute: int.tryParse(parts[1]) ?? 0,
+          )
+        : const TimeOfDay(hour: 8, minute: 0);
+    final picked = await showTimePicker(context: context, initialTime: courant);
+    if (picked != null) {
+      setState(() {
+        controller.text =
+            '${picked.hour.toString().padLeft(2, '0')}:'
+            '${picked.minute.toString().padLeft(2, '0')}';
+      });
+    }
+  }
+
+  void _toggleJour(int jour) {
+    setState(() {
+      if (_joursSelectionnes.contains(jour)) {
+        _joursSelectionnes.remove(jour);
+      } else {
+        _joursSelectionnes.add(jour);
+      }
+    });
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _save() async {
+    if (_joursSelectionnes.isEmpty) {
+      _showMessage('Cochez au moins un jour.');
+      return;
+    }
+    final body = {
+      'jours': _joursSelectionnes.toList()..sort(),
+      'heure_debut': _debutController.text,
+      'heure_fin': _finController.text,
+    };
+
+    FocusScope.of(context).unfocus();
+    setState(() => _saving = true);
+    try {
+      final data = await AdminApiClient.instance.put(_path, body);
+      await OfflineCache.instance.overwrite(_cacheKey, data);
+      _showMessage('Horaires du personnel administratif enregistrés.');
+    } on ApiException catch (e) {
+      if (e.statusCode == 0) {
+        await OfflineCache.instance.overwrite(_cacheKey, body);
+        await PendingActionsQueue.instance.enqueue(
+          authMode: AuthMode.admin,
+          method: 'PUT',
+          path: _path,
+          body: body,
+          label: 'Mettre à jour les horaires du personnel administratif',
+        );
+        await SyncEngine.instance.notifyEnqueued();
+        _showMessage('Horaires enregistrés hors ligne.');
+      } else {
+        _showMessage(e.message);
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return RefreshIndicator(
+          onRefresh: _refresh,
+          child: ListView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+            children: [
+              Text(
+                'Horaires du personnel administratif',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Le personnel de la section « Administration » n’est pas évalué '
+                'selon un emploi du temps : il est attendu chaque jour coché '
+                'ci-dessous, sur la plage horaire indiquée. Un emploi du temps '
+                'spécial, s’il existe, prime sur ces horaires.',
+                style: TextStyle(color: AuditronColors.ink500),
+              ),
+              const SizedBox(height: 16),
+              const _TitreBloc('Jours de présence'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  for (final option in _jours)
+                    FilterChip(
+                      label: Text(option.label),
+                      selected: _joursSelectionnes.contains(option.value),
+                      onSelected: (_) => _toggleJour(option.value as int),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const _TitreBloc('Plage horaire'),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _debutController,
+                      readOnly: true,
+                      onTap: () => _pickTime(_debutController),
+                      decoration: const InputDecoration(
+                        labelText: 'Début de journée',
+                        suffixIcon: Icon(Icons.schedule, size: 18),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _finController,
+                      readOnly: true,
+                      onTap: () => _pickTime(_finController),
+                      decoration: const InputDecoration(
+                        labelText: 'Fin de journée',
+                        suffixIcon: Icon(Icons.schedule, size: 18),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: _saving || _joursSelectionnes.isEmpty ? null : _save,
+                icon: _saving
+                    ? const SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.save_outlined),
+                label: Text(_saving ? 'Enregistrement…' : 'Enregistrer'),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

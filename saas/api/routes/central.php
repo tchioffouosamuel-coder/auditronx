@@ -53,6 +53,9 @@ Route::middleware(['auth:sanctum', 'platform'])->group(function () {
 
     // Lecture du parc ouverte à tout le personnel Auditron (support inclus).
     Route::get('/etablissements', [EtablissementController::class, 'index']);
+    // Déclarée avant la route paramétrée, sinon « hebergement » serait pris
+    // pour un identifiant d'établissement.
+    Route::get('/etablissements/hebergement', [EtablissementController::class, 'hebergement']);
     Route::get('/etablissements/{etablissement}', [EtablissementController::class, 'show']);
 
     Route::get('/plans', [PlanController::class, 'index']);

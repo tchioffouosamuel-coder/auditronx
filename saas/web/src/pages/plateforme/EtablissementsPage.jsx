@@ -44,6 +44,9 @@ export default function EtablissementsPage() {
   const [confirmation, setConfirmation] = useState("");
   const [details, setDetails] = useState(null);
   const [editionDetails, setEditionDetails] = useState(false);
+  // Conventions de l'hébergeur : préfixes imposés aux bases et aux comptes
+  // MySQL. Elles pilotent les valeurs proposées à l'ouverture d'un compte.
+  const [hebergement, setHebergement] = useState(null);
 
   function recharger() {
     return apiCentral
@@ -54,7 +57,20 @@ export default function EtablissementsPage() {
 
   useEffect(() => {
     recharger();
+    apiCentral
+      .get("/etablissements/hebergement")
+      .then(({ data }) => setHebergement(data))
+      .catch(() => setHebergement(null));
   }, []);
+
+  /* Suffixe proposé pour la base et le compte : le code, en minuscules. */
+  function suffixeParDefaut(code) {
+    return (code ?? "").toLowerCase().replace(/[^a-z0-9_]/g, "");
+  }
+
+  function ouvrirCreation() {
+    setCreation({ creer_la_base: hebergement?.cree_la_base ?? true });
+  }
 
   async function creer(e) {
     e.preventDefault();
@@ -62,7 +78,19 @@ export default function EtablissementsPage() {
     setEnCours(true);
 
     try {
-      const { data } = await apiCentral.post("/etablissements", creation);
+      const { db_suffixe, user_suffixe, ...champs } = creation;
+      const defaut = suffixeParDefaut(creation.code);
+      const prefixeBase = hebergement?.prefixe_base ?? "";
+      const prefixeUser = hebergement?.prefixe_utilisateur ?? "";
+
+      const { data } = await apiCentral.post("/etablissements", {
+        ...champs,
+        // Nom de base et compte MySQL explicites dès l'ouverture : laissés
+        // vides, la connexion locataire retomberait sur le compte central,
+        // qui n'a aucun droit sur la base du client en mutualisé.
+        db_name: prefixeBase + (db_suffixe || defaut),
+        db_username: prefixeUser + (user_suffixe || defaut),
+      });
       setCreation(null);
       // Mot de passe affiché une seule fois : il n'est stocké que haché dans
       // la base du client, personne ne pourra le relire ensuite.
@@ -176,7 +204,7 @@ export default function EtablissementsPage() {
         {estSuperAdmin && (
           <button
             type="button"
-            onClick={() => setCreation({})}
+            onClick={ouvrirCreation}
             className="btn bg-ink-900 text-white hover:bg-ink-800"
           >
             Ouvrir un établissement
@@ -293,6 +321,65 @@ export default function EtablissementsPage() {
                 />
               </label>
             ))}
+
+            {hebergement?.identifiants_requis && (
+              <fieldset className="space-y-3 rounded-xl border border-ink-100 p-3">
+                <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-ink-500">
+                  Base de données de l’établissement
+                </legend>
+
+                <ChampPrefixe
+                  label="Nom de la base"
+                  prefixe={hebergement.prefixe_base}
+                  value={creation.db_suffixe ?? suffixeParDefaut(creation.code)}
+                  onChange={(v) => setCreation({ ...creation, db_suffixe: v })}
+                />
+
+                <ChampPrefixe
+                  label="Utilisateur MySQL"
+                  prefixe={hebergement.prefixe_utilisateur}
+                  value={creation.user_suffixe ?? suffixeParDefaut(creation.code)}
+                  onChange={(v) => setCreation({ ...creation, user_suffixe: v })}
+                />
+
+                <label className="block text-sm">
+                  <span className="mb-1 block font-medium text-ink-700">
+                    Mot de passe de cet utilisateur
+                  </span>
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    value={creation.db_password ?? ""}
+                    onChange={(e) => setCreation({ ...creation, db_password: e.target.value })}
+                    className="field w-full"
+                  />
+                </label>
+
+                <label className="flex items-start gap-2 text-sm text-ink-700">
+                  <input
+                    type="checkbox"
+                    checked={creation.creer_la_base ?? true}
+                    onChange={(e) => setCreation({ ...creation, creer_la_base: e.target.checked })}
+                    className="mt-1"
+                  />
+                  <span>
+                    Créer la base automatiquement.
+                    <span className="block text-xs text-ink-500">
+                      À décocher sur hébergement mutualisé : la base et son utilisateur doivent
+                      alors être créés d’abord dans le panneau de l’hébergeur, puis saisis
+                      ci-dessus à l’identique.
+                    </span>
+                  </span>
+                </label>
+
+                {!creation.db_password && (
+                  <p className="rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                    Sans mot de passe, la base sera jointe avec le compte central — qui n’y a
+                    généralement aucun droit en mutualisé.
+                  </p>
+                )}
+              </fieldset>
+            )}
 
             <p className="text-xs text-ink-500">
               La base de l’établissement est créée et migrée immédiatement, et un compte de
@@ -419,6 +506,7 @@ export default function EtablissementsPage() {
                 <Detail label="E-mail" value={details.data.contact_email} />
                 <Detail label="Téléphone" value={details.data.contact_tel} />
                 <Detail label="Base configurée" value={details.data.db_name || `auditron_${details.data.code.toLowerCase()}`} />
+                <Detail label="Utilisateur de base" value={details.data.db_username || "compte central"} />
                 <Detail label="Provisionné le" value={details.data.provisionne_le ? new Date(details.data.provisionne_le).toLocaleString("fr-FR") : "Non provisionné"} />
               </dl>
               {details.data.notes && (
@@ -444,6 +532,32 @@ export default function EtablissementsPage() {
         </Modal>
       )}
     </div>
+  );
+}
+
+/**
+ * Champ à préfixe imposé : l’hébergeur mutualisé nomme toutes les bases et
+ * tous les comptes `u1339…_xxx`. Le préfixe est affiché mais non modifiable,
+ * seule la suite se saisit — c’est ce qui rend la valeur fiable du premier coup.
+ */
+function ChampPrefixe({ label, prefixe, value, onChange }) {
+  return (
+    <label className="block text-sm">
+      <span className="mb-1 block font-medium text-ink-700">{label}</span>
+      <div className="flex items-stretch overflow-hidden rounded-lg border border-ink-100 focus-within:border-brand-400">
+        {prefixe && (
+          <span className="flex items-center bg-ink-50 px-2 font-mono text-xs text-ink-500">
+            {prefixe}
+          </span>
+        )}
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+          className="w-full border-0 px-2 py-2 font-mono text-sm outline-none"
+        />
+      </div>
+    </label>
   );
 }
 

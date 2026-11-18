@@ -270,11 +270,25 @@ class _AdminEmploisScreenState extends State<AdminEmploisScreen> {
     // choisir à part laissait composer des créneaux impossibles (début
     // 15h30, fin 08h10) — et les pauses de la journée sont enjambées : une
     // récréation repousse la fin sans compter pour une période.
-    const AdminFieldSpec(
+    //
+    // Le début se choisit parmi les périodes configurées (Configuration) —
+    // comme côté web — plutôt qu'en heure libre : un champ libre laissait
+    // composer un créneau qui ne commence sur aucune période réelle.
+    AdminFieldSpec(
       key: 'heure_debut',
       label: 'Heure de début',
-      type: AdminFieldType.time,
+      type: AdminFieldType.select,
       required: true,
+      optionsEndpoint: '/periodes-cours',
+      optionValue: (item) => heureMinute(item['heure_debut']),
+      optionLabel: (item) =>
+          item['libelle_complet']?.toString() ??
+          plageAffichee(item['heure_debut'], item['heure_fin']),
+      // Un créneau saisi avant une reconfiguration de la grille peut ne
+      // commencer sur aucune période : il reste affiché tel quel plutôt que
+      // de laisser croire que l'horaire est perdu.
+      unknownOptionLabel: (value) => '${heureAffichee(value)} (hors grille)',
+      valueFrom: (item) => heureMinute(item['heure_debut']),
       helperText: 'Début de la première période du créneau.',
     ),
     AdminFieldSpec(

@@ -44,6 +44,29 @@ class EtablissementController extends Controller
         return response()->json(['data' => $etablissements]);
     }
 
+    /**
+     * Conventions de nommage imposées par l'hébergeur, pour que le formulaire
+     * d'ouverture propose une base et un compte MySQL valides au lieu de les
+     * laisser vides — un champ vide retombe sur le compte central, qui n'a
+     * aucun droit sur la base du client en mutualisé.
+     */
+    public function hebergement()
+    {
+        $driver = config('database.connections.tenant.driver');
+
+        return response()->json([
+            'prefixe_base' => (string) config('auditron.tenant.prefixe_base'),
+            'prefixe_utilisateur' => (string) config('auditron.tenant.prefixe_utilisateur'),
+            // False sur mutualisé : l'hébergeur crée les bases à la main, et
+            // le formulaire doit alors réclamer des accès déjà existants.
+            'cree_la_base' => (bool) config('auditron.provisioning.cree_la_base'),
+            // SQLite (démo locale, tests) : une base est un fichier, il n'y a
+            // ni compte ni mot de passe à saisir.
+            'identifiants_requis' => $driver !== 'sqlite',
+            'driver' => $driver,
+        ]);
+    }
+
     public function store(Request $request)
     {
         $data = $request->validate([
@@ -66,6 +89,9 @@ class EtablissementController extends Controller
             // Provisionner tout de suite (défaut) ou créer la fiche seule, le
             // temps que l'hébergeur crée la base à la main.
             'provisionner' => ['sometimes', 'boolean'],
+            // Tenter le `CREATE DATABASE` (serveur dédié) ou considérer que la
+            // base a déjà été créée par l'hébergeur (mutualisé).
+            'creer_la_base' => ['sometimes', 'boolean'],
             'direction_email' => ['nullable', 'email'],
             'direction_password' => ['nullable', 'string', 'min:10'],
         ]);
@@ -81,7 +107,8 @@ class EtablissementController extends Controller
 
         $etablissement = Etablissement::create([
             ...collect($data)->except([
-                'code', 'provisionner', 'direction_email', 'direction_password',
+                'code', 'provisionner', 'creer_la_base',
+                'direction_email', 'direction_password',
             ])->all(),
             'code' => $code,
             'fuseau' => $data['fuseau'] ?? 'Africa/Douala',
@@ -92,10 +119,14 @@ class EtablissementController extends Controller
 
         if ($request->boolean('provisionner', true)) {
             try {
-                $this->provisionneur->provisionne($etablissement, direction: array_filter([
-                    'email' => $data['direction_email'] ?? null,
-                    'password' => $data['direction_password'] ?? null,
-                ]));
+                $this->provisionneur->provisionne(
+                    $etablissement,
+                    direction: array_filter([
+                        'email' => $data['direction_email'] ?? null,
+                        'password' => $data['direction_password'] ?? null,
+                    ]),
+                    creerLaBase: $request->boolean('creer_la_base', true),
+                );
                 $identifiants = $this->provisionneur->dernieresIdentifiants();
             } catch (Throwable $e) {
                 // La fiche est conservée en `en_attente` : le provisioning est

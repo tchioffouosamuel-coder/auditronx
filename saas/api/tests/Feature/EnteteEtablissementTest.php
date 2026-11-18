@@ -285,21 +285,26 @@ class EnteteEtablissementTest extends TestCase
             ->assertOk()
             ->json('logo_url');
 
+        // Renommé d'après l'établissement : le fichier envoyé s'appelait
+        // « logo.png », comme celui de tous les autres abonnés.
+        $attendu = 'entete/logo-'.strtolower($this->codeEtablissement).'.png';
+
         $this->assertIsString($url);
-        $this->assertStringContainsString('entete/logo.png', $url);
-        $this->assertTrue(Storage::disk(EnteteEtablissement::LOGO_DISQUE)->exists('entete/logo.png'));
+        $this->assertStringContainsString($attendu, $url);
+        $this->assertTrue(Storage::disk(EnteteEtablissement::LOGO_DISQUE)->exists($attendu));
+        $this->assertFalse(Storage::disk(EnteteEtablissement::LOGO_DISQUE)->exists('entete/logo.png'));
 
         // L'en-tête le renvoie aux écrans de configuration, qui l'affichent.
         $this->getJson('/api/parametres/entete-etablissement')->assertOk()->assertJsonPath(
             'logo_url',
-            fn ($valeur) => is_string($valeur) && str_contains($valeur, 'entete/logo.png'),
+            fn ($valeur) => is_string($valeur) && str_contains($valeur, $attendu),
         );
 
         $this->deleteJson('/api/parametres/entete-etablissement/logo')
             ->assertOk()
             ->assertJson(['logo_url' => null]);
 
-        $this->assertFalse(Storage::disk(EnteteEtablissement::LOGO_DISQUE)->exists('entete/logo.png'));
+        $this->assertFalse(Storage::disk(EnteteEtablissement::LOGO_DISQUE)->exists($attendu));
     }
 
     public function test_un_fichier_qui_nest_pas_une_image_est_refuse(): void
