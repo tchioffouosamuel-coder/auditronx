@@ -68,6 +68,23 @@ class ManagementApiTest extends TestCase
             ->assertCreated();
     }
 
+    public function test_creation_accepte_un_matricule_deja_utilise(): void
+    {
+        $this->actingAsBackoffice();
+
+        $this->postJson('/api/personnel', [
+            'nom' => 'Premier enseignant',
+            'matricule' => 'MAT-DOUBLON',
+        ])->assertCreated();
+
+        $this->postJson('/api/personnel', [
+            'nom' => 'Second enseignant',
+            'matricule' => 'MAT-DOUBLON',
+        ])->assertCreated();
+
+        $this->assertDatabaseCount('enseignants', 2);
+    }
+
     public function test_un_role_restreint_ne_voit_que_les_enseignants_de_sa_section(): void
     {
         $accreditation = Accreditation::create(['label' => 'Chef de section Sciences', 'groupe' => 'Sciences']);

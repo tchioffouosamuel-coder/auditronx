@@ -10,7 +10,7 @@ class EnseignantFactory extends Factory
     {
         return [
             'nom' => $this->faker->name(),
-            'matricule' => $this->faker->unique()->numerify('MAT-####'),
+            'matricule' => $this->faker->numerify('MAT-####'),
             'email' => $this->faker->unique()->safeEmail(),
             'fonction' => 'Enseignant',
             'section' => $this->faker->randomElement(['Sciences', 'Lettres', 'Techniques']),

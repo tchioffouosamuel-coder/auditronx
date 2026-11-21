@@ -52,7 +52,10 @@ class SpreadsheetController extends Controller
                         return 'nom et matricule requis';
                     }
 
-                    $enseignant = Enseignant::firstOrNew(['matricule' => $matricule]);
+                    $enseignant = Enseignant::firstOrNew([
+                        'matricule' => $matricule,
+                        'nom' => $nom,
+                    ]);
 
                     $enseignant->fill([
                         'nom' => $nom,

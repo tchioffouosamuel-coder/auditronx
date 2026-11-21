@@ -40,7 +40,7 @@ class EnseignantController extends Controller
     {
         $data = $request->validate([
             'nom' => ['required', 'string', 'max:255'],
-            'matricule' => ['required', 'string', 'max:50', 'unique:enseignants,matricule'],
+            'matricule' => ['required', 'string', 'max:50'],
             'email' => ['nullable', 'email', 'unique:enseignants,email'],
             'fonction' => ['nullable', 'string', 'max:255'],
             'section' => ['nullable', 'string', 'max:255'],
@@ -87,7 +87,7 @@ class EnseignantController extends Controller
 
         $data = $request->validate([
             'nom' => ['sometimes', 'string', 'max:255'],
-            'matricule' => ['sometimes', 'string', 'max:50', 'unique:enseignants,matricule,' . $enseignant->id],
+            'matricule' => ['sometimes', 'string', 'max:50'],
             'email' => ['nullable', 'email', 'unique:enseignants,email,' . $enseignant->id],
             'fonction' => ['nullable', 'string', 'max:255'],
             'section' => ['nullable', 'string', 'max:255'],
@@ -230,20 +230,12 @@ class EnseignantController extends Controller
         ]);
 
         $crees = [];
-        $erreurs = [];
 
-        foreach ($data['enseignants'] as $index => $ligne) {
-            if (Enseignant::where('matricule', $ligne['matricule'])->exists()) {
-                $erreurs[] = ['index' => $index, 'matricule' => $ligne['matricule'], 'erreur' => 'Matricule déjà existant.'];
-
-                continue;
-            }
-
+        foreach ($data['enseignants'] as $ligne) {
             $this->refuserSectionInterdite($request->user(), $ligne['section'] ?? null);
-
             $crees[] = Enseignant::create($this->avecMotDePasse($ligne));
         }
 
-        return response()->json(['crees' => count($crees), 'erreurs' => $erreurs], 201);
+        return response()->json(['crees' => count($crees), 'erreurs' => []], 201);
     }
 }
