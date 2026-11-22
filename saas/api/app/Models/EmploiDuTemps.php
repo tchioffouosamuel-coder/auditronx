@@ -11,6 +11,22 @@ class EmploiDuTemps extends Model
 {
     use HasFactory;
 
+    /**
+     * Jours de la semaine, tels qu'ils s'écrivent dans les classeurs
+     * d'import/export de l'emploi du temps. La colonne `jour` reste un entier
+     * en base et dans l'API JSON ; seuls les fichiers parlent en clair, parce
+     * qu'un numéro de 1 à 7 obligeait l'utilisateur à retenir une convention.
+     */
+    public const NOMS_JOURS = [
+        1 => 'Lundi',
+        2 => 'Mardi',
+        3 => 'Mercredi',
+        4 => 'Jeudi',
+        5 => 'Vendredi',
+        6 => 'Samedi',
+        7 => 'Dimanche',
+    ];
+
     public const HEURES_DEBUT = [
         '07:30',
         '08:10',
@@ -59,6 +75,42 @@ class EmploiDuTemps extends Model
         'salle',
         'type_cours',
     ];
+
+    /** « Lundi » pour 1, null si le numéro n'est pas un jour de la semaine. */
+    public static function nomJour(mixed $jour): ?string
+    {
+        return self::NOMS_JOURS[(int) $jour] ?? null;
+    }
+
+    /**
+     * Numéro de jour depuis ce qu'écrit l'utilisateur : « Lundi », « lundi »,
+     * « MARDI », « mer. ». Les anciens classeurs portant un numéro de 1 à 7
+     * restent acceptés, sinon un fichier déjà rempli deviendrait illisible.
+     * Renvoie null si la valeur ne désigne aucun jour.
+     */
+    public static function jourDepuisLibelle(mixed $valeur): ?int
+    {
+        // Espaces et points sautés : « mer. » et « Mer » désignent le mercredi.
+        $texte = preg_replace('/[\s.]+/u', '', mb_strtolower(trim((string) $valeur), 'UTF-8')) ?? '';
+
+        if ($texte === '') {
+            return null;
+        }
+
+        if (ctype_digit($texte)) {
+            return isset(self::NOMS_JOURS[(int) $texte]) ? (int) $texte : null;
+        }
+
+        foreach (self::NOMS_JOURS as $numero => $nom) {
+            $nom = mb_strtolower($nom, 'UTF-8');
+
+            if ($texte === $nom || $texte === mb_substr($nom, 0, 3, 'UTF-8')) {
+                return $numero;
+            }
+        }
+
+        return null;
+    }
 
     public function enseignant(): BelongsTo
     {

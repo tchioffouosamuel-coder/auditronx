@@ -7,6 +7,7 @@ use App\Models\Classe;
 use App\Models\Discipline;
 use App\Models\EmploiDuTemps;
 use App\Models\Enseignant;
+use App\Models\PeriodeCours;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -129,9 +130,17 @@ class SpreadsheetTest extends TestCase
         $this->assertSame('=NomsEnseignants', $templateWorkbook->getSheet(0)->getCell('A2')->getDataValidation()->getFormula1());
         $this->assertSame('Ada Lovelace', $templateWorkbook->getSheetByName('_listes')->getCell('A2')->getValue());
         $this->assertSame('=CodesDisciplines', $templateWorkbook->getSheet(0)->getCell('C2')->getDataValidation()->getFormula1());
+        $this->assertSame('=Jours', $templateWorkbook->getSheet(0)->getCell('D2')->getDataValidation()->getFormula1());
         $this->assertSame('=HeuresDebut', $templateWorkbook->getSheet(0)->getCell('E2')->getDataValidation()->getFormula1());
         $this->assertSame('=HeuresFin', $templateWorkbook->getSheet(0)->getCell('F2')->getDataValidation()->getFormula1());
         $this->assertSame('=TypesCours', $templateWorkbook->getSheet(0)->getCell('H2')->getDataValidation()->getFormula1());
+
+        // Le jour se choisit en clair, et les heures proposées sont celles des
+        // périodes de l'établissement — pas la grille figée du modèle.
+        $this->assertSame('Lundi', $templateWorkbook->getSheetByName('_listes')->getCell('F2')->getValue());
+        $this->assertSame('Dimanche', $templateWorkbook->getSheetByName('_listes')->getCell('F8')->getValue());
+        $this->assertSame('07:30', $templateWorkbook->getSheetByName('_listes')->getCell('C2')->getValue());
+        $this->assertSame('08:10', $templateWorkbook->getSheetByName('_listes')->getCell('D2')->getValue());
         $this->assertFalse($templateWorkbook->getSheet(0)->getCell('A2')->getDataValidation()->getShowInputMessage());
         $this->assertTrue($templateWorkbook->getSheet(0)->getCell('A2')->getDataValidation()->getShowDropDown());
         $this->assertSame('Théorique', $templateWorkbook->getSheetByName('_listes')->getCell('E2')->getValue());
@@ -143,6 +152,7 @@ class SpreadsheetTest extends TestCase
         $exportWorkbook = $this->readWorkbook($exportBinary);
         $this->assertSame(['TA1', 'TB1', '_listes'], $exportWorkbook->getSheetNames());
         $this->assertSame('Ada Lovelace', $exportWorkbook->getSheet(0)->getCell('A2')->getValue());
+        $this->assertSame('Lundi', $exportWorkbook->getSheet(0)->getCell('D2')->getValue());
         $this->assertSame('list', $exportWorkbook->getSheet(0)->getCell('A2')->getDataValidation()->getType());
 
         $response = $this->post('/api/spreadsheet/emplois/import', [
@@ -200,10 +210,115 @@ class SpreadsheetTest extends TestCase
         ])->assertOk();
 
         $response->assertJsonPath('importes', 0);
-        $response->assertJsonPath('erreurs.0.erreur', 'heure_debut doit être choisie dans la liste prédéfinie (valeur reçue : « 08:00 »)');
+        $response->assertJsonPath('erreurs.0.erreur', "heure_debut doit être le début d'une période de l'établissement (valeur reçue : « 08:00 »)");
         $response->assertJsonPath('erreurs.1.erreur', 'discipline « UNKNOWN » introuvable');
         $response->assertJsonPath('erreurs.1.feuille_nom', 'Worksheet');
         $this->assertSame(0, EmploiDuTemps::count());
+    }
+
+    public function test_import_emplois_accepte_les_jours_en_clair(): void
+    {
+        $this->actingAsBackoffice();
+        Classe::factory()->create(['code' => 'TA1']);
+        Enseignant::factory()->create(['matricule' => 'MAT-001']);
+        Discipline::factory()->create(['code' => 'MATH']);
+
+        // Casse, abréviation pointée et ancien numéro : les trois écritures
+        // qu'un classeur déjà rempli peut porter.
+        $binary = Excel::raw(
+            new ArrayExport(
+                ['matricule_enseignant', 'code_classe', 'code_discipline', 'jour', 'heure_debut', 'heure_fin', 'salle', 'type_cours'],
+                [
+                    ['MAT-001', 'TA1', 'MATH', 'Lundi', '07:30', '08:10', null, null],
+                    ['MAT-001', 'TA1', 'MATH', 'MARDI', '07:30', '08:10', null, null],
+                    ['MAT-001', 'TA1', 'MATH', 'mer.', '07:30', '08:10', null, null],
+                    ['MAT-001', 'TA1', 'MATH', 7, '07:30', '08:10', null, null],
+                ],
+            ),
+            ExcelWriterType::XLSX,
+        );
+
+        $this->post('/api/spreadsheet/emplois/import', [
+            'file' => UploadedFile::fake()->createWithContent('emplois.xlsx', $binary),
+        ])->assertOk()->assertJson(['importes' => 4, 'erreurs' => []]);
+
+        $this->assertSame([1, 2, 3, 7], EmploiDuTemps::orderBy('jour')->pluck('jour')->all());
+    }
+
+    public function test_import_emplois_refuse_un_jour_qui_ne_designe_aucun_jour_de_la_semaine(): void
+    {
+        $this->actingAsBackoffice();
+        Classe::factory()->create(['code' => 'TA1']);
+        Enseignant::factory()->create(['matricule' => 'MAT-001']);
+        Discipline::factory()->create(['code' => 'MATH']);
+
+        $binary = Excel::raw(
+            new ArrayExport(
+                ['matricule_enseignant', 'code_classe', 'code_discipline', 'jour', 'heure_debut', 'heure_fin', 'salle', 'type_cours'],
+                [
+                    ['MAT-001', 'TA1', 'MATH', 'Lunddi', '07:30', '08:10', null, null],
+                    ['MAT-001', 'TA1', 'MATH', 8, '07:30', '08:10', null, null],
+                ],
+            ),
+            ExcelWriterType::XLSX,
+        );
+
+        $response = $this->post('/api/spreadsheet/emplois/import', [
+            'file' => UploadedFile::fake()->createWithContent('emplois.xlsx', $binary),
+        ])->assertOk();
+
+        $response->assertJsonPath('importes', 0);
+        $response->assertJsonPath(
+            'erreurs.0.erreur',
+            'jour doit être un jour de la semaine (Lundi, Mardi, Mercredi, Jeudi, Vendredi, Samedi, Dimanche) (valeur reçue : « Lunddi »)',
+        );
+        $response->assertJsonPath(
+            'erreurs.1.erreur',
+            'jour doit être un jour de la semaine (Lundi, Mardi, Mercredi, Jeudi, Vendredi, Samedi, Dimanche) (valeur reçue : « 8 »)',
+        );
+        $this->assertSame(0, EmploiDuTemps::count());
+    }
+
+    public function test_import_emplois_suit_les_periodes_de_l_etablissement(): void
+    {
+        $this->actingAsBackoffice();
+        Classe::factory()->create(['code' => 'TA1']);
+        Enseignant::factory()->create(['matricule' => 'MAT-001']);
+        Discipline::factory()->create(['code' => 'MATH']);
+
+        // L'établissement redécoupe sa journée : l'horaire qu'il vient de
+        // définir doit être accepté, et l'ancienne grille du code refusée.
+        PeriodeCours::query()->delete();
+        PeriodeCours::create(['ordre' => 1, 'libelle' => 'P1', 'heure_debut' => '06:00', 'heure_fin' => '06:55']);
+
+        $binary = Excel::raw(
+            new ArrayExport(
+                ['matricule_enseignant', 'code_classe', 'code_discipline', 'jour', 'heure_debut', 'heure_fin', 'salle', 'type_cours'],
+                [
+                    ['MAT-001', 'TA1', 'MATH', 'Lundi', '06h00', '06h55', null, null],
+                    ['MAT-001', 'TA1', 'MATH', 'Mardi', '07:30', '08:10', null, null],
+                ],
+            ),
+            ExcelWriterType::XLSX,
+        );
+
+        $response = $this->post('/api/spreadsheet/emplois/import', [
+            'file' => UploadedFile::fake()->createWithContent('emplois.xlsx', $binary),
+        ])->assertOk();
+
+        $response->assertJsonPath('importes', 1);
+        $response->assertJsonPath(
+            'erreurs.0.erreur',
+            "heure_debut doit être le début d'une période de l'établissement (valeur reçue : « 07:30 »)",
+        );
+        $this->assertDatabaseHas('emploi_du_temps', ['jour' => 1, 'heure_debut' => '06:00', 'heure_fin' => '06:55']);
+
+        // Le modèle ne propose plus que la nouvelle période.
+        $template = $this->readWorkbook($this->downloadedFileContents(
+            $this->get('/api/spreadsheet/emplois/template')->assertOk()
+        ));
+        $this->assertSame('06:00', $template->getSheetByName('_listes')->getCell('C2')->getValue());
+        $this->assertNull($template->getSheetByName('_listes')->getCell('C3')->getValue());
     }
 
     private function readWorkbook(string $binary): Spreadsheet

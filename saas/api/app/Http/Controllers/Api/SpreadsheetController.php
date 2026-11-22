@@ -10,6 +10,7 @@ use App\Models\Classe;
 use App\Models\Discipline;
 use App\Models\EmploiDuTemps;
 use App\Models\Enseignant;
+use App\Models\PeriodeCours;
 use App\Models\Programme;
 use App\Models\ProgressionLecon;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -31,6 +32,7 @@ class SpreadsheetController extends Controller
     private function profile(string $entity): array
     {
         $enseignantsParNom = null;
+        $periodes = null;
 
         return match ($entity) {
             'personnel' => [
@@ -144,13 +146,13 @@ class SpreadsheetController extends Controller
                         $e->enseignant?->nom,
                         $e->classe?->code,
                         $e->discipline?->code,
-                        $e->jour,
+                        EmploiDuTemps::nomJour($e->jour) ?? $e->jour,
                         $e->heure_debut,
                         $e->heure_fin,
                         $e->salle,
                         $e->type_cours,
                     ])->all(),
-                'import' => function (array $row) use (&$enseignantsParNom) {
+                'import' => function (array $row) use (&$enseignantsParNom, &$periodes) {
                     $nomEnseignant = trim((string) ($row['nom_enseignant'] ?? ''));
                     $matricule = trim((string) ($row['matricule_enseignant'] ?? ''));
                     if ($nomEnseignant !== '') {
@@ -175,9 +177,10 @@ class SpreadsheetController extends Controller
                     $codeDiscipline = trim((string) ($row['code_discipline'] ?? ''));
                     $classe = $codeClasse === '' ? null : Classe::where('code', $codeClasse)->first();
                     $discipline = $codeDiscipline === '' ? null : Discipline::where('code', $codeDiscipline)->first();
-                    $jour = $row['jour'] ?? null;
+                    $jour = EmploiDuTemps::jourDepuisLibelle($row['jour'] ?? null);
                     $heureDebut = $this->normalizeTime($row['heure_debut'] ?? null);
                     $heureFin = $this->normalizeTime($row['heure_fin'] ?? null);
+                    $periodes ??= $this->grillePeriodes();
 
                     $problemes = [];
                     if (! $enseignantId) {
@@ -197,23 +200,26 @@ class SpreadsheetController extends Controller
                         return implode(' ; ', $problemes);
                     }
 
-                    if (! is_numeric($jour) || (float) $jour !== (float) (int) $jour || (int) $jour < 1 || (int) $jour > 7) {
-                        return 'jour doit être un nombre de 1 à 7 (valeur reçue : « ' . $this->displayValue($jour) . ' »)';
+                    if ($jour === null) {
+                        return 'jour doit être un jour de la semaine (' . implode(', ', EmploiDuTemps::NOMS_JOURS)
+                            . ') (valeur reçue : « ' . $this->displayValue($row['jour'] ?? null) . ' »)';
                     }
 
-                    if (! in_array($heureDebut, EmploiDuTemps::HEURES_DEBUT, true)) {
-                        return 'heure_debut doit être choisie dans la liste prédéfinie (valeur reçue : « ' . $this->displayValue($row['heure_debut'] ?? null) . ' »)';
+                    if (! in_array($heureDebut, $periodes['debuts'], true)) {
+                        return 'heure_debut doit être le début d\'une période de l\'établissement (valeur reçue : « '
+                            . $this->displayValue($row['heure_debut'] ?? null) . ' »)';
                     }
 
-                    if (! in_array($heureFin, EmploiDuTemps::HEURES_FIN, true) || $heureFin <= $heureDebut) {
-                        return 'heure_fin doit être choisie dans la liste prédéfinie et être après heure_debut (valeur reçue : « ' . $this->displayValue($row['heure_fin'] ?? null) . ' »)';
+                    if (! in_array($heureFin, $periodes['fins'], true) || $heureFin <= $heureDebut) {
+                        return 'heure_fin doit être la fin d\'une période de l\'établissement et être après heure_debut (valeur reçue : « '
+                            . $this->displayValue($row['heure_fin'] ?? null) . ' »)';
                     }
 
                     EmploiDuTemps::updateOrCreate(
                         [
                             'enseignant_id' => $enseignantId,
                             'classe_id' => $classe->id,
-                            'jour' => (int) $jour,
+                            'jour' => $jour,
                             'heure_debut' => $heureDebut,
                         ],
                         [
@@ -306,14 +312,47 @@ class SpreadsheetController extends Controller
         return $value === '' || $value === null ? null : (string) $value;
     }
 
+    /**
+     * « 7:30 », « 07:30:00 » ou « 07h30 » -> « 07:30 ». Le séparateur « h »
+     * est accepté parce que c'est ainsi que les périodes s'affichent dans
+     * l'application (« P1 · 07h30–08h10 ») et donc ce que l'utilisateur
+     * recopie dans le classeur.
+     */
     private function normalizeTime(mixed $value): ?string
     {
         $value = $this->blankToNull($value);
-        if ($value === null || preg_match('/^(\d{1,2}):(\d{2})(?::\d{2})?$/', $value, $matches) !== 1) {
+        if ($value === null || preg_match('/^(\d{1,2})[:h](\d{2})(?::\d{2})?$/i', $value, $matches) !== 1) {
             return null;
         }
 
         return sprintf('%02d:%02d', (int) $matches[1], (int) $matches[2]);
+    }
+
+    /**
+     * Heures proposées à l'import comme au modèle : celles des périodes de
+     * l'établissement (écran Configuration). La grille figée du modèle ne sert
+     * que de secours si la table est vide — un classeur sans aucune heure
+     * proposée serait impossible à remplir.
+     *
+     * @return array{debuts: array<int, string>, fins: array<int, string>}
+     */
+    private function grillePeriodes(): array
+    {
+        $periodes = PeriodeCours::grille();
+
+        $trier = function (array $heures): array {
+            $heures = array_values(array_unique(array_filter($heures)));
+            sort($heures);
+
+            return $heures;
+        };
+
+        $debuts = $trier($periodes->pluck('heure_debut')->all());
+        $fins = $trier($periodes->pluck('heure_fin')->all());
+
+        return $debuts === [] || $fins === []
+            ? ['debuts' => EmploiDuTemps::HEURES_DEBUT, 'fins' => EmploiDuTemps::HEURES_FIN]
+            : ['debuts' => $debuts, 'fins' => $fins];
     }
 
     private function displayValue(mixed $value): string
@@ -359,7 +398,7 @@ class SpreadsheetController extends Controller
                         $emploi->enseignant?->nom,
                         $emploi->classe?->code,
                         $emploi->discipline?->code,
-                        $emploi->jour,
+                        EmploiDuTemps::nomJour($emploi->jour) ?? $emploi->jour,
                         substr((string) $emploi->heure_debut, 0, 5),
                         substr((string) $emploi->heure_fin, 0, 5),
                         $emploi->salle,
@@ -368,6 +407,8 @@ class SpreadsheetController extends Controller
                 });
         }
 
+        $periodes = $this->grillePeriodes();
+
         return new EmploisWorkbookExport(
             $classes->map(fn(Classe $classe) => [
                 'id' => $classe->id,
@@ -375,6 +416,8 @@ class SpreadsheetController extends Controller
             ])->all(),
             Enseignant::orderBy('nom')->pluck('nom')->all(),
             Discipline::orderBy('nom')->pluck('code')->all(),
+            $periodes['debuts'],
+            $periodes['fins'],
             $rowsByClasse,
         );
     }

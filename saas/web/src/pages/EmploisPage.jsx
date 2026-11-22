@@ -558,7 +558,12 @@ export default function EmploisPage() {
         </button>
       </div>
 
-      <SpreadsheetActions entity="emplois" label="emplois du temps" onImported={charger} />
+      <SpreadsheetActions
+        entity="emplois"
+        label="emplois du temps"
+        hint="Dans le classeur, le jour se choisit en clair (Lundi, Mardi…) et les heures parmi les périodes de l’établissement, configurées dans Configuration."
+        onImported={charger}
+      />
 
       {conflits.length > 0 && tab !== 'conflits' && (
         <button

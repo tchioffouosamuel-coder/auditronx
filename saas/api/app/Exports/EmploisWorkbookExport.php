@@ -14,6 +14,14 @@ use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
 use PhpOffice\PhpSpreadsheet\NamedRange;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
+/**
+ * Classeur d'emploi du temps : un onglet par classe, plus un onglet caché qui
+ * porte les listes déroulantes. Les heures proposées sont celles des périodes
+ * de l'établissement (table `periodes_cours`, écran Configuration) et non plus
+ * une grille figée dans le code : un établissement qui redécoupe sa journée
+ * voyait sinon son propre classeur refuser ses horaires. Le jour se choisit en
+ * clair — « Lundi » plutôt que « 1 ».
+ */
 class EmploisWorkbookExport implements Export, WithMultipleSheets
 {
     public const TYPES_COURS = ['Théorique', 'Pratique'];
@@ -29,10 +37,20 @@ class EmploisWorkbookExport implements Export, WithMultipleSheets
         'type_cours',
     ];
 
+    /**
+     * @param  array<int, array{id: int, code: string}>  $classes
+     * @param  array<int, string>  $nomsEnseignants
+     * @param  array<int, string>  $codesDisciplines
+     * @param  array<int, string>  $heuresDebut  heures de début des périodes de l'établissement
+     * @param  array<int, string>  $heuresFin  heures de fin des périodes de l'établissement
+     * @param  array<int, array<int, mixed>>  $rowsByClasse
+     */
     public function __construct(
         private readonly array $classes,
         private readonly array $nomsEnseignants,
         private readonly array $codesDisciplines,
+        private readonly array $heuresDebut,
+        private readonly array $heuresFin,
         private readonly array $rowsByClasse,
     ) {}
 
@@ -53,7 +71,12 @@ class EmploisWorkbookExport implements Export, WithMultipleSheets
             $sheets[] = new EmploisClasseSheetExport('Emplois', []);
         }
 
-        $sheets[] = new EmploisListsSheetExport($this->nomsEnseignants, $this->codesDisciplines);
+        $sheets[] = new EmploisListsSheetExport(
+            $this->nomsEnseignants,
+            $this->codesDisciplines,
+            $this->heuresDebut,
+            $this->heuresFin,
+        );
 
         return $sheets;
     }
@@ -106,24 +129,37 @@ class EmploisClasseSheetExport implements Export, FromArray, WithEvents, WithHea
                 $sheet = $event->sheet->getDelegate();
                 $this->addListValidation($sheet, 'A', '=NomsEnseignants');
                 $this->addListValidation($sheet, 'C', '=CodesDisciplines');
-                $this->addListValidation($sheet, 'E', '=HeuresDebut');
-                $this->addListValidation($sheet, 'F', '=HeuresFin');
+                $this->addListValidation($sheet, 'D', '=Jours');
+                $this->addListValidation($sheet, 'E', '=HeuresDebut', 'Début de période');
+                $this->addListValidation($sheet, 'F', '=HeuresFin', 'Fin de période');
                 $this->addListValidation($sheet, 'H', '=TypesCours');
             },
         ];
     }
 
-    private function addListValidation(Worksheet $sheet, string $column, string $formula): void
+    /**
+     * Les heures proposées sont celles des périodes de l'établissement : on le
+     * dit dans la bulle de saisie, sinon une liste restreinte passe pour un
+     * défaut du logiciel alors qu'il suffit d'ajouter la période manquante
+     * dans Configuration.
+     */
+    private function addListValidation(Worksheet $sheet, string $column, string $formula, ?string $promptTitle = null): void
     {
         $validation = new DataValidation;
         $validation->setType(DataValidation::TYPE_LIST);
         $validation->setErrorStyle(DataValidation::STYLE_STOP);
         $validation->setAllowBlank(true);
         $validation->setShowDropDown(true);
-        $validation->setShowInputMessage(false);
+        $validation->setShowInputMessage($promptTitle !== null);
         $validation->setShowErrorMessage(true);
         $validation->setErrorTitle('Valeur non autorisée');
         $validation->setError('Sélectionnez une valeur proposée dans la liste.');
+
+        if ($promptTitle !== null) {
+            $validation->setPromptTitle($promptTitle);
+            $validation->setPrompt("Choisissez une heure parmi les périodes de l'établissement (Configuration > Périodes de cours).");
+        }
+
         $validation->setFormula1($formula);
 
         $sheet->setDataValidation($column . '2:' . $column . self::MAX_INPUT_ROW, $validation);
@@ -135,28 +171,31 @@ class EmploisListsSheetExport implements Export, FromArray, WithEvents, WithHead
     public function __construct(
         private readonly array $nomsEnseignants,
         private readonly array $codesDisciplines,
+        private readonly array $heuresDebut,
+        private readonly array $heuresFin,
     ) {}
+
+    /** @return array<string, array<int, string>> Colonne de l'onglet -> valeurs proposées. */
+    private function colonnes(): array
+    {
+        return [
+            'A' => array_values($this->nomsEnseignants),
+            'B' => array_values($this->codesDisciplines),
+            'C' => array_values($this->heuresDebut),
+            'D' => array_values($this->heuresFin),
+            'E' => EmploisWorkbookExport::TYPES_COURS,
+            'F' => array_values(EmploiDuTemps::NOMS_JOURS),
+        ];
+    }
 
     public function array(): array
     {
+        $colonnes = array_values($this->colonnes());
         $rows = [];
-        $rowCount = max(
-            1,
-            count($this->nomsEnseignants),
-            count($this->codesDisciplines),
-            count(EmploiDuTemps::HEURES_DEBUT),
-            count(EmploiDuTemps::HEURES_FIN),
-            count(EmploisWorkbookExport::TYPES_COURS),
-        );
+        $rowCount = max(1, ...array_map('count', $colonnes));
 
         for ($index = 0; $index < $rowCount; $index++) {
-            $rows[] = [
-                $this->nomsEnseignants[$index] ?? null,
-                $this->codesDisciplines[$index] ?? null,
-                EmploiDuTemps::HEURES_DEBUT[$index] ?? null,
-                EmploiDuTemps::HEURES_FIN[$index] ?? null,
-                EmploisWorkbookExport::TYPES_COURS[$index] ?? null,
-            ];
+            $rows[] = array_map(fn(array $valeurs) => $valeurs[$index] ?? null, $colonnes);
         }
 
         return $rows;
@@ -164,7 +203,7 @@ class EmploisListsSheetExport implements Export, FromArray, WithEvents, WithHead
 
     public function headings(): array
     {
-        return ['noms_enseignants', 'codes_disciplines', 'heures_debut', 'heures_fin', 'types_cours'];
+        return ['noms_enseignants', 'codes_disciplines', 'heures_debut', 'heures_fin', 'types_cours', 'jours'];
     }
 
     public function title(): string
@@ -178,26 +217,21 @@ class EmploisListsSheetExport implements Export, FromArray, WithEvents, WithHead
             AfterSheet::class => function (AfterSheet $event): void {
                 $sheet = $event->sheet->getDelegate();
                 $spreadsheet = $sheet->getParent();
-                $ranges = [
+                $colonnes = $this->colonnes();
+                $plages = [
                     'NomsEnseignants' => 'A',
                     'CodesDisciplines' => 'B',
                     'HeuresDebut' => 'C',
                     'HeuresFin' => 'D',
                     'TypesCours' => 'E',
-                ];
-                $counts = [
-                    'NomsEnseignants' => count($this->nomsEnseignants),
-                    'CodesDisciplines' => count($this->codesDisciplines),
-                    'HeuresDebut' => count(EmploiDuTemps::HEURES_DEBUT),
-                    'HeuresFin' => count(EmploiDuTemps::HEURES_FIN),
-                    'TypesCours' => count(EmploisWorkbookExport::TYPES_COURS),
+                    'Jours' => 'F',
                 ];
 
-                foreach ($ranges as $name => $column) {
+                foreach ($plages as $name => $column) {
                     $spreadsheet->addNamedRange(new NamedRange(
                         $name,
                         $sheet,
-                        '$' . $column . '$2:$' . $column . '$' . max(2, $counts[$name] + 1),
+                        '$' . $column . '$2:$' . $column . '$' . max(2, count($colonnes[$column]) + 1),
                     ));
                 }
 

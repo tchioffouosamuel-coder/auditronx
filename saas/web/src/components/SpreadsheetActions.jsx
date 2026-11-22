@@ -12,7 +12,7 @@ function sortErreurs(erreurs) {
   return [...erreurs].sort((a, b) => (a.feuille ?? 0) - (b.feuille ?? 0) || a.ligne - b.ligne)
 }
 
-export default function SpreadsheetActions({ entity, label, onImported }) {
+export default function SpreadsheetActions({ entity, label, hint, onImported }) {
   const fileInputRef = useRef(null)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState(null)
@@ -89,6 +89,8 @@ export default function SpreadsheetActions({ entity, label, onImported }) {
         onChange={handleFileChange}
         className="hidden"
       />
+
+      {hint && <p className="w-full text-xs text-ink-500">{hint}</p>}
 
       {result && (
         <div className="w-full text-sm">
