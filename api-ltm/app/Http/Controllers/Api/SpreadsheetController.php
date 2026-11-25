@@ -34,7 +34,7 @@ class SpreadsheetController extends Controller
 
         return match ($entity) {
             'personnel' => [
-                'headings' => ['nom', 'matricule', 'email', 'fonction', 'section', 'grade', 'tel', 'poste'],
+                'headings' => ['nom', 'matricule', 'email', 'fonction', 'section', 'grade', 'Numéro de téléphone', 'poste'],
                 'export' => fn() => Enseignant::orderBy('nom')->get()->map(fn(Enseignant $e) => [
                     $e->nom,
                     $e->matricule,
@@ -60,7 +60,7 @@ class SpreadsheetController extends Controller
                         'fonction' => $this->blankToNull($row['fonction'] ?? null),
                         'section' => $this->blankToNull($row['section'] ?? null),
                         'grade' => $this->blankToNull($row['grade'] ?? null),
-                        'tel' => $this->blankToNull($row['tel'] ?? null),
+                        'tel' => $this->blankToNull($row['tel'] ?? $row['numero_de_telephone'] ?? $row['telephone'] ?? null),
                         'poste' => $this->blankToNull($row['poste'] ?? null),
                     ]);
 

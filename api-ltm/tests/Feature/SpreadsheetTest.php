@@ -48,6 +48,37 @@ class SpreadsheetTest extends TestCase
         }
     }
 
+    public function test_fichier_personnel_affiche_le_numero_de_telephone_et_accepte_les_anciens_entetes(): void
+    {
+        $this->actingAsBackoffice();
+
+        $template = $this->readWorkbook($this->downloadedFileContents(
+            $this->get('/api/spreadsheet/personnel/template')->assertOk()
+        ));
+        $this->assertSame('Numéro de téléphone', $template->getActiveSheet()->getCell('G1')->getValue());
+
+        foreach ([
+            ['nom', 'matricule', 'Numéro de téléphone'],
+            ['nom', 'matricule', 'tel'],
+        ] as $index => $headings) {
+            $binary = Excel::raw(
+                new ArrayExport($headings, [[
+                    'Personnel ' . $index,
+                    'MAT-PHONE-' . $index,
+                    '60000000' . $index,
+                ]]),
+                ExcelWriterType::XLSX,
+            );
+
+            $this->post('/api/spreadsheet/personnel/import', [
+                'file' => UploadedFile::fake()->createWithContent('personnel.xlsx', $binary),
+            ])->assertOk()->assertJson(['importes' => 1, 'erreurs' => []]);
+        }
+
+        $this->assertDatabaseHas('enseignants', ['matricule' => 'MAT-PHONE-0', 'tel' => '600000000']);
+        $this->assertDatabaseHas('enseignants', ['matricule' => 'MAT-PHONE-1', 'tel' => '600000001']);
+    }
+
     public function test_import_xlsx_cree_et_met_a_jour_les_classes(): void
     {
         $this->actingAsBackoffice();
