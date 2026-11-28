@@ -5,6 +5,7 @@ namespace App\Observers;
 use App\Models\AccessPoint;
 use App\Models\Accreditation;
 use App\Models\AuditLog;
+use App\Models\Bulletin;
 use App\Models\CahierTexteEntree;
 use App\Models\Classe;
 use App\Models\CoursValidation;
@@ -135,6 +136,8 @@ class AuditObserver
             Parametre::class,
             Programme::class,
             CahierTexteEntree::class,
+            // Décisions du conseil de classe : qui a changé quoi, avant / après.
+            Bulletin::class,
         ];
     }
 

@@ -13,6 +13,7 @@ import AssiduitePage from "./pages/AssiduitePage";
 import CahierTextePage from "./pages/CahierTextePage";
 import ClassesPage from "./pages/ClassesPage";
 import ConfigurationPage from "./pages/ConfigurationPage";
+import ConseilPage from "./pages/ConseilPage";
 import DashboardPage from "./pages/DashboardPage";
 import DisciplinesPage from "./pages/DisciplinesPage";
 import ElevesPage from "./pages/ElevesPage";
@@ -99,6 +100,7 @@ export default function App() {
             <Route path="/classes/:id/maquette" element={<MaquettePage />} />
             <Route path="/eleves" element={<ElevesPage />} />
             <Route path="/notes" element={<NotesPage />} />
+            <Route path="/conseil" element={<ConseilPage />} />
             <Route path="/disciplines" element={<DisciplinesPage />} />
             <Route path="/structure" element={<StructurePage />} />
             <Route path="/referentiel" element={<ReferentielPage />} />

@@ -40,6 +40,7 @@ const NAV_SECTIONS = [
       { to: "/referentiel", label: "Référentiel APC", icon: "school" },
       { to: "/eleves", label: "Élèves", icon: "groups" },
       { to: "/notes", label: "Saisie des notes", icon: "grading" },
+      { to: "/conseil", label: "Conseil de classe", icon: "gavel" },
       { to: "/emplois", label: "Emplois du temps", icon: "calendar_month" },
       {
         to: "/accreditations",

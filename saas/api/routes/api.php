@@ -8,7 +8,9 @@ use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CahierTexteController;
+use App\Http\Controllers\Api\BulletinPdfController;
 use App\Http\Controllers\Api\ClasseController;
+use App\Http\Controllers\Api\ConseilClasseController;
 use App\Http\Controllers\Api\CoursEnseignantController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DepartementController;
@@ -178,6 +180,34 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('backoffice')->group(function () {
         Route::put('/notes/bulk', [NoteModuleController::class, 'bulk']);
         Route::post('/notes/classeur/import', [NotesClasseurController::class, 'import']);
+    });
+
+    /*
+     * Calcul des bulletins et conseil de classe (§bulletins APC, lot 5).
+     *
+     * Un conseil = une classe, une année, une période (1, 2, 3 ou annuel).
+     * Lecture ouverte, écriture réservée au backoffice : générer, décider,
+     * valider (verrouille les notes), rouvrir (motif obligatoire, la
+     * version signée est conservée).
+     */
+    Route::get('/conseil', [ConseilClasseController::class, 'index']);
+
+    /*
+     * Impression (§bulletins APC, lot 6) : tout se lit dans l'instantané du
+     * calcul, rien n'est recalculé. Chemins fixes avant `{bulletin}`, et
+     * `{bulletin}` limité aux nombres, pour que « classe » ou « export-zip »
+     * ne soient jamais pris pour un identifiant.
+     */
+    Route::get('/bulletins/classe/{classe}/pdf', [BulletinPdfController::class, 'classe']);
+    Route::get('/bulletins/classe/{classe}/pv', [BulletinPdfController::class, 'pv']);
+    Route::get('/bulletins/export-zip', [BulletinPdfController::class, 'zip'])->middleware('backoffice');
+    Route::get('/bulletins/{bulletin}/pdf', [BulletinPdfController::class, 'bulletin'])->whereNumber('bulletin');
+    Route::get('/bulletins/{bulletin}', [ConseilClasseController::class, 'show'])->whereNumber('bulletin');
+    Route::middleware('backoffice')->group(function () {
+        Route::post('/conseil/generer', [ConseilClasseController::class, 'generer']);
+        Route::post('/conseil/valider', [ConseilClasseController::class, 'valider']);
+        Route::post('/conseil/rouvrir', [ConseilClasseController::class, 'rouvrir']);
+        Route::put('/bulletins/{bulletin}', [ConseilClasseController::class, 'update'])->whereNumber('bulletin');
     });
 
     /*

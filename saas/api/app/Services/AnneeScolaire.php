@@ -69,6 +69,15 @@ class AnneeScolaire
     }
 
     /**
+     * Ce qu'imprime un document : « Année Scolaire : 2025-2026 », au tiret.
+     * Le stockage garde la barre oblique, celle de `programmes.annee_scolaire`.
+     */
+    public static function affichage(?string $valeur): string
+    {
+        return str_replace('/', '-', (string) $valeur);
+    }
+
+    /**
      * Les années présentes dans une colonne, les plus récentes d'abord —
      * pour les listes déroulantes des écrans.
      *
