@@ -50,7 +50,6 @@ export default function StructurePage() {
               optionLabel: 'nom',
             },
             { key: 'cycle', label: 'Cycle' },
-            { key: 'ordre', label: 'Ordre', type: 'number' },
           ]}
           columns={[
             { key: 'code', label: 'Code' },
@@ -66,11 +65,8 @@ export default function StructurePage() {
         <ResourceTable
           title="Départements"
           resource="/departements"
-          fields={[
-            { key: 'code', label: 'Code', required: true },
-            { key: 'nom', label: 'Nom', required: true },
-            { key: 'ordre', label: 'Ordre', type: 'number' },
-          ]}
+          // Le nom suffit : le code se déduit côté API (« Génie Électrique » -> GE).
+          fields={[{ key: 'nom', label: 'Nom', required: true }]}
           columns={[
             { key: 'code', label: 'Code' },
             { key: 'nom', label: 'Nom' },

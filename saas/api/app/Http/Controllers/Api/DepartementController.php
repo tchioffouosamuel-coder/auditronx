@@ -52,14 +52,20 @@ class DepartementController extends Controller
     private function valide(Request $request, ?Departement $departement = null): array
     {
         $data = $request->validate([
-            'code' => ['required', 'string', 'max:50', 'unique:departements,code'.($departement ? ','.$departement->id : '')],
+            'code' => ['nullable', 'string', 'max:50', 'unique:departements,code'.($departement ? ','.$departement->id : '')],
             'nom' => ['required', 'string', 'max:255'],
             'ordre' => ['nullable', 'integer', 'min:0', 'max:999'],
         ]);
 
         // La colonne n'est pas nullable : un champ laissé vide au formulaire
         // vaut « pas de rang choisi », donc 0, et non un NULL rejeté par MySQL.
-        $data['ordre'] = $data['ordre'] ?? 0;
+        $data['ordre'] = $data['ordre'] ?? $departement?->ordre ?? 0;
+
+        // Le formulaire ne demande que le nom : le code se déduit à la
+        // création et ne bouge plus ensuite, même si le nom change — il peut
+        // déjà figurer dans des documents.
+        $code = trim((string) ($data['code'] ?? ''));
+        $data['code'] = $code !== '' ? $code : ($departement?->code ?? Departement::genererCode($data['nom']));
 
         return $data;
     }

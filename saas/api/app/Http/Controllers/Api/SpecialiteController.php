@@ -70,7 +70,8 @@ class SpecialiteController extends Controller
             'ordre' => ['nullable', 'integer', 'min:0', 'max:999'],
         ]);
 
-        $data['ordre'] = $data['ordre'] ?? 0;
+        // Plus demandé au formulaire : une modification garde l'ordre existant.
+        $data['ordre'] = $data['ordre'] ?? $specialite?->ordre ?? 0;
         $data['actif'] = $data['actif'] ?? true;
 
         return $data;

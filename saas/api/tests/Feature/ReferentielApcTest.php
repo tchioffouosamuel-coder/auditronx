@@ -395,6 +395,26 @@ class ReferentielApcTest extends TestCase
         $this->assertNotNull($specialite->fresh());
     }
 
+    /**
+     * Le formulaire ne demande que le nom : le code se déduit des initiales,
+     * se départage d'un suffixe, et ne bouge plus quand le nom change.
+     */
+    public function test_le_code_dun_departement_se_deduit_de_son_nom(): void
+    {
+        $this->actingAsBackoffice();
+
+        $ge = $this->postJson('/api/departements', ['nom' => 'Génie Électrique'])->assertCreated()->json();
+        $this->assertSame('GE', $ge['code']);
+
+        $this->assertSame('GE2', $this->postJson('/api/departements', ['nom' => 'Génie Énergétique'])->json('code'));
+        $this->assertSame('IH', $this->postJson('/api/departements', ['nom' => "Industrie de l'Habillement"])->json('code'));
+        $this->assertSame('MEC', $this->postJson('/api/departements', ['nom' => 'Mécanique'])->json('code'));
+
+        $this->putJson("/api/departements/{$ge['id']}", ['nom' => 'Génie Électrique et Électronique'])
+            ->assertOk()
+            ->assertJsonPath('code', 'GE');
+    }
+
     /** Supprimer une spécialité emporte son référentiel : un module n'existe pas sans elle. */
     public function test_supprimer_une_specialite_emporte_ses_modules(): void
     {
