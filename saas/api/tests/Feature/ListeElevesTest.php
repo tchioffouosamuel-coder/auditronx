@@ -127,8 +127,8 @@ class ListeElevesTest extends TestCase
         $this->actingAsBackoffice();
 
         $resultat = $this->importe([
-            ['ALPHA BETA', '', '26T0001', '01/01/2008', 'VILLE-A', 600000001, 'M', 'N'],
-            ['GAMMA  DELTA JOSEPH  ', '100000001', '21T0002', '20/09/2005', 'VILLE-B', '600000002', 'M', 'R'],
+            ['ALPHA BETA', '', '26T0001', '05/02/2008', 'VILLE-A', 600000001, 'M', 'N'],
+            ['GAMMA  DELTA JOSEPH  ', '100000001', '21T0002', '11/06/2006', 'VILLE-B', '600000002', 'M', 'R'],
         ]);
 
         $this->assertSame(2, $resultat['importes']);
@@ -138,7 +138,7 @@ class ListeElevesTest extends TestCase
         $this->assertSame('GAMMA DELTA JOSEPH', $eleve->nom_complet);
         $this->assertSame('100000001', $eleve->matricule_national);
         $this->assertSame('600000002', $eleve->telephone);
-        $this->assertSame('2005-09-20', $eleve->date_naissance->toDateString());
+        $this->assertSame('2006-06-11', $eleve->date_naissance->toDateString());
 
         $this->assertSame('600000001', Eleve::where('matricule', '26T0001')->value('telephone'));
         $this->assertNull(Eleve::where('matricule', '26T0001')->value('matricule_national'));
@@ -257,8 +257,8 @@ class ListeElevesTest extends TestCase
 
         Eleve::create(['matricule' => '26T0001', 'nom' => 'ALPHA', 'prenoms' => 'Beta']);
 
-        $this->importe([['ALPHA BETA', '', '26T0001', '01/01/2008', 'VILLE-A', '', 'M', 'N']]);
-        $this->importe([['ALPHA BETA', '100000002', '26T0001', '01/01/2008', 'VILLE-C', '', 'M', 'R']]);
+        $this->importe([['ALPHA BETA', '', '26T0001', '05/02/2008', 'VILLE-A', '', 'M', 'N']]);
+        $this->importe([['ALPHA BETA', '100000002', '26T0001', '05/02/2008', 'VILLE-C', '', 'M', 'R']]);
 
         $this->assertSame(1, Eleve::count());
         $this->assertSame(1, Inscription::count());
@@ -312,8 +312,8 @@ class ListeElevesTest extends TestCase
         $this->actingAsBackoffice();
 
         $this->importe([
-            ['ZETA JEAN PAUL', '100000003', '24T0003', '01/01/2009', 'VILLE-D', '600000003', 'M', 'N'],
-            ['ALPHA OMEGA', '', '26T0004', '03/03/2010', 'VILLE-E', '', 'M', 'R'],
+            ['ZETA JEAN PAUL', '100000003', '24T0003', '07/04/2009', 'VILLE-D', '600000003', 'M', 'N'],
+            ['ALPHA OMEGA', '', '26T0004', '09/08/2010', 'VILLE-E', '', 'M', 'R'],
         ]);
         Eleve::create(['matricule' => 'X1', 'nom' => 'NON AFFECTE']);
 
@@ -323,11 +323,11 @@ class ListeElevesTest extends TestCase
 
         $this->assertSame(['2F4BA', ListeEleves::SANS_CLASSE], array_keys($onglets));
         $this->assertSame(
-            [1, 'ALPHA OMEGA', null, '26T0004', '03/03/2010', 'VILLE-E', null, 'M', 'R'],
+            [1, 'ALPHA OMEGA', null, '26T0004', '09/08/2010', 'VILLE-E', null, 'M', 'R'],
             $onglets['2F4BA'][3]
         );
         $this->assertSame(
-            [2, 'ZETA JEAN PAUL', '100000003', '24T0003', '01/01/2009', 'VILLE-D', '600000003', 'M', 'N'],
+            [2, 'ZETA JEAN PAUL', '100000003', '24T0003', '07/04/2009', 'VILLE-D', '600000003', 'M', 'N'],
             $onglets['2F4BA'][4]
         );
 

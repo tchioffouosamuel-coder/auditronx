@@ -181,8 +181,7 @@ consommeront la grille de saisie et l'en-tête du bulletin.
 
 ### Import
 
-Au format de la **liste de classe de l'administration**
-(`Liste_eleves_2nde_F4-BA_2026_2027.xlsx`) :
+Au format de la **liste de classe de l'administration** :
 [`ListeElevesController`](api/app/Http/Controllers/Api/ListeElevesController.php)
 et [`App\Support\ListeEleves`](api/app/Support/ListeEleves.php), qui lit et
 écrit le classeur. Un contrôleur à part, comme le référentiel : la classe et
