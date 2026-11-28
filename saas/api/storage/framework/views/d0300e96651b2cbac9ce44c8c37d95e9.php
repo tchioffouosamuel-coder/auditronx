@@ -7,26 +7,29 @@
     <title>Bulletins de compétences</title>
     <style>
         @page { margin: 9mm 9mm 8mm 9mm; }
-        body { font-family: "DejaVu Sans", sans-serif; font-size: 8.6px; color: #111; }
+        body { font-family: "DejaVu Sans", sans-serif; font-size: 8.4px; color: #111; }
         .page { position: relative; }
         .saut { page-break-after: always; }
         table { width: 100%; border-collapse: collapse; }
-        .grille th, .grille td { border: 0.6px solid #333; padding: 2.6px 2.5px; }
-        .grille th { background: #e4e8ee; font-size: 7.6px; text-align: center; }
+        .grille th, .grille td { border: 0.6px solid #222; padding: 2.4px 3px; }
+        .grille th { font-weight: normal; font-size: 7.6px; text-align: center; vertical-align: top; }
+        .grille th.g { text-align: left; }
         .c { text-align: center; }
         .r { text-align: right; }
         .b { font-weight: bold; }
-        .bloc td { background: #f1f3f6; font-weight: bold; font-size: 8px; }
-        .total td { background: #e4e8ee; font-weight: bold; }
-        .rouge { color: #b00020; }
+        .i { font-style: italic; }
+        .bloc td { background: #d9d9d9; font-weight: bold; }
+        .total td { background: #d9d9d9; font-weight: bold; }
+        .total td.normal { font-weight: normal; }
+        .rouge { color: #c00000; }
         .manq { background: #fff1c2; }
-        h1 { font-size: 13px; text-align: center; margin: 2px 0 1px; letter-spacing: .3px; }
-        .sous-titre { text-align: center; font-size: 8.5px; margin-bottom: 4px; }
-        .identite td { border: none; padding: 1.5px 2px; font-size: 9px; }
-        .cadre { border: 0.6px solid #333; padding: 3px 4px; vertical-align: top; }
-        .case { font-size: 9px; }
-        .legende td { border: none; padding: 0 4px 0 0; font-size: 7.2px; }
-        .signatures td { border: none; text-align: center; font-size: 8.6px; height: 48px; vertical-align: top; }
+        h1 { font-size: 13.5px; text-align: center; color: #1f3864; margin: 2px 0 5px; }
+        h2 { font-size: 10px; color: #1f3864; margin: 6px 0 3px; }
+        .identite td { border: none; padding: 1.8px 0; font-size: 9px; }
+        .ligne { font-size: 9px; margin: 2px 0; }
+        .legende td { border: none; padding: 1px 0; font-size: 7.6px; vertical-align: top; }
+        .signatures { margin-top: 8px; }
+        .signatures td { border: none; text-align: center; font-size: 8.6px; height: 46px; vertical-align: top; }
         .filigrane {
             position: absolute; top: 330px; left: 40px; width: 620px;
             text-align: center; font-size: 64px; font-weight: bold;
