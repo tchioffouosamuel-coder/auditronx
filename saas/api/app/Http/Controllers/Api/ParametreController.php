@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\BaremeApc;
 use App\Services\EnteteEtablissement;
 use App\Services\GrilleHoraire;
 use App\Services\HoraireAttendu;
@@ -144,5 +145,63 @@ class ParametreController extends Controller
         $entete->supprimerLogo();
 
         return response()->json(['logo_url' => null]);
+    }
+
+    /**
+     * GET /api/parametres/bareme-apc
+     *
+     * Barème des bulletins de compétences : seuil de réussite, répartition
+     * UEA / épreuve intégratrice et bornes des mentions. Lu sans restriction
+     * de rôle — les écrans de saisie des notes en ont besoin pour afficher la
+     * note finale au fur et à mesure de la frappe.
+     */
+    public function baremeApc()
+    {
+        return response()->json(BaremeApc::valeurs());
+    }
+
+    /**
+     * PUT /api/parametres/bareme-apc
+     *
+     * Changer le barème ne retouche aucun bulletin déjà généré : ceux-ci
+     * portent leurs propres lignes figées. Seuls les calculs à venir suivent.
+     */
+    public function definirBaremeApc(Request $request)
+    {
+        $regles = [
+            'seuil_reussite' => ['sometimes', 'numeric', 'between:0,'.BaremeApc::NOTE_MAXIMALE],
+            // Une part d'UEA de 0 ou de 100 viderait l'une des deux colonnes
+            // du bulletin de toute signification.
+            'bareme_uea' => ['sometimes', 'integer', 'between:1,'.(BaremeApc::NOTE_MAXIMALE - 1)],
+            'nombre_trimestres' => ['sometimes', 'integer', 'between:1,6'],
+            'mentions' => ['sometimes', 'array'],
+        ];
+
+        foreach (array_keys(BaremeApc::MENTIONS) as $lettre) {
+            $regles["mentions.{$lettre}"] = ['required_with:mentions', 'numeric', 'between:0,'.BaremeApc::NOTE_MAXIMALE];
+        }
+
+        $data = $request->validate($regles);
+
+        // Les mentions se lisent de haut en bas : des bornes qui ne décroissent
+        // pas classeraient toutes les notes dans la dernière lettre.
+        if (isset($data['mentions'])) {
+            // Remises dans l'ordre des lettres : le corps de la requête JSON
+            // n'a aucune raison d'arriver trié.
+            $bornes = array_map(
+                fn (string $lettre) => (float) $data['mentions'][$lettre],
+                array_keys(BaremeApc::MENTIONS),
+            );
+            for ($i = 1; $i < count($bornes); $i++) {
+                if ($bornes[$i] >= $bornes[$i - 1]) {
+                    return response()->json([
+                        'message' => 'Les bornes des mentions doivent décroître de A vers E.',
+                        'errors' => ['mentions' => ['Les bornes des mentions doivent décroître de A vers E.']],
+                    ], 422);
+                }
+            }
+        }
+
+        return response()->json(BaremeApc::definir($data));
     }
 }

@@ -7,6 +7,7 @@ use App\Models\EmploiDuTemps;
 use App\Models\Enseignant;
 use App\Models\LeconRealisee;
 use App\Models\Presence;
+use App\Services\AnneeScolaire;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -45,7 +46,7 @@ class CoursEnseignantController extends Controller
                 'heure_fin' => $cours->heure_fin,
                 'lecons' => $cours->discipline->programmes()
                     ->where('classe_id', $cours->classe_id)
-                    ->where('annee_scolaire', $this->anneeScolaire($date))
+                    ->where('annee_scolaire', AnneeScolaire::pour($date))
                     ->with('lecons')
                     ->first()?->lecons->map(fn($lecon) => [
                         'id' => $lecon->id,
@@ -100,9 +101,4 @@ class CoursEnseignantController extends Controller
         return $request->user();
     }
 
-    private function anneeScolaire(Carbon $date): string
-    {
-        $debut = $date->month >= 9 ? $date->year : $date->year - 1;
-        return "{$debut}/" . ($debut + 1);
-    }
 }

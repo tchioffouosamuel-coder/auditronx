@@ -15,17 +15,22 @@ import ClassesPage from "./pages/ClassesPage";
 import ConfigurationPage from "./pages/ConfigurationPage";
 import DashboardPage from "./pages/DashboardPage";
 import DisciplinesPage from "./pages/DisciplinesPage";
+import ElevesPage from "./pages/ElevesPage";
 import EmploisPage from "./pages/EmploisPage";
 import FeriesPage from "./pages/FeriesPage";
 import FicheProgressionPage from "./pages/FicheProgressionPage";
 import FirmwaresPage from "./pages/FirmwaresPage";
 import JournalAuditPage from "./pages/JournalAuditPage";
 import LoginPage from "./pages/LoginPage";
+import MaquettePage from "./pages/MaquettePage";
 import MoniteurBornesPage from "./pages/MoniteurBornesPage";
+import NotesPage from "./pages/NotesPage";
 import PersonnelPage from "./pages/PersonnelPage";
 import PonctualitePage from "./pages/PonctualitePage";
+import ReferentielPage from "./pages/ReferentielPage";
 import RetardsPage from "./pages/RetardsPage";
 import SignalementsPage from "./pages/SignalementsPage";
+import StructurePage from "./pages/StructurePage";
 import ConnexionPlateformePage from "./pages/plateforme/ConnexionPage";
 import EtablissementsPage from "./pages/plateforme/EtablissementsPage";
 import FacturationPage from "./pages/plateforme/FacturationPage";
@@ -91,7 +96,12 @@ export default function App() {
             <Route path="/" element={<DashboardPage />} />
             <Route path="/personnel" element={<PersonnelPage />} />
             <Route path="/classes" element={<ClassesPage />} />
+            <Route path="/classes/:id/maquette" element={<MaquettePage />} />
+            <Route path="/eleves" element={<ElevesPage />} />
+            <Route path="/notes" element={<NotesPage />} />
             <Route path="/disciplines" element={<DisciplinesPage />} />
+            <Route path="/structure" element={<StructurePage />} />
+            <Route path="/referentiel" element={<ReferentielPage />} />
             <Route path="/emplois" element={<EmploisPage />} />
             <Route path="/accreditations" element={<AccreditationsPage />} />
             <Route path="/retards" element={<RetardsPage />} />

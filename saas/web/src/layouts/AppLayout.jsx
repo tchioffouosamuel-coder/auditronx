@@ -36,6 +36,10 @@ const NAV_SECTIONS = [
       { to: "/personnel", label: "Personnel", icon: "badge" },
       { to: "/classes", label: "Classes", icon: "meeting_room" },
       { to: "/disciplines", label: "Disciplines", icon: "menu_book" },
+      { to: "/structure", label: "Départements & spécialités", icon: "account_tree" },
+      { to: "/referentiel", label: "Référentiel APC", icon: "school" },
+      { to: "/eleves", label: "Élèves", icon: "groups" },
+      { to: "/notes", label: "Saisie des notes", icon: "grading" },
       { to: "/emplois", label: "Emplois du temps", icon: "calendar_month" },
       {
         to: "/accreditations",

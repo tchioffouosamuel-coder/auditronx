@@ -1095,6 +1095,154 @@ function EnteteEtablissement() {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Barème des bulletins de compétences (APC)                                   */
+/* -------------------------------------------------------------------------- */
+
+const LETTRES_MENTION = ['A', 'B', 'C', 'D', 'E']
+
+/**
+ * Barème des bulletins de compétences, modèle APC.
+ *
+ * Les valeurs présentées par défaut sont celles du modèle national : note sur
+ * 100 composée de la moyenne des UEA (/60) et de l'épreuve intégratrice (/40),
+ * compétence acquise à partir de 70, mentions A à E. Un établissement qui s'en
+ * écarte le fait ici plutôt que dans le code.
+ *
+ * Les bornes de mention sont des bornes **inférieures** : « 85 » en face de B
+ * signifie « B à partir de 85 ». Le tableau officiel les écrit en intervalles
+ * fermés (85-89), ce qui laissait 84,5 sans mention alors que les notes
+ * finales ont un dixième.
+ */
+function BaremeApc() {
+  const [valeurs, setValeurs] = useState(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    api.get('/parametres/bareme-apc').then(({ data }) => setValeurs(data))
+  }, [])
+
+  function definir(champ, valeur) {
+    setValeurs((actuelles) => ({ ...actuelles, [champ]: valeur }))
+  }
+
+  function definirMention(lettre, valeur) {
+    setValeurs((actuelles) => ({ ...actuelles, mentions: { ...actuelles.mentions, [lettre]: valeur } }))
+  }
+
+  async function enregistrer(e) {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      const { data } = await api.put('/parametres/bareme-apc', {
+        seuil_reussite: Number(valeurs.seuil_reussite),
+        bareme_uea: Number(valeurs.bareme_uea),
+        nombre_trimestres: Number(valeurs.nombre_trimestres),
+        mentions: Object.fromEntries(LETTRES_MENTION.map((lettre) => [lettre, Number(valeurs.mentions[lettre])])),
+      })
+      setValeurs(data)
+      notify('Barème des bulletins enregistré.', { icon: 'success' })
+    } catch (error) {
+      notify(messageErreur(error, "L'enregistrement a échoué."), { icon: 'error' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!valeurs) return <LoadingState />
+
+  const integratrice = valeurs.note_maximale - Number(valeurs.bareme_uea || 0)
+
+  return (
+    <form onSubmit={enregistrer} className={`max-w-2xl ${CARTE}`}>
+      <h2 className="text-sm font-medium text-ink-900">Barème des bulletins de compétences</h2>
+      <p className="mt-1 mb-4 text-sm text-ink-500">
+        Ce barème décide de la note finale d’un module, de sa mention et de sa sanction, de la moyenne générale
+        pondérée par les crédits et de la décision proposée au conseil de classe. Le modifier ne retouche aucun
+        bulletin déjà généré — ceux-ci gardent les valeurs figées le jour de leur édition — seuls les calculs à venir
+        suivent.
+      </p>
+
+      <div className="mb-5 flex flex-wrap items-end gap-3">
+        <label className="text-sm">
+          <span className="mb-1 block text-ink-700">Moyenne des UEA</span>
+          <input
+            type="number"
+            min={1}
+            max={valeurs.note_maximale - 1}
+            required
+            value={valeurs.bareme_uea}
+            onChange={(e) => definir('bareme_uea', e.target.value)}
+            className="field w-24 py-2"
+          />
+        </label>
+        <span className="pb-2 text-sm text-ink-500">
+          + épreuve intégratrice <strong className="text-ink-700">{integratrice}</strong> = {valeurs.note_maximale}
+        </span>
+      </div>
+
+      <div className="mb-5 flex flex-wrap items-end gap-4">
+        <label className="text-sm">
+          <span className="mb-1 block text-ink-700">Seuil de réussite</span>
+          <input
+            type="number"
+            min={0}
+            max={valeurs.note_maximale}
+            step="0.1"
+            required
+            value={valeurs.seuil_reussite}
+            onChange={(e) => definir('seuil_reussite', e.target.value)}
+            className="field w-24 py-2"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-ink-700">Nombre de trimestres</span>
+          <input
+            type="number"
+            min={1}
+            max={6}
+            required
+            value={valeurs.nombre_trimestres}
+            onChange={(e) => definir('nombre_trimestres', e.target.value)}
+            className="field w-24 py-2"
+          />
+        </label>
+      </div>
+
+      <fieldset className="mb-2">
+        <legend className="mb-1 text-sm text-ink-700">Mentions</legend>
+        <p className="mb-3 text-xs text-ink-500">
+          Note minimale ouvrant droit à chaque mention. Les valeurs doivent décroître de A vers E ; sous le seuil de
+          réussite, le bulletin n’imprime aucune mention.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          {LETTRES_MENTION.map((lettre) => (
+            <label key={lettre} className="text-sm">
+              <span className="mb-1 block text-ink-700">
+                {lettre} · {valeurs.appreciations?.[lettre]}
+              </span>
+              <input
+                type="number"
+                min={0}
+                max={valeurs.note_maximale}
+                step="0.1"
+                required
+                value={valeurs.mentions[lettre]}
+                onChange={(e) => definirMention(lettre, e.target.value)}
+                className="field w-24 py-2"
+              />
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      <button type="submit" disabled={saving} className="btn-primary mt-5">
+        {saving ? 'Enregistrement…' : 'Enregistrer'}
+      </button>
+    </form>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
 
 export default function ConfigurationPage() {
   const [tab, setTab] = useState('periodes')
@@ -1105,6 +1253,7 @@ export default function ConfigurationPage() {
     ['speciaux', 'Emplois du temps spéciaux'],
     ['administratif', 'Horaires administratifs'],
     ['entete', 'En-tête de l’établissement'],
+    ['bareme-apc', 'Barème des bulletins'],
   ]
 
   return (
@@ -1130,6 +1279,7 @@ export default function ConfigurationPage() {
       {tab === 'speciaux' && <EmploisSpeciaux />}
       {tab === 'administratif' && <HorairesAdministratifs />}
       {tab === 'entete' && <EnteteEtablissement />}
+      {tab === 'bareme-apc' && <BaremeApc />}
     </div>
   )
 }

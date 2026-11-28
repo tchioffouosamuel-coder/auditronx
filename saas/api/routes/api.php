@@ -11,9 +11,11 @@ use App\Http\Controllers\Api\CahierTexteController;
 use App\Http\Controllers\Api\ClasseController;
 use App\Http\Controllers\Api\CoursEnseignantController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\DepartementController;
 use App\Http\Controllers\Api\DeviceController;
 use App\Http\Controllers\Api\DeviceLogController;
 use App\Http\Controllers\Api\DisciplineController;
+use App\Http\Controllers\Api\EleveController;
 use App\Http\Controllers\Api\EmploiDuTempsController;
 use App\Http\Controllers\Api\EmploiDuTempsSpecialController;
 use App\Http\Controllers\Api\EnseignantController;
@@ -21,8 +23,13 @@ use App\Http\Controllers\Api\EtablissementCourantController;
 use App\Http\Controllers\Api\FerieController;
 use App\Http\Controllers\Api\FicheProgressionController;
 use App\Http\Controllers\Api\FirmwareController;
+use App\Http\Controllers\Api\InscriptionController;
+use App\Http\Controllers\Api\MaquetteClasseController;
+use App\Http\Controllers\Api\ModuleController;
 use App\Http\Controllers\Api\MonAssiduiteController;
 use App\Http\Controllers\Api\MyPresenceController;
+use App\Http\Controllers\Api\NoteModuleController;
+use App\Http\Controllers\Api\NotesClasseurController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OtpController;
 use App\Http\Controllers\Api\ParametreController;
@@ -30,10 +37,12 @@ use App\Http\Controllers\Api\PeriodeCoursController;
 use App\Http\Controllers\Api\PresenceValidationController;
 use App\Http\Controllers\Api\ProgrammeController;
 use App\Http\Controllers\Api\QrPointController;
+use App\Http\Controllers\Api\ReferentielApcController;
 use App\Http\Controllers\Api\RelayImportController;
 use App\Http\Controllers\Api\RelaySyncController;
 use App\Http\Controllers\Api\RetardsController;
 use App\Http\Controllers\Api\SignalementController;
+use App\Http\Controllers\Api\SpecialiteController;
 use App\Http\Controllers\Api\SpreadsheetController;
 use App\Http\Controllers\Api\StatistiquesController;
 use Illuminate\Http\Request;
@@ -108,9 +117,99 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/personnel/{enseignant}/assiduite', [EnseignantController::class, 'assiduite']);
     Route::apiResource('personnel', EnseignantController::class)
         ->parameters(['personnel' => 'enseignant']);
+    /*
+     * Maquette d'une classe (§bulletins APC) : déclarée avant l'apiResource,
+     * sinon `classes/{classe}` capterait le segment « maquette ». Lecture
+     * ouverte — les écrans de saisie des notes la parcourent — écriture
+     * réservée au backoffice.
+     */
+    Route::get('/classes/{classe}/maquette', [MaquetteClasseController::class, 'show']);
+    Route::middleware('backoffice')->group(function () {
+        Route::post('/classes/{classe}/maquette/initialiser', [MaquetteClasseController::class, 'initialiser']);
+        Route::put('/classes/{classe}/maquette', [MaquetteClasseController::class, 'update']);
+        Route::delete('/classes/{classe}/maquette/{module}', [MaquetteClasseController::class, 'destroy']);
+    });
+
     Route::apiResource('classes', ClasseController::class)
         ->parameters(['classes' => 'classe']);
     Route::apiResource('disciplines', DisciplineController::class);
+
+    /*
+     * Élèves et inscriptions (§bulletins APC).
+     *
+     * L'inscription — et non l'élève — est l'unité à laquelle se rattacheront
+     * les notes et les bulletins : c'est ce qui permet à un redoublant
+     * d'avoir deux années côte à côte sans que la seconde écrase la première.
+     *
+     * Lecture ouverte à tout compte authentifié, écriture réservée au
+     * backoffice, comme le reste du chantier.
+     */
+    Route::get('/classes/{classe}/eleves', [EleveController::class, 'parClasse']);
+    Route::get('/eleves/annees', [EleveController::class, 'annees']);
+    // `parameters` explicite : le singulier déduit de « eleves » est
+    // « elefe », qui ne correspond à aucun paramètre type-hinté et casse la
+    // liaison de modèle sans rien dire.
+    Route::apiResource('eleves', EleveController::class)
+        ->only(['index', 'show'])
+        ->parameters(['eleves' => 'eleve']);
+    Route::apiResource('eleves', EleveController::class)
+        ->except(['index', 'show'])
+        ->parameters(['eleves' => 'eleve'])
+        ->middleware('backoffice');
+
+    Route::apiResource('inscriptions', InscriptionController::class)->only(['index', 'show']);
+    Route::apiResource('inscriptions', InscriptionController::class)
+        ->except(['index', 'show'])
+        ->middleware('backoffice');
+
+    /*
+     * Saisie des notes (§bulletins APC).
+     *
+     * Sans `classe_module_id`, `/notes` rend l'avancement de la classe : ce
+     * qu'il reste à remplir avant le conseil. Avec, il rend la grille d'un
+     * module — une classe, un trimestre, un module à la fois.
+     *
+     * Le classeur est la voie hors ligne : export pré-rempli, réimport par
+     * code de module et matricule.
+     */
+    Route::get('/notes', [NoteModuleController::class, 'index']);
+    Route::get('/notes/avancement', [NoteModuleController::class, 'avancement']);
+    Route::get('/notes/classeur/export', [NotesClasseurController::class, 'export']);
+    Route::middleware('backoffice')->group(function () {
+        Route::put('/notes/bulk', [NoteModuleController::class, 'bulk']);
+        Route::post('/notes/classeur/import', [NotesClasseurController::class, 'import']);
+    });
+
+    /*
+     * Structure et référentiel APC (§bulletins de compétences).
+     *
+     * `disciplines` reste ce qu'elle est — l'emploi du temps, le cahier de
+     * texte et l'assiduité s'appuient dessus. Les modules du bulletin vivent
+     * à côté : ils portent un bloc, un niveau, une spécialité et des crédits,
+     * qu'une matière d'emploi du temps n'a pas à connaître.
+     *
+     * Lecture ouverte à tout compte authentifié (les écrans de saisie des
+     * notes en ont besoin), écriture réservée au backoffice.
+     */
+    Route::apiResource('departements', DepartementController::class)
+        ->only(['index', 'show']);
+    Route::apiResource('departements', DepartementController::class)
+        ->except(['index', 'show'])
+        ->middleware('backoffice');
+
+    Route::apiResource('specialites', SpecialiteController::class)
+        ->only(['index', 'show']);
+    Route::apiResource('specialites', SpecialiteController::class)
+        ->except(['index', 'show'])
+        ->middleware('backoffice');
+
+    // Avant l'apiResource : `modules/{module}` capterait sinon « blocs ».
+    Route::get('/modules/blocs', [ModuleController::class, 'blocs']);
+    Route::apiResource('modules', ModuleController::class)
+        ->only(['index', 'show']);
+    Route::apiResource('modules', ModuleController::class)
+        ->except(['index', 'show'])
+        ->middleware('backoffice');
     // Avant l'apiResource : `emplois/{emploiDuTemp}` capterait sinon « conflits ».
     Route::get('/emplois/conflits', [EmploiDuTempsController::class, 'conflits']);
     Route::apiResource('emplois', EmploiDuTempsController::class)
@@ -153,7 +252,20 @@ Route::middleware('auth:sanctum')->group(function () {
     // Import/export/modèle XLSX génériques (§4.2) pour les entités principales.
     // Préfixées `/spreadsheet/...` pour ne pas entrer en collision avec les
     // apiResource `/personnel/{enseignant}` etc. déclarées ci-dessus.
-    Route::pattern('spreadsheetEntity', 'personnel|classes|disciplines|emplois|progressions');
+    /*
+     * Référentiel APC : même préfixe `/spreadsheet/...` que les autres
+     * classeurs, mais son propre contrôleur — la disposition du document
+     * (une colonne par bloc, une ligne pouvant porter deux modules) n'entre
+     * pas dans le format « une ligne, des colonnes nommées » de
+     * SpreadsheetController. Déclarées avant le pattern ci-dessous, qui ne
+     * les couvre volontairement pas.
+     */
+    Route::get('/spreadsheet/referentiel/template', [ReferentielApcController::class, 'template']);
+    Route::get('/spreadsheet/referentiel/export', [ReferentielApcController::class, 'export']);
+    Route::post('/spreadsheet/referentiel/import', [ReferentielApcController::class, 'import'])
+        ->middleware('backoffice');
+
+    Route::pattern('spreadsheetEntity', 'personnel|classes|disciplines|eleves|emplois|progressions');
     Route::get('/spreadsheet/personnel/export-pdf', [SpreadsheetController::class, 'exportPersonnelPdf'])->middleware('backoffice');
     Route::get('/spreadsheet/{spreadsheetEntity}/template', [SpreadsheetController::class, 'template']);
     Route::get('/spreadsheet/{spreadsheetEntity}/export', [SpreadsheetController::class, 'export']);
@@ -194,6 +306,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // Configuration (§4.2) — horaire fixe du personnel administratif.
     Route::get('/parametres/horaires-administratifs', [ParametreController::class, 'horairesAdministratifs']);
     Route::put('/parametres/horaires-administratifs', [ParametreController::class, 'definirHorairesAdministratifs'])->middleware('backoffice');
+
+    // Configuration — barème des bulletins de compétences (modèle APC) :
+    // seuil de réussite, répartition UEA / épreuve intégratrice, mentions.
+    Route::get('/parametres/bareme-apc', [ParametreController::class, 'baremeApc']);
+    Route::put('/parametres/bareme-apc', [ParametreController::class, 'definirBaremeApc'])->middleware('backoffice');
 
     // En-tête officiel imprimé en haut des documents (§4.2).
     Route::get('/parametres/entete-etablissement', [ParametreController::class, 'enteteEtablissement']);
