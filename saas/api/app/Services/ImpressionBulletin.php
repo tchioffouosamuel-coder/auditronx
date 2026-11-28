@@ -64,7 +64,18 @@ class ImpressionBulletin
     }
 
     /**
-     * Ce qu'imprime une page de bulletin.
+     * Ce qu'imprime une page de bulletin, dans la disposition du canevas
+     * officiel (formation des censeurs industriels, cas pratiques NGONO et
+     * TCHAMBA).
+     *
+     * Le bulletin trimestriel n'imprime que les modules programmés au
+     * trimestre : c'est ce que fait le modèle, dont les crédits totalisent 60
+     * au T3 alors que l'année en compte 97. L'annuel imprime tout, tiret
+     * compris, et le module non programmé de l'année avec son crédit entre
+     * parenthèses.
+     *
+     * Les quatre blocs sont toujours imprimés ; un bloc sans module porte la
+     * mention « sans objet », comme dans le modèle.
      *
      * @return array<string, mixed>
      */
@@ -74,72 +85,97 @@ class ImpressionBulletin
         $annuel = $bulletin->estAnnuel();
         $bareme = $bulletin->bareme ?: BaremeApc::valeurs();
         $trimestres = $annuel ? range(1, (int) ($bareme['nombre_trimestres'] ?? BaremeApc::nombreTrimestres())) : [];
+        $specialite = $bulletin->classe?->specialiteApc;
 
-        $blocs = $bulletin->lignes
-            ->groupBy('bloc')
-            ->sortBy(fn (Collection $_, string $bloc) => Module::rangBloc($bloc))
-            ->map(fn (Collection $lignes, string $bloc) => [
-                'libelle' => Module::libelleBloc($bloc) ?? $bloc,
-                'lignes' => $lignes->map(fn (BulletinLigne $l) => self::ligne($l, $trimestres))->values()->all(),
-            ])
-            ->values()
-            ->all();
+        $parBloc = $bulletin->lignes
+            ->filter(fn (BulletinLigne $l) => $annuel || ! $l->hors_totaux)
+            ->groupBy('bloc');
+
+        $blocs = [];
+        foreach (array_unique([...array_keys(Module::BLOCS), ...$parBloc->keys()->all()]) as $bloc) {
+            $blocs[] = [
+                'libelle' => mb_strtoupper(Module::libelleBloc($bloc) ?? $bloc, 'UTF-8'),
+                'lignes' => $parBloc->get($bloc, collect())->map(fn (BulletinLigne $l) => self::ligne($l, $trimestres))->values()->all(),
+            ];
+        }
+
+        $decision = $bulletin->decisionRetenue();
+        $nonValidees = $bulletin->competences_non_validees;
+        $seuil = self::note((float) ($bareme['seuil_reussite'] ?? BaremeApc::SEUIL_REUSSITE));
+        $uea = (int) ($bareme['bareme_uea'] ?? BaremeApc::BAREME_UEA);
+        $integratrice = (int) ($bareme['bareme_integratrice'] ?? BaremeApc::NOTE_MAXIMALE - $uea);
 
         return [
             'type' => $bulletin->type,
             'annuel' => $annuel,
-            'titre' => $annuel
-                ? 'BULLETIN ANNUEL DE COMPÉTENCES'
-                : 'BULLETIN DE COMPÉTENCES — '.self::ordinal((int) $bulletin->trimestre, true).' TRIMESTRE',
+            'titre' => $annuel ? 'BULLETIN DE COMPÉTENCES : ANNUEL' : 'BULLETIN DE COMPÉTENCES : Trimestre '.$bulletin->trimestre,
             'annee' => AnneeScolaire::affichage($bulletin->annee_scolaire),
             'filigrane' => self::filigrane($bulletin),
             'eleve' => [
                 'nom_complet' => $eleve?->nom_complet ?? '',
                 'matricule' => $eleve?->matricule ?? '',
                 'sexe' => $eleve?->sexe ?? '',
-                'naissance' => trim(($eleve?->date_naissance?->format('d/m/Y') ?? '')
-                    .($eleve?->lieu_naissance ? ' à '.$eleve->lieu_naissance : '')),
-                'statut' => Inscription::LIBELLES_STATUTS[$bulletin->statut_inscription] ?? (string) $bulletin->statut_inscription,
+                'date_naissance' => $eleve?->date_naissance?->format('d/m/Y') ?? '',
+                'lieu_naissance' => $eleve?->lieu_naissance ?? '',
             ],
+            // « Statut : Régulier / Redoublant », le statut de l'élève souligné.
+            'statuts' => Inscription::LIBELLES_STATUTS,
+            'statut' => $bulletin->statut_inscription,
             'classe' => [
                 'code' => $bulletin->classe_code,
                 'nom' => $bulletin->classe_nom,
-                'specialite' => $bulletin->classe?->specialiteApc?->nom,
+                'specialite' => $specialite ? trim($specialite->nom.($specialite->code && $specialite->code !== $specialite->nom ? ' ('.$specialite->code.')' : '')) : '',
+                'specialite_code' => $specialite?->code ?? $bulletin->classe_code,
             ],
             'effectif' => $bulletin->effectif,
-            'bareme_uea' => $bareme['bareme_uea'] ?? BaremeApc::BAREME_UEA,
-            'bareme_integratrice' => $bareme['bareme_integratrice'] ?? BaremeApc::NOTE_MAXIMALE - BaremeApc::BAREME_UEA,
+            'bareme_uea' => $uea,
+            'bareme_integratrice' => $integratrice,
             'trimestres' => $trimestres,
             'blocs' => $blocs,
-            'totaux' => [
+            'pied' => [
+                'moyenne' => self::note($bulletin->moyenne_generale),
                 'credits' => (string) $bulletin->total_credits,
                 'volume_horaire' => $bulletin->total_volume_horaire === null ? '' : (string) $bulletin->total_volume_horaire,
-                'moyenne' => self::note($bulletin->moyenne_generale),
                 'mention' => $bulletin->mention ?? self::TIRET,
+                'decision' => mb_strtoupper((string) BaremeApc::libelleDecision($decision), 'UTF-8'),
+                'defavorable' => in_array($decision, [BaremeApc::DECISION_ECHEC, BaremeApc::DECISION_REDOUBLEMENT], true),
+                'competences' => $bulletin->notes_manquantes > 0
+                    ? $bulletin->notes_manquantes.' note(s) manquante(s)'
+                    : ($nonValidees === 0 ? 'Toutes validées' : $nonValidees.' compétence(s) non validée(s)'),
             ],
+            'seuil' => $annuel
+                ? "{$seuil} / 100 pour chaque compétence (note finale = moyenne des trimestres où le module est programmé ; — : non programmé ce trimestre)"
+                : "{$seuil} / 100 pour chaque compétence (note finale = moyenne UEA /{$uea} + épreuve intégratrice /{$integratrice}) programmées au trimestre {$bulletin->trimestre}.",
             'synthese' => [
                 'moyenne' => self::note($bulletin->moyenne_generale),
-                'mention' => $bulletin->mention,
-                'appreciation' => $bulletin->mention ? ($bareme['appreciations'][$bulletin->mention] ?? '') : null,
-                'rang' => self::rang($bulletin->rang, $bulletin->ex_aequo),
-                'effectif_classe' => $bulletin->effectif_classe,
                 'moyenne_classe' => self::note($bulletin->moyenne_classe),
                 'moyenne_max' => self::note($bulletin->moyenne_max),
                 'moyenne_min' => self::note($bulletin->moyenne_min),
-                'competences_non_validees' => $bulletin->competences_non_validees,
                 'position' => $bulletin->position_groupe,
                 'positions' => BaremeApc::LIBELLES_POSITIONS,
                 'validation' => $bulletin->validation_competences,
-                'decision' => $bulletin->decisionRetenue(),
-                'decisions' => array_combine(
-                    $bulletin->decisionsPossibles(),
-                    array_map(fn (string $d) => BaremeApc::libelleDecision($d), $bulletin->decisionsPossibles()),
-                ),
+                'decision' => $decision,
+                'decisions' => self::decisionsImprimees($bulletin),
                 'observation' => $bulletin->observation,
             ],
             'legende' => self::legende($bareme),
             'valide_le' => $bulletin->valide_at?->format('d/m/Y'),
         ];
+    }
+
+    /**
+     * Les décisions dans l'ordre du modèle : « Succès · Échec · Remédiation »
+     * au trimestre, et non dans l'ordre de gravité du barème.
+     *
+     * @return array<string, string>
+     */
+    private static function decisionsImprimees(Bulletin $bulletin): array
+    {
+        $ordre = $bulletin->estAnnuel()
+            ? [BaremeApc::DECISION_ADMIS, BaremeApc::DECISION_SOUS_RESERVE, BaremeApc::DECISION_REDOUBLEMENT]
+            : [BaremeApc::DECISION_SUCCES, BaremeApc::DECISION_ECHEC, BaremeApc::DECISION_REMEDIATION];
+
+        return array_combine($ordre, array_map(fn (string $d) => (string) BaremeApc::libelleDecision($d), $ordre));
     }
 
     /**
@@ -250,26 +286,40 @@ class ImpressionBulletin
         return [
             'code' => $l->code,
             'intitule' => $l->intitule,
-            // Hors totaux : le crédit s'imprime entre parenthèses, il ne pèse pas.
+            // Hors totaux : le crédit s'imprime entre parenthèses, il ne pèse
+            // pas. Les heures restent lisibles — le modèle imprime « (20) »
+            // mais « 300 » pour le stage — et sortent du total quand même.
             'credit' => $l->credit === null ? '' : ($l->hors_totaux ? '('.$l->credit.')' : (string) $l->credit),
-            'volume_horaire' => $l->volume_horaire === null ? '' : ($l->hors_totaux ? '('.$l->volume_horaire.')' : (string) $l->volume_horaire),
+            'volume_horaire' => $l->volume_horaire === null ? '' : (string) $l->volume_horaire,
             'moyenne_uea' => $l->hors_totaux ? self::TIRET : self::note($l->moyenne_uea, ''),
             'note_integratrice' => $l->hors_totaux ? self::TIRET : self::note($l->note_integratrice, ''),
             'notes' => $notes,
             'note_finale' => $l->hors_totaux ? self::TIRET : self::note($l->note_finale, ''),
             'manquante' => $l->note_manquante,
-            'sous_seuil' => $l->sanction === BaremeApc::SANCTION_NON_ACQUISE,
+            'non_acquise' => $l->sanction === BaremeApc::SANCTION_NON_ACQUISE,
             'mention' => $l->hors_totaux ? self::TIRET : ($l->mention ?? ($l->note_finale === null ? '' : self::TIRET)),
             'sanction' => $l->hors_totaux ? self::TIRET : ($l->sanction ?? ''),
-            'appreciation' => $l->hors_totaux ? '' : ($l->appreciation ?? ''),
+            'appreciation' => $l->hors_totaux ? 'Non programmé' : ($l->appreciation ?? ''),
             'signataire' => self::initiales($l->signataire),
         ];
     }
 
-    /** 86.5 → « 86,5 » ; 87.0 → « 87,0 » : une décimale toujours, comme le barème. */
+    /**
+     * 87.0 → « 87 », 86.5 → « 86,5 », comme le modèle : la décimale n'est
+     * imprimée que si elle existe. La valeur est déjà arrondie au dixième par
+     * le barème ; on ne fait que l'écrire.
+     */
     public static function note(float|int|null $note, string $vide = self::TIRET): string
     {
-        return $note === null ? $vide : number_format((float) $note, BaremeApc::DECIMALES, ',', ' ');
+        if ($note === null) {
+            return $vide;
+        }
+
+        $note = round((float) $note, BaremeApc::DECIMALES);
+
+        return $note == floor($note)
+            ? (string) (int) $note
+            : number_format($note, BaremeApc::DECIMALES, ',', ' ');
     }
 
     /** « 1er », « 2e ex æquo ». */
@@ -314,25 +364,25 @@ class ImpressionBulletin
     }
 
     /**
-     * Légende des mentions, d'après le barème recopié au calcul.
+     * Légende des mentions, d'après le barème recopié au calcul, en
+     * intervalles comme le modèle : « Mention A (Excellent) : [90 - 100] ».
+     * La borne haute d'une mention est la borne basse de la suivante moins
+     * un, comme l'écrit le modèle.
      *
-     * @return array<int, array{lettre: string, borne: string, appreciation: string}>
+     * @return array<int, string>
      */
     private static function legende(array $bareme): array
     {
+        $mentions = $bareme['mentions'] ?? BaremeApc::MENTIONS;
+        arsort($mentions);
+
         $legende = [];
-        foreach ($bareme['mentions'] ?? BaremeApc::MENTIONS as $lettre => $borne) {
-            $legende[] = [
-                'lettre' => $lettre,
-                'borne' => '≥ '.self::note((float) $borne),
-                'appreciation' => $bareme['appreciations'][$lettre] ?? (BaremeApc::APPRECIATIONS[$lettre] ?? ''),
-            ];
+        $haut = (float) BaremeApc::NOTE_MAXIMALE;
+        foreach ($mentions as $lettre => $borne) {
+            $appreciation = $bareme['appreciations'][$lettre] ?? (BaremeApc::APPRECIATIONS[$lettre] ?? '');
+            $legende[] = "Mention {$lettre} ({$appreciation}) : [".self::note((float) $borne).' - '.self::note($haut).']';
+            $haut = (float) $borne - 1;
         }
-        $legende[] = [
-            'lettre' => self::TIRET,
-            'borne' => '< '.self::note((float) ($bareme['seuil_reussite'] ?? BaremeApc::SEUIL_REUSSITE)),
-            'appreciation' => BaremeApc::APPRECIATION_NON_ACQUISE,
-        ];
 
         return $legende;
     }

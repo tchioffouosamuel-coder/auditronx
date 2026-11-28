@@ -224,15 +224,14 @@ class BulletinPdfTest extends TestCase
 
         $this->assertSame([1, 2, 3], $page['trimestres']);
         $this->assertSame(BaremeApc::TIRET, $lignes['C13']['notes'][1]);   // ouvert au T2
-        $this->assertSame('89,0', $lignes['C13']['notes'][2]);             // 52+2 + 35
+        $this->assertSame('89', $lignes['C13']['notes'][2]);               // 52+2 + 35
         $this->assertSame('(12)', $lignes['STG']['credit']);               // non programmé
         $this->assertSame(BaremeApc::TIRET, $lignes['STG']['note_finale']);
         $this->assertSame('M.J.P.', $lignes['C10']['signataire']);
         $this->assertSame('Année Scolaire : 2025-2026', 'Année Scolaire : '.$page['annee']);
-        $this->assertSame('1er', $page['synthese']['rang']);
         $this->assertSame(
-            ['Modules des compétences particulières', 'Modules des compétences générales',
-                'Modules des enseignements généraux', 'Modules des enseignements complémentaires'],
+            ['MODULES DES COMPÉTENCES PARTICULIÈRES', 'MODULES DES COMPÉTENCES GÉNÉRALES',
+                'MODULES DES ENSEIGNEMENTS GÉNÉRAUX', 'MODULES DES ENSEIGNEMENTS COMPLÉMENTAIRES'],
             array_column($page['blocs'], 'libelle'),
         );
     }
@@ -253,7 +252,7 @@ class BulletinPdfTest extends TestCase
         $apres = ImpressionBulletin::page($bulletin->fresh());
 
         $this->assertSame($avant['legende'], $apres['legende']);
-        $this->assertSame('≥ 85,0', $apres['legende'][1]['borne']);
+        $this->assertSame('Mention B (Très bien) : [85 - 89]', $apres['legende'][1]);
         $this->assertSame($avant['blocs'], $apres['blocs']);
         $this->assertSame($avant['synthese']['moyenne'], $apres['synthese']['moyenne']);
     }
@@ -281,8 +280,8 @@ class BulletinPdfTest extends TestCase
         ConseilClasse::valider($this->classe, AnneeScolaire::courante(), '3', null);
 
         $html = view('pdf.bulletins', ['pages' => [ImpressionBulletin::page($tchamba->fresh())]])->render();
-        $this->assertStringContainsString('☒</span> Échec', $html);
-        $this->assertStringContainsString('☐</span> Remédiation', $html);
+        $this->assertStringContainsString('[X] <span class="rouge b">Échec</span>', $html);
+        $this->assertStringContainsString('[ ] <span class="rouge b">Remédiation</span>', $html);
         $this->assertStringContainsString('Reprendre C11', $html);
 
         $pv = ImpressionBulletin::pv($this->classe, AnneeScolaire::courante(), '3', Bulletin::duConseil($this->classe->id, AnneeScolaire::courante(), '3')->courants()->get());

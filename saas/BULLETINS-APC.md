@@ -22,9 +22,9 @@ calcul change, c'est contre eux qu'il faut le vérifier.
 | 3 | Élèves et inscriptions | **fait** — 20 tests |
 | 4 | Saisie des notes | **fait** — 22 tests |
 | 5 | Calcul des bulletins et conseil de classe | **fait** — 16 tests |
-| 6 | Impression PDF par classe | **fait** — 11 tests |
+| 6 | Impression PDF par classe | **fait** — 16 tests, dont les 4 bulletins de référence |
 
-Suite complète au moment d'écrire : **371 tests, 368 passent**. Les trois
+Suite complète au moment d'écrire : **376 tests, 373 passent**. Les trois
 échecs sont antérieurs au chantier (voir §8).
 
 ### La chaîne visée
@@ -41,8 +41,8 @@ Départements ─▶ Spécialités ─▶ Modules (import XLSX) ─▶ Maquette 
                                     Bulletins PDF — un fichier par classe
 ```
 
-Les sept lots sont faits. Reste le critère de fin (§6) : refaire les quatre
-bulletins du PPTX dans l'application et comparer à l'impression.
+Les sept lots sont faits, et le critère de fin est atteint : les quatre
+bulletins des cas pratiques ressortent à l'identique (§6).
 
 ---
 
@@ -398,21 +398,21 @@ Sinon, une réimpression faite après un changement de bornes afficherait un
 - `pdf/bulletins.blade.php` est l'enveloppe commune : un élève par page,
   dans l'ordre de la liste d'appel, avec filigrane, en-tête, identité,
   tableau et synthèse.
-- `pdf/bulletin-trimestre.blade.php` (11 colonnes) et
+- `pdf/bulletin-trimestre.blade.php` (9 colonnes) et
   `pdf/bulletin-annuel.blade.php` (une colonne par trimestre) ne contiennent
   que le tableau. Une classe est toujours d'un seul type.
 - `pdf/partials/bulletin-identite` et `pdf/partials/bulletin-synthese` sont
-  partagés. La synthèse imprime des cases ☐ ☒ (position, validation,
-  décision), à la manière du modèle officiel.
+  partagés : en-tête de l'élève, puis sections II (synthèse) et III
+  (décision du conseil), avec les cases `[X]` / `[ ]` du canevas.
 - `pdf/pv-conseil.blade.php` est en A4 paysage : classe par rang, décision
   proposée et décision retenue (`*` si le conseil s'est écarté du barème),
   décompte par décision, taux de « S » et moyenne par module.
 
-Police **DejaVu Sans** : dompdf remplace Arial par Helvetica, qui n'a ni
-`≥` ni `☐ ☒`.
+Police **DejaVu Sans** : dompdf remplace Arial par Helvetica, à qui
+manquent des glyphes (tiret long, apostrophe typographique).
 
-**Rendu vérifié à l'œil.** Le bulletin annuel de 13 modules × 12 colonnes
-tient sur une page A4 portrait avec une marge confortable, en police 8,6 px.
+**Rendu vérifié à l'œil.** Le bulletin annuel de 13 modules tient sur une
+page A4 portrait, en police 8,4 px.
 Le cas « serré » redouté n'en est pas un.
 
 Un document qui n'est pas la version signée porte un filigrane :
@@ -441,21 +441,47 @@ dossier avec le PDF des bulletins et le PV.
 Sur `/conseil` : boutons « Bulletins (PDF) », « PV du conseil », « Archive
 établissement (ZIP) », et un bouton « PDF » par élève.
 
+### Critère de fin — atteint
+
+La référence est la présentation de la formation des censeurs industriels
+(canevas trimestriel et annuel, puis quatre cas pratiques : NGONO Aline
+Carine admise, TCHAMBA Kevin Arnaud en échec, 1re année TPV, T3 et
+annuel). [`BulletinsDeReferenceTest`](api/tests/Feature/BulletinsDeReferenceTest.php)
+les ressaisit (même maquette, mêmes notes, même programmation par
+trimestre). Il compare **chaque case** de chaque ligne, puis le pied du
+tableau : 84,4 · 67,2 · 84,1 · 66,9 ; 60 et 97 crédits ; 1410 h ; 4 et 7
+compétences non validées. Le moteur n'a pas eu à changer. Seule la mise
+en page a été alignée sur le canevas :
+
+- notes sans décimale inutile (`87`, `86,5`) ;
+- trimestriel : seuls les modules **programmés au trimestre** sont imprimés
+  (le modèle totalise 60 crédits au T3, l'année en compte 97) ;
+- colonnes du canevas, code dans la case du module, pas de VH au trimestre ;
+- les quatre blocs toujours imprimés, « sans objet » s'ils sont vides ;
+- ligne « Moyenne Générale des notes pondérées » (moyenne, crédits, VH,
+  mention, décision, compétences validées) et ligne « Seuil de réussite » ;
+- sections I / II / III, cases `[X]`, légende en intervalles ;
+- module non programmé de l'année : crédit `(20)`, VH `300`, « Non
+  programmé ».
+
+Les moyennes de classe du modèle (effectif 28) ne sont pas reconstituées.
+
 ### Points ouverts
 
+- **Décision annuelle.** Le pied du bulletin annuel du modèle porte
+  « SUCCÈS » / « ÉCHEC ». Le barème (lot 0) nomme la décision annuelle
+  Admis / Validation sous réserve / Redoublement. La section III de l'annuel
+  est coupée dans la présentation : **à trancher** avec un censeur.
+- **Colonne SIGN.** Les captures du modèle sont rognées à droite après
+  « APPRÉCIATION ». La colonne de signature (initiales de l'enseignant,
+  lot 2) est gardée en dernière position, **à confirmer**.
+- **Rang** : le modèle ne l'imprime pas sur le bulletin. Il est retiré du
+  bulletin et reste au PV.
 - **Le ZIP est rendu en synchrone.** Pour une quarantaine de classes, cela
   prend quelques minutes. Au-delà, il faudra un job en file d'attente et un
   lien de téléchargement.
 - **Statut `publie`** (remise aux familles) : la constante existe, aucun
   écran ne le pose encore.
-- La mise en page reproduit la structure du modèle (blocs, colonnes, cases),
-  pas sa maquette au millimètre : **le PPTX n'est pas dans le dépôt.** Le
-  critère de fin reste à faire avec lui sous les yeux.
-
-### Critère de fin
-
-Les quatre bulletins du PPTX, saisis dans l'application, ressortent imprimés à
-l'identique.
 
 ---
 
@@ -562,7 +588,7 @@ cd saas/api && ./vendor/bin/phpunit --no-coverage
 Les tests du chantier :
 
 ```bash
-cd saas/api && ./vendor/bin/phpunit --no-coverage --filter 'BaremeApcTest|ReferentielApcTest|MaquetteClasseTest|ElevesEtInscriptionsTest|SaisieNotesTest|ConseilClasseTest|BulletinPdfTest'
+cd saas/api && ./vendor/bin/phpunit --no-coverage --filter 'BaremeApcTest|ReferentielApcTest|MaquetteClasseTest|ElevesEtInscriptionsTest|SaisieNotesTest|ConseilClasseTest|BulletinPdfTest|BulletinsDeReferenceTest'
 ```
 
 Côté portail :

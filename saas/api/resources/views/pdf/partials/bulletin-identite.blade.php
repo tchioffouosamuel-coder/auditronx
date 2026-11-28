@@ -1,20 +1,29 @@
-{{-- Titre et identité de l'élève, en tête de chaque bulletin. --}}
+{{-- Titre et identité de l'élève, disposés comme sur le canevas officiel. --}}
 <h1>{{ $page['titre'] }}</h1>
-<div class="sous-titre">Année Scolaire : {{ $page['annee'] }}</div>
 
-<table class="identite" style="margin-bottom:4px">
+<table class="identite">
     <tr>
-        <td style="width:50%">Nom de l'Élève : <span class="b">{{ $page['eleve']['nom_complet'] }}</span></td>
-        <td style="width:25%">Matricule : <span class="b">{{ $page['eleve']['matricule'] }}</span></td>
-        <td style="width:25%">Sexe : {{ $page['eleve']['sexe'] }}</td>
+        <td colspan="2"><span class="b">SPÉCIALITÉ :</span> {{ $page['classe']['specialite'] }}</td>
+        <td colspan="2" class="r" style="white-space:nowrap"><span class="b">Année Scolaire :</span> {{ $page['annee'] }}</td>
     </tr>
     <tr>
-        <td>Né(e) le : {{ $page['eleve']['naissance'] }}</td>
-        <td>Classe : <span class="b">{{ $page['classe']['nom'] ?: $page['classe']['code'] }}</span></td>
-        <td>Effectif : {{ $page['effectif'] }}</td>
+        <td style="width:42%"><span class="b">Nom de l'Élève :</span> <u>{{ $page['eleve']['nom_complet'] }}</u></td>
+        <td style="width:22%"><span class="b">Classe :</span> <u>{{ $page['classe']['nom'] ?: $page['classe']['code'] }}</u></td>
+        <td style="width:22%"><span class="b">Matricule :</span> <u>{{ $page['eleve']['matricule'] }}</u></td>
+        <td style="width:14%" class="r"><span class="b">Effectif :</span> <u>{{ $page['effectif'] }}</u></td>
     </tr>
     <tr>
-        <td>Spécialité : {{ $page['classe']['specialite'] }}</td>
-        <td colspan="2">Statut : {{ $page['eleve']['statut'] }}</td>
+        <td colspan="4">
+            <span class="b">Né(e) le :</span> <u>{{ $page['eleve']['date_naissance'] }}</u>
+            <span class="b">à</span> <u>{{ $page['eleve']['lieu_naissance'] }}</u>
+            &nbsp;<span class="b">Sexe</span> <u>{{ $page['eleve']['sexe'] }}</u>
+            &nbsp;<span class="b">Statut :</span>
+            @foreach ($page['statuts'] as $valeur => $libelle)
+                @if (! $loop->first) / @endif
+                @if ($page['statut'] === $valeur)<u>{{ $libelle }}</u>@else{{ $libelle }}@endif
+            @endforeach
+        </td>
     </tr>
 </table>
+
+<h2>I. ÉVALUATIONS ET MAÎTRISE DES COMPÉTENCES</h2>
