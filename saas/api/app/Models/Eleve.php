@@ -23,11 +23,13 @@ class Eleve extends Model
 
     protected $fillable = [
         'matricule',
+        'matricule_national',
         'nom',
         'prenoms',
         'sexe',
         'date_naissance',
         'lieu_naissance',
+        'telephone',
         'photo_path',
     ];
 

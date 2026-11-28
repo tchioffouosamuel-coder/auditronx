@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 
 /**
  * Petits services communs aux imports de classeurs.
@@ -59,5 +60,43 @@ class Classeur
         $dejaUtilises[] = $nom;
 
         return $nom;
+    }
+
+    /**
+     * « 14/03/2008 », « 2008-03-14 » ou le numéro de série d'Excel -> « 2008-03-14 ».
+     *
+     * Le numéro de série est le cas réel : une colonne formatée en date dans
+     * le classeur arrive en nombre (39521), et l'interpréter comme une chaîne
+     * donnerait une naissance en l'an 39521. Les jours et les mois se lisent
+     * à l'européenne — « 03/04/2008 » est le 3 avril, pas le 4 mars.
+     *
+     * Rend `false` — et non `null` — quand la valeur est présente mais
+     * illisible : l'appelant doit pouvoir distinguer « pas de date » de
+     * « date fausse », et signaler la seconde.
+     */
+    public static function date(mixed $valeur): string|false|null
+    {
+        if ($valeur === null || (is_string($valeur) && trim($valeur) === '')) {
+            return null;
+        }
+
+        if (is_numeric($valeur)) {
+            try {
+                return ExcelDate::excelToDateTimeObject((float) $valeur)->format('Y-m-d');
+            } catch (\Throwable) {
+                return false;
+            }
+        }
+
+        $texte = trim((string) $valeur);
+
+        foreach (['d/m/Y', 'd-m-Y', 'Y-m-d', 'd/m/y'] as $format) {
+            $date = \DateTime::createFromFormat('!'.$format, $texte);
+            if ($date !== false && $date->format($format) === $texte) {
+                return $date->format('Y-m-d');
+            }
+        }
+
+        return false;
     }
 }

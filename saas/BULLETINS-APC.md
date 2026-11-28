@@ -19,12 +19,12 @@ calcul change, c'est contre eux qu'il faut le vérifier.
 | 0 | Barème APC et service de calcul | **fait** — 16 tests |
 | 1 | Départements, spécialités, modules, import du classeur | **fait** — 22 tests |
 | 2 | Maquette de classe | **fait** — 18 tests |
-| 3 | Élèves et inscriptions | **fait** — 20 tests |
+| 3 | Élèves et inscriptions | **fait** — 25 tests, dont 11 sur la liste de classe |
 | 4 | Saisie des notes | **fait** — 22 tests |
 | 5 | Calcul des bulletins et conseil de classe | **fait** — 16 tests |
 | 6 | Impression PDF par classe | **fait** — 16 tests, dont les 4 bulletins de référence |
 
-Suite complète au moment d'écrire : **376 tests, 373 passent**. Les trois
+Suite complète au moment d'écrire : **381 tests, 378 passent**. Les trois
 échecs sont antérieurs au chantier (voir §8).
 
 ### La chaîne visée
@@ -181,20 +181,52 @@ consommeront la grille de saisie et l'en-tête du bulletin.
 
 ### Import
 
-Entité `eleves` de
-[`SpreadsheetController`](api/app/Http/Controllers/Api/SpreadsheetController.php) :
-format tabulaire classique, une ligne par élève, identité **et** inscription
-sur la même feuille — c'est ainsi que l'administration reçoit ses listes.
+Au format de la **liste de classe de l'administration**
+(`Liste_eleves_2nde_F4-BA_2026_2027.xlsx`) :
+[`ListeElevesController`](api/app/Http/Controllers/Api/ListeElevesController.php)
+et [`App\Support\ListeEleves`](api/app/Support/ListeEleves.php), qui lit et
+écrit le classeur. Un contrôleur à part, comme le référentiel : la classe et
+l'année ne sont pas des colonnes, elles se lisent une fois par onglet dans le
+titre.
 
-Colonnes : `matricule`, `nom`, `prenoms`, `sexe`, `date_naissance`,
-`lieu_naissance`, `code_classe`, `annee_scolaire`, `statut`.
+- un onglet par classe ; ligne 1, titre fusionné
+  « LISTE DES ÉLÈVES — 2nde F4-BA — 2026-2027 » ;
+- ligne 3, les en-têtes : N°, NOMS ET PRÉNOMS, MATRICULE NATIONAL, MATRICULE
+  INTERNE, DATE DE NAISSANCE, LIEU DE NAISSANCE, TÉLÉPHONE, SEXE, STATUT ;
+- un élève par ligne à partir de la 4.
 
-`code_classe` vide → l'identité est enregistrée sans inscription. Les listes
-arrivent parfois avant les affectations.
+Correspondances :
 
-`normalizeDate()` lit le **numéro de série d'Excel** (39521 → 14/03/2008) aussi
-bien que `JJ/MM/AAAA` : une colonne formatée en date arrive ici en nombre, et
-la traiter comme une chaîne donnerait une naissance en l'an 39521.
+- la clé est le **matricule interne** (`eleves.matricule`) ; le matricule
+  national manque sur une bonne part des listes et ne peut pas l'être ;
+- NOMS ET PRÉNOMS va dans `nom`, espaces réduits, et efface `prenoms`, pour que
+  le nom ne s'imprime pas deux fois ;
+- STATUT N (nouveau) → `regulier`, R → `redoublant` ; une cellule vide vaut N ;
+- `matricule_national` et `telephone` ont été ajoutés à `eleves` par la
+  migration `2026_11_28_090110`.
+
+La classe du titre se cherche par code puis par nom, sans casse ni accents. Une
+classe inconnue **refuse l'onglet entier**, avec une erreur sur la ligne du
+titre : inscrire quarante élèves nulle part sur une faute de frappe ne se
+verrait pas. Un titre « SANS CLASSE » enregistre l'identité seule, puisque les
+listes arrivent parfois avant les affectations. Sans année dans le titre,
+l'année en cours s'applique.
+
+La lecture reconnaît les colonnes à leur intitulé, pas à leur position (accents,
+casse, ordre, ligne d'en-têtes décalée). Un onglet sans en-têtes reconnus est
+ignoré ; un fichier qui n'en a aucun est refusé en 422, ancien modèle à plat
+compris.
+
+Les sorties :
+
+- le **modèle** donne un onglet vierge par classe, titre rempli ;
+- l'**export** (`?annee=`, l'année en cours par défaut) donne un onglet par
+  classe, plus « SANS CLASSE », et se réimporte tel quel ;
+- l'import est réservé au back-office.
+
+`Classeur::date()` lit le **numéro de série d'Excel** (39521 → 14/03/2008)
+aussi bien que `JJ/MM/AAAA` : une colonne formatée en date arrive ici en
+nombre, et la traiter comme une chaîne donnerait une naissance en l'an 39521.
 
 ### Écran
 

@@ -73,7 +73,7 @@ export default function ElevesPage() {
           <SpreadsheetActions
             entity="eleves"
             label="élèves"
-            hint="Une ligne par élève : identité et inscription ensemble. Colonne « code_classe » vide, l’identité est enregistrée sans inscription — les listes arrivent parfois avant les affectations."
+            hint="Format de la liste de classe : un onglet par classe, titré « LISTE DES ÉLÈVES — classe — année », un élève par ligne à partir de la ligne 4. Statut N (nouveau) ou R (redoublant). Un onglet titré « SANS CLASSE » enregistre l’identité sans inscription."
             onImported={() => setRefreshKey((k) => k + 1)}
           />
 
@@ -123,7 +123,8 @@ export default function ElevesPage() {
             createLabel="Nouvel élève"
             resource={resource}
             fields={[
-              { key: 'matricule', label: 'Matricule', required: true },
+              { key: 'matricule', label: 'Matricule interne', required: true },
+              { key: 'matricule_national', label: 'Matricule national' },
               { key: 'nom', label: 'Nom', required: true },
               { key: 'prenoms', label: 'Prénoms' },
               {
@@ -137,6 +138,7 @@ export default function ElevesPage() {
               },
               { key: 'date_naissance', label: 'Date de naissance', toForm: (v) => (v ? String(v).slice(0, 10) : '') },
               { key: 'lieu_naissance', label: 'Lieu de naissance' },
+              { key: 'telephone', label: 'Téléphone' },
             ]}
             columns={[
               { key: 'matricule', label: 'Matricule' },
@@ -148,6 +150,7 @@ export default function ElevesPage() {
                 render: (row) => (row.date_naissance ? String(row.date_naissance).slice(0, 10) : '—'),
               },
               { key: 'lieu_naissance', label: 'À' },
+              { key: 'telephone', label: 'Téléphone', render: (row) => row.telephone || '—' },
               {
                 key: 'inscriptions',
                 label: 'Classe',

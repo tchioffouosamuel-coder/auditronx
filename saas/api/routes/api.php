@@ -39,6 +39,7 @@ use App\Http\Controllers\Api\PeriodeCoursController;
 use App\Http\Controllers\Api\PresenceValidationController;
 use App\Http\Controllers\Api\ProgrammeController;
 use App\Http\Controllers\Api\QrPointController;
+use App\Http\Controllers\Api\ListeElevesController;
 use App\Http\Controllers\Api\ReferentielApcController;
 use App\Http\Controllers\Api\RelayImportController;
 use App\Http\Controllers\Api\RelaySyncController;
@@ -295,7 +296,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/spreadsheet/referentiel/import', [ReferentielApcController::class, 'import'])
         ->middleware('backoffice');
 
-    Route::pattern('spreadsheetEntity', 'personnel|classes|disciplines|eleves|emplois|progressions');
+    /*
+     * Élèves : la liste de classe de l'administration — un onglet par
+     * classe, la classe et l'année dans le titre (voir ListeEleves). Même
+     * raison que le référentiel pour un contrôleur à part.
+     */
+    Route::get('/spreadsheet/eleves/template', [ListeElevesController::class, 'template']);
+    Route::get('/spreadsheet/eleves/export', [ListeElevesController::class, 'export']);
+    Route::post('/spreadsheet/eleves/import', [ListeElevesController::class, 'import'])
+        ->middleware('backoffice');
+
+    Route::pattern('spreadsheetEntity', 'personnel|classes|disciplines|emplois|progressions');
     Route::get('/spreadsheet/personnel/export-pdf', [SpreadsheetController::class, 'exportPersonnelPdf'])->middleware('backoffice');
     Route::get('/spreadsheet/{spreadsheetEntity}/template', [SpreadsheetController::class, 'template']);
     Route::get('/spreadsheet/{spreadsheetEntity}/export', [SpreadsheetController::class, 'export']);

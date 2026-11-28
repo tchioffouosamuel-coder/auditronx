@@ -120,11 +120,13 @@ class EleveController extends Controller
     {
         return $request->validate([
             'matricule' => ['required', 'string', 'max:50', Rule::unique('eleves', 'matricule')->ignore($eleve?->id)],
+            'matricule_national' => ['nullable', 'string', 'max:50'],
             'nom' => ['required', 'string', 'max:255'],
             'prenoms' => ['nullable', 'string', 'max:255'],
             'sexe' => ['nullable', Rule::in(Eleve::SEXES)],
             'date_naissance' => ['nullable', 'date'],
             'lieu_naissance' => ['nullable', 'string', 'max:255'],
+            'telephone' => ['nullable', 'string', 'max:30'],
         ]);
     }
 }

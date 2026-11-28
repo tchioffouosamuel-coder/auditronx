@@ -8,20 +8,16 @@ use App\Http\Controllers\Controller;
 use App\Imports\ArrayImport;
 use App\Models\Classe;
 use App\Models\Discipline;
-use App\Models\Eleve;
 use App\Models\EmploiDuTemps;
 use App\Models\Enseignant;
-use App\Models\Inscription;
 use App\Models\PeriodeCours;
 use App\Models\Programme;
 use App\Models\ProgressionLecon;
-use App\Services\AnneeScolaire;
 use App\Support\Classeur;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
-use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 /**
@@ -138,98 +134,6 @@ class SpreadsheetController extends Controller
                             'coefficient' => $row['coefficient'] !== '' && $row['coefficient'] !== null ? (int) $row['coefficient'] : 1,
                             'departement' => $this->blankToNull($row['departement'] ?? null),
                         ]
-                    );
-
-                    return null;
-                },
-            ],
-            /*
-             * Élèves (§bulletins APC). Format tabulaire classique — une ligne,
-             * un élève — contrairement au référentiel APC, dont la
-             * disposition en colonnes de blocs a son propre contrôleur.
-             *
-             * Une seule feuille porte l'identité **et** l'inscription : c'est
-             * ainsi que l'administration reçoit ses listes de classe, et les
-             * séparer en deux fichiers reviendrait à lui demander de faire le
-             * découpage à la main.
-             */
-            'eleves' => [
-                'headings' => [
-                    'matricule', 'nom', 'prenoms', 'sexe', 'date_naissance', 'lieu_naissance',
-                    'code_classe', 'annee_scolaire', 'statut',
-                ],
-                'export' => fn () => Inscription::with(['eleve', 'classe:id,code'])
-                    ->orderBy('annee_scolaire', 'desc')
-                    ->get()
-                    ->sortBy(fn (Inscription $inscription) => mb_strtolower((string) $inscription->eleve?->nom, 'UTF-8'))
-                    ->map(fn (Inscription $inscription) => [
-                        $inscription->eleve?->matricule,
-                        $inscription->eleve?->nom,
-                        $inscription->eleve?->prenoms,
-                        $inscription->eleve?->sexe,
-                        $inscription->eleve?->date_naissance?->format('d/m/Y'),
-                        $inscription->eleve?->lieu_naissance,
-                        $inscription->classe?->code,
-                        $inscription->annee_scolaire,
-                        $inscription->statut,
-                    ])->values()->all(),
-                'import' => function (array $row) {
-                    $matricule = trim((string) ($row['matricule'] ?? ''));
-                    $nom = trim((string) ($row['nom'] ?? ''));
-
-                    if ($matricule === '' || $nom === '') {
-                        return 'matricule et nom requis';
-                    }
-
-                    $sexe = strtoupper(trim((string) ($row['sexe'] ?? '')));
-                    if ($sexe !== '' && ! in_array($sexe, Eleve::SEXES, true)) {
-                        return 'sexe doit valoir M ou F (valeur reçue : « '.$this->displayValue($row['sexe'] ?? null).' »)';
-                    }
-
-                    $dateNaissance = $this->normalizeDate($row['date_naissance'] ?? null);
-                    if ($dateNaissance === false) {
-                        return 'date_naissance illisible (attendu : JJ/MM/AAAA) (valeur reçue : « '
-                            .$this->displayValue($row['date_naissance'] ?? null).' »)';
-                    }
-
-                    $eleve = Eleve::updateOrCreate(
-                        ['matricule' => $matricule],
-                        [
-                            'nom' => $nom,
-                            'prenoms' => $this->blankToNull($row['prenoms'] ?? null),
-                            'sexe' => $sexe === '' ? null : $sexe,
-                            'date_naissance' => $dateNaissance,
-                            'lieu_naissance' => $this->blankToNull($row['lieu_naissance'] ?? null),
-                        ]
-                    );
-
-                    $codeClasse = trim((string) ($row['code_classe'] ?? ''));
-
-                    // Fiche sans classe : l'identité est enregistrée, l'élève
-                    // sera inscrit plus tard. C'est volontairement permis —
-                    // les listes arrivent parfois avant les affectations.
-                    if ($codeClasse === '') {
-                        return null;
-                    }
-
-                    $classe = Classe::where('code', $codeClasse)->first();
-                    if (! $classe) {
-                        return "classe « {$codeClasse} » introuvable";
-                    }
-
-                    $statut = strtolower(trim((string) ($row['statut'] ?? ''))) ?: Inscription::STATUT_REGULIER;
-                    if (! array_key_exists($statut, Inscription::LIBELLES_STATUTS)) {
-                        return 'statut doit valoir '.implode(' ou ', array_keys(Inscription::LIBELLES_STATUTS))
-                            .' (valeur reçue : « '.$this->displayValue($row['statut'] ?? null).' »)';
-                    }
-
-                    Inscription::updateOrCreate(
-                        [
-                            'eleve_id' => $eleve->id,
-                            'annee_scolaire' => AnneeScolaire::normalise($row['annee_scolaire'] ?? null)
-                                ?? AnneeScolaire::courante(),
-                        ],
-                        ['classe_id' => $classe->id, 'statut' => $statut, 'actif' => true]
                     );
 
                     return null;
@@ -422,44 +326,6 @@ class SpreadsheetController extends Controller
         }
 
         return sprintf('%02d:%02d', (int) $matches[1], (int) $matches[2]);
-    }
-
-    /**
-     * « 14/03/2008 », « 2008-03-14 » ou le numéro de série d'Excel -> date.
-     *
-     * Le numéro de série est le cas réel : une colonne formatée en date dans
-     * le classeur arrive ici en nombre (39521), et l'interpréter comme une
-     * chaîne donnerait une naissance en l'an 39521. Les jours et les mois se
-     * lisent à l'européenne — « 03/04/2008 » est le 3 avril, pas le 4 mars.
-     *
-     * Rend `false` — et non `null` — quand la valeur est présente mais
-     * illisible : l'appelant doit pouvoir distinguer « pas de date » de
-     * « date fausse », et signaler la seconde.
-     */
-    private function normalizeDate(mixed $value): string|false|null
-    {
-        if ($value === null || (is_string($value) && trim($value) === '')) {
-            return null;
-        }
-
-        if (is_numeric($value)) {
-            try {
-                return ExcelDate::excelToDateTimeObject((float) $value)->format('Y-m-d');
-            } catch (\Throwable) {
-                return false;
-            }
-        }
-
-        $texte = trim((string) $value);
-
-        foreach (['d/m/Y', 'd-m-Y', 'Y-m-d', 'd/m/y'] as $format) {
-            $date = \DateTime::createFromFormat('!'.$format, $texte);
-            if ($date !== false && $date->format($format) === $texte) {
-                return $date->format('Y-m-d');
-            }
-        }
-
-        return false;
     }
 
     /**
